@@ -53,12 +53,6 @@ func _on_slot_pressed(index: int) -> void:
 		get_tree().change_scene_to_file(WORLD_SCENE)
 
 
-func _on_back_pressed() -> void:
-	if _confirm_visible():
-		return
-	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
-
-
 # --- 삭제 (되돌릴 수 없으므로 한 번 확인한다) ---------------------------------
 
 func _confirm_visible() -> bool:

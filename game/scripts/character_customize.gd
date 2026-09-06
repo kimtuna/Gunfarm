@@ -38,7 +38,6 @@ func _ready() -> void:
 		# 슬롯 화면을 거치지 않고 들어온 경우 — 저장할 곳이 없으니 만들 수 없다.
 		(%SlotLabel as Label).text = "고른 슬롯이 없다 — 슬롯 화면에서 다시 고르세요"
 		name_edit.editable = false
-		(%BackButton as Button).grab_focus()
 	_refresh()
 
 
@@ -95,10 +94,6 @@ func _on_confirm_pressed() -> void:
 		(%Hint as Label).text = "저장에 실패했습니다 — 다시 시도하세요."
 		return
 	get_tree().change_scene_to_file(WORLD_SCENE)
-
-
-func _on_back_pressed() -> void:
-	_back_to_slots()
 
 
 func _unhandled_input(event: InputEvent) -> void:

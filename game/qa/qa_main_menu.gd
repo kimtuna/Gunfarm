@@ -6,7 +6,9 @@ extends SceneTree
 ##   /Applications/Godot.app/Contents/MacOS/Godot --path game --script qa/qa_main_menu.gd
 ##   (--headless 를 붙이면 캡처가 안 된다 — docs/GOTCHAS.md 참고)
 ##
-## 검증 순서: 메인 메뉴 캡처 → 플레이 → 뒤로 → 설정 → 뒤로 → 나가기(종료 확인).
+## 검증 순서: 메인 메뉴 캡처 → 플레이 → Esc → 설정 → Esc → 나가기(종료 확인).
+## **돌아가는 길은 Esc 하나뿐이다** — 화면 안에 "뒤로" 버튼이 없는지도 같이 본다
+## (INBOX #17, docs/DESIGN.md 「클라이언트 화면 흐름」).
 ## 스크린샷은 user:// (~/Library/Application Support/Godot/app_userdata/Gunfarm) 에 남는다.
 
 const SHOTS := "user://qa_shots"
@@ -25,12 +27,14 @@ func _initialize() -> void:
 		_step_main_menu,
 		func(): _press("Layout/PlayButton"),
 		func(): _expect_screen("캐릭터 선택", "01_play"),
-		func(): _press("Layout/BackButton"),
-		func(): _expect_screen("GUNFARM", "02_back_from_play"),
+		_expect_no_back_button,
+		_press_escape,
+		func(): _expect_screen("GUNFARM", "02_escape_from_play"),
 		func(): _press("Layout/SettingsButton"),
 		func(): _expect_screen("설정", "03_settings"),
-		func(): _press("Layout/BackButton"),
-		func(): _expect_screen("GUNFARM", "04_back_from_settings"),
+		_expect_no_back_button,
+		_press_escape,
+		func(): _expect_screen("GUNFARM", "04_escape_from_settings"),
 		_step_quit,
 	]
 
@@ -61,6 +65,24 @@ func _press(node_path: String) -> void:
 		_fails.append("버튼을 못 찾음: %s (현재 씬 %s)" % [node_path, _scene().name])
 		return
 	button.emit_signal("pressed")
+
+
+## Esc 를 실제 입력으로 흘려보낸다 — 화면 스크립트의 _unhandled_input 이 받아야 한다.
+func _press_escape() -> void:
+	var event := InputEventAction.new()
+	event.action = "ui_cancel"
+	event.pressed = true
+	Input.parse_input_event(event)
+
+
+## 화면 안에 "뒤로" 버튼이 남아 있으면 안 된다 (INBOX #17). 이름으로도 글자로도 본다 —
+## 둘 중 하나만 보면 이름만 바꿔 살아남는다.
+func _expect_no_back_button() -> void:
+	for button in _scene().find_children("*", "Button", true, false):
+		var b := button as Button
+		if b.name == "BackButton" or b.text.strip_edges() == "뒤로":
+			_fails.append("%s 화면에 뒤로 버튼이 남아 있다: %s (\"%s\")" % [
+				_scene().name, _scene().get_path_to(b), b.text])
 
 
 func _step_main_menu() -> void:

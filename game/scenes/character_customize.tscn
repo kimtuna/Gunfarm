@@ -304,11 +304,11 @@ size_flags_horizontal = 3
 disabled = true
 text = "확정"
 
-[node name="BackButton" type="Button" parent="Layout/Buttons"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 56)
+[node name="EscHint" type="Label" parent="Layout"]
 layout_mode = 2
-text = "뒤로"
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 18
+text = "Esc — 돌아가기 (확정하지 않으면 저장되지 않습니다)"
+horizontal_alignment = 1
 
 [connection signal="pressed" from="Layout/Buttons/ConfirmButton" to="." method="_on_confirm_pressed"]
-[connection signal="pressed" from="Layout/Buttons/BackButton" to="." method="_on_back_pressed"]

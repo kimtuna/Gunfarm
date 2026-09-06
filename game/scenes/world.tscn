@@ -1,9 +1,21 @@
-[gd_scene load_steps=6 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=7 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Theme" path="res://ui/menu_theme.tres" id="4_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pause"]
+content_margin_left = 32.0
+content_margin_top = 28.0
+content_margin_right = 32.0
+content_margin_bottom = 28.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
 
 [node name="World" type="Node2D"]
 script = ExtResource("1_world")
@@ -56,17 +68,83 @@ theme_override_colors/font_color = Color(0.803922, 0.827451, 0.760784, 1)
 theme_override_font_sizes/font_size = 18
 text = "시드"
 
-[node name="BackButton" type="Button" parent="HUD/Layout"]
+[node name="PauseMenu" type="Control" parent="HUD"]
 unique_name_in_owner = true
-layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 24.0
-offset_top = -80.0
-offset_right = 184.0
-offset_bottom = -24.0
-grow_vertical = 0
-text = "뒤로"
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("4_theme")
 
-[connection signal="pressed" from="HUD/Layout/BackButton" to="." method="_on_back_pressed"]
+[node name="Dim" type="ColorRect" parent="HUD/PauseMenu"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.045098, 0.0352941, 0.62)
+
+[node name="Box" type="PanelContainer" parent="HUD/PauseMenu"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -200.0
+offset_right = 260.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_pause")
+
+[node name="BoxLayout" type="VBoxContainer" parent="HUD/PauseMenu/Box"]
+layout_mode = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="HUD/PauseMenu/Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 40
+text = "일시정지"
+horizontal_alignment = 1
+
+[node name="Note" type="Label" parent="HUD/PauseMenu/Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.603922, 0.627451, 0.560784, 1)
+theme_override_font_sizes/font_size = 17
+text = "월드는 멈추지 않습니다 — 메뉴가 열린 동안 조작만 받지 않습니다."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="Gap" type="Control" parent="HUD/PauseMenu/Box/BoxLayout"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="ResumeButton" type="Button" parent="HUD/PauseMenu/Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "계속하기"
+
+[node name="SettingsButton" type="Button" parent="HUD/PauseMenu/Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "설정"
+
+[node name="ExitButton" type="Button" parent="HUD/PauseMenu/Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "메인 메뉴로 나가기"
+
+[connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/ResumeButton" to="." method="_on_resume_pressed"]
+[connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/SettingsButton" to="." method="_on_pause_settings_pressed"]
+[connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/ExitButton" to="." method="_on_exit_to_main_menu_pressed"]

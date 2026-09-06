@@ -9,9 +9,14 @@ extends Node2D
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 
-const SLOTS_SCENE := "res://scenes/character_slots.tscn"
+const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
+const SETTINGS_SCENE := preload("res://scenes/settings.tscn")
 
 var world: RefCounted = null
+
+## 일시정지 메뉴에서 띄운 설정 화면. 씬을 바꾸지 않고 **월드 위에 겹쳐서** 띄운다 —
+## 씬을 바꾸면 월드가 통째로 내려가므로 "월드는 멈추지 않는다"가 성립하지 않는다.
+var _settings_overlay: Control = null
 
 
 func _ready() -> void:
@@ -53,18 +58,69 @@ func _ready() -> void:
 		seed_value, world.spawn_tile.x, world.spawn_tile.y,
 		WorldGen.MAP_TILES, WorldGen.MAP_TILES, roundi(world.sea_ratio() * 100.0),
 	]
-	(%BackButton as Button).grab_focus()
 
 
-func _on_back_pressed() -> void:
-	_back_to_slots()
+# --- 일시정지 메뉴 (docs/DESIGN.md 「조작」의 Esc 항목) -------------------------
+#
+# **월드 시뮬레이션을 멈추지 않는다** — `get_tree().paused` 를 쓰지 않는다. 멀티플레이에서
+# 한 사람이 Esc 를 눌렀다고 세계가 멈출 수는 없기 때문이다. 대신 메뉴가 열려 있는 동안
+# 플레이어의 **입력만 끊는다**(`player.gd` 의 `input_enabled`) — 시간을 멈추는 게 아니라
+# 조작을 안 받는 것이다. 조준 각도는 0 으로 만들지 않고 보던 각도를 유지한다(0 으로 넣으면
+# 메뉴를 열 때마다 캐릭터가 오른쪽으로 홱 돈다).
+
+func _menu_open() -> bool:
+	return _settings_overlay != null or (%PauseMenu as Control).visible
 
 
+## 월드 안의 Esc 는 나가는 키가 아니라 일시정지 메뉴다.
+## **가장 안쪽 창부터 닫는다** — 설정이 열려 있으면 설정만 닫히고 일시정지 메뉴가 남는다.
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		get_viewport().set_input_as_handled()
-		_back_to_slots()
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	if _settings_overlay != null:
+		_close_settings()
+	else:
+		_set_pause_open(not (%PauseMenu as Control).visible)
 
 
-func _back_to_slots() -> void:
-	get_tree().change_scene_to_file(SLOTS_SCENE)
+func _set_pause_open(open: bool) -> void:
+	(%PauseMenu as Control).visible = open
+	if open:
+		(%ResumeButton as Button).grab_focus()
+	_sync_player_input()
+
+
+## 메뉴가 하나라도 열려 있으면 플레이어는 조작을 받지 않는다.
+func _sync_player_input() -> void:
+	(%Player as Node2D).input_enabled = not _menu_open()
+
+
+func _on_resume_pressed() -> void:
+	_set_pause_open(false)
+
+
+## 메뉴 화면의 설정과 **같은 화면**을 띄운다(docs/DESIGN.md 「조작」). 겹쳐 띄운 것이라
+## 그쪽의 Esc 는 메인 메뉴로 가지 않고 자기만 닫는다 — 그 처리는 여기서 한다.
+func _on_pause_settings_pressed() -> void:
+	if _settings_overlay != null:
+		return
+	var overlay := SETTINGS_SCENE.instantiate() as Control
+	overlay.as_overlay = true
+	_settings_overlay = overlay
+	# 일시정지 메뉴보다 뒤에 붙으므로 그 위에 그려진다.
+	($HUD as CanvasLayer).add_child(overlay)
+	_sync_player_input()
+
+
+func _close_settings() -> void:
+	if _settings_overlay == null:
+		return
+	_settings_overlay.queue_free()
+	_settings_overlay = null
+	_sync_player_input()
+	(%ResumeButton as Button).grab_focus()
+
+
+func _on_exit_to_main_menu_pressed() -> void:
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE)

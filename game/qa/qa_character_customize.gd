@@ -6,6 +6,8 @@ extends SceneTree
 ##   /Applications/Godot.app/Contents/MacOS/Godot --path game --script qa/qa_character_customize.gd
 ##   (--headless 를 붙이면 캡처가 안 된다 — docs/GOTCHAS.md 참고)
 ##
+## 화면 안에 "뒤로" 버튼은 없다 — 나가는 길은 Esc 하나뿐이다 (INBOX #17).
+##
 ## 검증: 외형 데이터 클래스(팔레트/정규화/이름 다듬기) → 기본 상태(이름 없으면 확정 불가) →
 ##       이름 입력하면 확정 가능 → 색/머리모양 좌우 이동 + 양끝에서 되감김 →
 ##       머리모양 4종 미리보기 캡처 → 확정하면 슬롯에 외형까지 저장되고 월드 입장 →
@@ -36,6 +38,7 @@ func _initialize() -> void:
 	change_scene_to_file(CUSTOMIZE_SCENE)
 	_steps = [
 		_check_default_state,
+		_expect_no_back_button,
 		func(): _type_name("  갈대  "),
 		_check_name_enables_confirm,
 		# 양끝에서 되감기는지 — 첫 선택지에서 왼쪽으로 가면 마지막 선택지여야 한다.
@@ -244,6 +247,14 @@ func _press_escape() -> void:
 
 
 # --- 검증 -------------------------------------------------------------------
+
+## 화면 안에 "뒤로" 버튼이 남아 있으면 안 된다 (INBOX #17). 이름으로도 글자로도 본다.
+func _expect_no_back_button() -> void:
+	for button in current_scene.find_children("*", "Button", true, false):
+		var b := button as Button
+		_expect(b.name != "BackButton" and b.text.strip_edges() != "뒤로",
+			"%s 화면에 뒤로 버튼이 남아 있다: %s" % [current_scene.name, current_scene.get_path_to(b)])
+
 
 func _expect(ok: bool, message: String) -> void:
 	if not ok:

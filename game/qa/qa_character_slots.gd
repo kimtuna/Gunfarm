@@ -9,11 +9,15 @@ extends SceneTree
 ## 검증: 빈 슬롯 3개 → 빈 슬롯 고르기 → 캐릭터 생성(월드 입장) → 슬롯에 표시 → 저장 파일 확인 →
 ##       (재시작 흉내) 다시 불러도 남아있음 → 캐릭터 슬롯 고르면 월드 입장 →
 ##       삭제 확인창 취소 → 삭제 확인창 삭제 → 다시 빈 슬롯 + 저장 파일도 비어있음.
+##
+## 화면을 오가는 길은 **Esc 하나뿐이다**(INBOX #17) — 슬롯 화면에는 뒤로 버튼이 없고,
+## 월드에서는 Esc 가 일시정지 메뉴를 연다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 
 const SHOTS := "user://qa_shots"
 const SLOTS_SCENE := "res://scenes/character_slots.tscn"
+const PAUSE_EXIT := "HUD/PauseMenu/Box/BoxLayout/ExitButton"
 
 var _steps: Array[Callable] = []
 var _step := 0
@@ -36,15 +40,24 @@ func _initialize() -> void:
 		func(): _type_name("모험가 2"),
 		func(): _press("Layout/Buttons/ConfirmButton"),
 		_check_created_enters_world,
-		func(): _press("HUD/Layout/BackButton"),
+		# 월드에서 나오는 길도 Esc 뿐이다 — Esc 는 슬롯으로 나가지 않고 일시정지 메뉴를 연다
+		# (INBOX #17). 거기서 "메인 메뉴로 나가기" → 플레이 로 슬롯 화면에 돌아온다.
+		_press_escape,
+		_check_pause_menu_opened,
+		func(): _press(PAUSE_EXIT),
+		_check_world_exits_to_main_menu,
+		func(): _press("Layout/PlayButton"),
 		_check_slot_filled,
 		func(): change_scene_to_file(SLOTS_SCENE),
 		_check_reloaded,
 		func(): _press_slot(1),
 		_check_world,
-		func(): _press("HUD/Layout/BackButton"),
+		_press_escape,
+		func(): _press(PAUSE_EXIT),
+		_check_escaped_to_main_menu,
+		func(): _press("Layout/PlayButton"),
 		_check_back_from_world,
-		# Esc 로도 메인 메뉴로 나갈 수 있어야 한다 (DESIGN.md "클라이언트 화면 흐름").
+		# 슬롯 화면의 Esc 는 한 단계 위(메인 메뉴)로 간다 (DESIGN.md "클라이언트 화면 흐름").
 		_press_escape,
 		_check_escaped_to_main_menu,
 		func(): _press("Layout/PlayButton"),
@@ -60,7 +73,7 @@ func _initialize() -> void:
 		func(): _press_delete(1),
 		func(): _press("DeleteConfirm/Box/BoxLayout/Buttons/DeleteYesButton"),
 		_check_deleted,
-		func(): _press("Layout/BackButton"),
+		_press_escape,
 		_check_back_to_main_menu,
 	]
 
@@ -88,6 +101,20 @@ func _check_created_enters_world() -> void:
 	_expect_text_on_screen("모험가 2")
 
 
+## 월드의 Esc 는 **슬롯으로 나가는 게 아니라** 일시정지 메뉴를 연다 (INBOX #17).
+func _check_pause_menu_opened() -> void:
+	_expect(current_scene.get_node_or_null("HUD/PauseMenu") != null,
+		"월드에서 Esc 를 눌렀는데 일시정지 메뉴가 없다 (현재 씬 %s)" % current_scene.name)
+	_expect_text_on_screen("일시정지")
+	_expect_text_on_screen("시드")  # 아직 월드다 — 씬이 바뀌지 않았다.
+	_shoot("11c_world_pause_menu")
+
+
+## 일시정지 메뉴의 "메인 메뉴로 나가기"는 슬롯이 아니라 메인 메뉴로 간다.
+func _check_world_exits_to_main_menu() -> void:
+	_expect_screen("GUNFARM", "11d_world_exit_to_main_menu")
+
+
 ## 월드에서 돌아오면 슬롯 화면에, 저장 파일에도 이름이 남아 있다.
 func _check_slot_filled() -> void:
 	_expect_screen("캐릭터 선택", "12_slot_filled")
@@ -111,6 +138,7 @@ func _check_world() -> void:
 
 func _check_back_from_world() -> void:
 	_expect_screen("캐릭터 선택", "15_back_from_world")
+	_expect_no_back_button()
 
 
 func _check_escaped_to_main_menu() -> void:
@@ -212,6 +240,14 @@ func _press_escape() -> void:
 
 func _slot_button(index: int) -> Button:
 	return current_scene.get_node_or_null("Layout/Slots/Slot%d/Choose" % index) as Button
+
+
+## 화면 안에 "뒤로" 버튼이 남아 있으면 안 된다 (INBOX #17). 이름으로도 글자로도 본다.
+func _expect_no_back_button() -> void:
+	for button in current_scene.find_children("*", "Button", true, false):
+		var b := button as Button
+		_expect(b.name != "BackButton" and b.text.strip_edges() != "뒤로",
+			"%s 화면에 뒤로 버튼이 남아 있다: %s" % [current_scene.name, current_scene.get_path_to(b)])
 
 
 func _confirm_visible() -> bool:

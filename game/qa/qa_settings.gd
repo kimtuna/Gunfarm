@@ -11,6 +11,8 @@ extends SceneTree
 ##   2) 다시 들어오면 저장된 값이 그대로 보이고, 진입 씬(메인 메뉴)이 그걸 창에 반영한다.
 ##   3) **해상도가 달라져도 카메라가 보여주는 월드 범위는 똑같다** (docs/DESIGN.md
 ##      "카메라 / 해상도"). 창을 16:9 아닌 비율로 늘려도 마찬가지여야 한다.
+##   4) **돌아가는 길은 Esc 하나뿐이다** — 화면에 "뒤로" 버튼이 없고, Esc 로 메인 메뉴에
+##      돌아간다 (INBOX #17, docs/DESIGN.md 「클라이언트 화면 흐름」).
 
 const SettingsStore := preload("res://scripts/settings_store.gd")
 
@@ -41,6 +43,7 @@ func _initialize() -> void:
 
 	_steps = [
 		_step_initial,
+		_expect_no_back_button,
 		func(): _press("Layout/ResolutionRow/NextButton"),
 		_step_after_next,
 		func(): _press("Layout/ResolutionRow/PrevButton"),
@@ -57,6 +60,11 @@ func _initialize() -> void:
 	# 사용자가 창을 손으로 끌어 16:9 아닌 비율로 만든 경우에도 시야가 넓어지면 안 된다.
 	_steps.append(func(): DisplayServer.window_set_size(Vector2i(1600, 720)))
 	_steps.append(func(): _check_range("창을 손으로 늘린 1600x720", "20_range_dragged_1600x720"))
+	# 마지막으로 설정 화면으로 돌아와 Esc 가 메인 메뉴로 나가는지 본다.
+	_steps.append(func(): change_scene_to_file(SETTINGS_SCENE))
+	_steps.append(_expect_no_back_button)
+	_steps.append(_press_escape)
+	_steps.append(_step_escaped_to_main_menu)
 	_steps.append(_step_cleanup)
 
 
@@ -137,6 +145,35 @@ func _check_range(what: String, shot_name: String) -> void:
 	if not rect.position.is_equal_approx(EXPECTED_RANGE.position) or not rect.size.is_equal_approx(EXPECTED_RANGE.size):
 		_fails.append("%s: 보이는 월드 범위가 %s — %s 여야 한다 (PvP 공정성)" % [what, rect, EXPECTED_RANGE])
 	_shoot(shot_name)
+
+
+## 설정 화면에서 Esc → 메인 메뉴. 뒤로 버튼이 없어졌으므로 이게 유일한 길이다.
+func _step_escaped_to_main_menu() -> void:
+	var found := false
+	for label in current_scene.find_children("*", "Label", true, false):
+		if (label as Label).text.findn("GUNFARM") != -1:
+			found = true
+			break
+	if not found:
+		_fails.append("설정 화면에서 Esc 를 눌렀는데 메인 메뉴로 안 갔다 (현재 씬 %s)" % current_scene.name)
+	_shoot("30_settings_escape_to_menu")
+
+
+## 화면 안에 "뒤로" 버튼이 남아 있으면 안 된다 (INBOX #17). 이름으로도 글자로도 본다.
+func _expect_no_back_button() -> void:
+	for button in current_scene.find_children("*", "Button", true, false):
+		var b := button as Button
+		if b.name == "BackButton" or b.text.strip_edges() == "뒤로":
+			_fails.append("%s 화면에 뒤로 버튼이 남아 있다: %s" % [
+				current_scene.name, current_scene.get_path_to(b)])
+
+
+## Esc 를 실제 입력으로 흘려보낸다 — 화면 스크립트의 _unhandled_input 이 받아야 한다.
+func _press_escape() -> void:
+	var event := InputEventAction.new()
+	event.action = "ui_cancel"
+	event.pressed = true
+	Input.parse_input_event(event)
 
 
 func _step_cleanup() -> void:

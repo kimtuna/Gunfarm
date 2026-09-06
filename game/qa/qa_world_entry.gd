@@ -11,7 +11,11 @@ extends SceneTree
 ##      시작하지 않는다). 카메라는 플레이어의 자식이라 위치를 볼 때 global 로 본다.
 ##   3) **보이는 월드 범위는 여전히 1280×720 고정**이다 (docs/DESIGN.md "카메라 / 해상도").
 ##   4) 시드가 다르면 화면도 다르고, 같은 시드로 다시 들어오면 같은 화면이다.
-##   5) 뒤로 버튼으로 슬롯 화면에 돌아갈 수 있다.
+##   5) **월드의 Esc 는 나가는 키가 아니라 일시정지 메뉴다** (INBOX #17):
+##      화면에 뒤로 버튼이 없고, Esc 로 메뉴가 열리며 씬은 그대로 월드다.
+##      메뉴가 열려도 **월드는 멈추지 않고**(get_tree().paused 를 쓰지 않는다) **입력만**
+##      끊긴다. 설정은 겹쳐서 열리고 Esc 로 가장 안쪽 창부터 닫힌다.
+##      "메인 메뉴로 나가기"는 슬롯이 아니라 메인 메뉴로 간다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -30,11 +34,27 @@ const EXPECTED_RANGE := Rect2(-640, -360, 1280, 720)
 const SEED_A := 20260906
 const SEED_B := 31337
 
+## 캡처를 견주거나 이동을 재기 전에 시뮬레이션이 자리를 잡을 때까지 쉬는 **시간**.
+## 프레임 수로 세면 안 된다 (docs/GOTCHAS.md) — 이 창은 수직동기화가 없어 몇 프레임이
+## 몇 ms 밖에 안 되고, 그러면 고정 틱(1/60초)이 한 번도 안 돈다. 그때 (1) 캐릭터가 아직
+## 마우스 쪽을 안 본 채로 찍혀 같은 시드 재입장 비교가 어긋나고, (2) "메뉴가 열리면 안
+## 움직인다" 검사가 애초에 아무도 안 움직여서 거저 통과한다.
+const SETTLE_SECONDS := 0.35
+
+const PAUSE := "HUD/PauseMenu"
+const PAUSE_BOX := "HUD/PauseMenu/Box/BoxLayout"
+## 일시정지 메뉴가 열린 동안 월드가 계속 도는지 재는 시계. 세계를 `get_tree().paused` 로
+## 세웠다면 기본 process_mode 인 이 타이머도 같이 멈춰서 `time_left` 가 그대로 남는다.
+const CLOCK_SECONDS := 10.0
+
 var _steps: Array[Callable] = []
 var _step := 0
 var _wait := 0
+var _wait_time := 0.0
 var _fails: Array[String] = []
 var _shot_a := PackedByteArray()
+## 일시정지 메뉴를 열기 직전의 플레이어 위치 — 메뉴가 열린 동안 여기서 안 움직여야 한다.
+var _move_from := Vector2.ZERO
 
 
 func _initialize() -> void:
@@ -46,24 +66,46 @@ func _initialize() -> void:
 	_enter_world_with_seed(SEED_A)
 
 	_steps = [
+		_settle,
 		_check_first_entry,
 		_check_view_range,
 		_check_spawn_is_land,
 		func(): _look_at_coast(),
 		_check_coast_shows_both,
 		func(): _enter_world_with_seed(SEED_B),
+		_settle,
 		_check_other_seed_differs,
 		func(): _enter_world_with_seed(SEED_A),
+		_settle,
 		_check_same_seed_repeats,
 		_check_seed_saved_on_old_slot,
 		func(): _overview_shot(),
-		_check_back_button,
+		# 위 캡처가 카메라를 축소해뒀으므로 일시정지 메뉴는 새로 들어간 월드에서 본다.
+		func(): _enter_world_with_seed(SEED_A),
+		_check_no_back_button,
+		_press_escape,
+		_check_escape_opens_pause_menu,
+		_settle,
+		_check_world_keeps_running_input_cut,
+		func(): _press(PAUSE_BOX + "/SettingsButton"),
+		_check_settings_opens_over_world,
+		_press_escape,
+		_check_settings_closed_back_to_pause,
+		_press_escape,
+		_settle,
+		_check_resumed,
+		_press_escape,
+		func(): _press(PAUSE_BOX + "/ExitButton"),
+		_check_exit_goes_to_main_menu,
 	]
 
 
-func _process(_delta: float) -> bool:
+func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
+	if _wait_time > 0.0:
+		_wait_time -= delta
+		return false
 	if _wait > 0:
 		_wait -= 1
 		return false
@@ -246,19 +288,145 @@ func _overview_shot() -> void:
 	_steps.insert(_step, func(): _shoot("44_island_overview_QA만_축소"))
 
 
-func _check_back_button() -> void:
-	var button := current_scene.get_node_or_null("HUD/Layout/BackButton") as Button
+# --- 일시정지 메뉴 (INBOX #17) ------------------------------------------------
+
+## 화면 안에 "뒤로" 버튼이 남아 있으면 안 된다. 이름으로도 글자로도 본다 —
+## 둘 중 하나만 보면 이름만 바꿔 살아남는다.
+func _check_no_back_button() -> void:
+	for button in current_scene.find_children("*", "Button", true, false):
+		var b := button as Button
+		if b.name == "BackButton" or b.text.strip_edges() == "뒤로":
+			_fails.append("월드 화면에 뒤로 버튼이 남아 있다: %s" % current_scene.get_path_to(b))
+
+
+## Esc 는 **슬롯 화면으로 나가지 않는다** — 그 자리에서 일시정지 메뉴를 연다.
+func _check_escape_opens_pause_menu() -> void:
+	if _find_text("캐릭터 선택"):
+		_fails.append("월드에서 Esc 를 눌렀더니 슬롯 화면으로 나가버렸다 — 일시정지 메뉴여야 한다")
+		return
+	var menu := current_scene.get_node_or_null(PAUSE) as Control
+	if menu == null or not menu.visible:
+		_fails.append("월드에서 Esc 를 눌렀는데 일시정지 메뉴가 안 열렸다")
+		return
+	for label: String in ["계속하기", "설정", "메인 메뉴로 나가기"]:
+		if current_scene.get_node_or_null("%s/%s" % [PAUSE_BOX, _button_name(label)]) == null:
+			_fails.append("일시정지 메뉴에 '%s' 가 없다" % label)
+	if paused:
+		_fails.append("get_tree().paused 로 세계를 세웠다 — 멀티플레이에서 한 사람이 세계를 멈출 수 없다")
+	var player := _player()
+	if player != null and not player.is_processing():
+		_fails.append("메뉴를 열면서 플레이어의 _process 를 껐다 — 입력만 끊어야 한다")
+	_shoot("45_pause_menu")
+
+	# 여기서부터 "세계는 도는데 입력만 끊겼다"를 잰다: 시계를 하나 걸어두고,
+	# 이동 키를 **누른 채로** 둔다.
+	_start_clock()
+	_move_from = player.global_position if player != null else Vector2.ZERO
+	Input.action_press("move_up")
+
+
+## 메뉴가 열린 동안: 시계는 계속 가고(세계가 돈다), 플레이어는 키를 눌러도 안 움직인다.
+func _check_world_keeps_running_input_cut() -> void:
+	var clock := _clock()
+	if clock == null or clock.is_stopped():
+		_fails.append("월드가 계속 도는지 잴 시계가 멈춰 있다")
+	elif is_equal_approx(clock.time_left, CLOCK_SECONDS):
+		_fails.append("일시정지 메뉴를 여는 동안 월드 시간이 한 틱도 안 흘렀다 — 세계를 멈추면 안 된다")
+	var player := _player()
+	if player == null:
+		return
+	var moved := player.global_position.distance_to(_move_from)
+	print("[qa] 메뉴 열린 채 W 를 누른 동안 이동 %.1f / 시계 남은 %.3f초" % [moved, clock.time_left])
+	if moved > 0.5:
+		_fails.append("메뉴가 열려 있는데 W 로 %.1f 만큼 움직였다 — 입력은 끊겨야 한다" % moved)
+
+
+## 설정은 **씬을 바꾸지 않고 월드 위에 겹쳐서** 열린다(씬을 바꾸면 월드가 내려간다).
+func _check_settings_opens_over_world() -> void:
+	if _world() == null:
+		_fails.append("설정을 열었더니 월드 씬이 통째로 바뀌었다 — 겹쳐서 띄워야 한다")
+		return
+	if current_scene.get_node_or_null("HUD/Screen") == null:
+		_fails.append("일시정지 메뉴의 설정을 눌렀는데 설정 화면이 안 떴다")
+	_expect_text("해상도", "겹쳐 뜬 설정 화면")
+	_shoot("46_pause_settings")
+
+
+## 가장 안쪽 창부터 닫힌다 — Esc 로 설정만 닫히고 일시정지 메뉴는 남는다.
+func _check_settings_closed_back_to_pause() -> void:
+	if current_scene.get_node_or_null("HUD/Screen") != null:
+		_fails.append("겹쳐 뜬 설정이 Esc 로 안 닫혔다")
+	var menu := current_scene.get_node_or_null(PAUSE) as Control
+	if menu == null or not menu.visible:
+		_fails.append("설정을 닫았더니 일시정지 메뉴까지 같이 닫혔다 — 안쪽 창 하나만 닫혀야 한다")
+	_shoot("47_pause_after_settings")
+
+
+## 메뉴를 닫으면 조작이 돌아온다 — 아까부터 누르고 있던 W 가 그제서야 먹는다.
+func _check_resumed() -> void:
+	var menu := current_scene.get_node_or_null(PAUSE) as Control
+	if menu != null and menu.visible:
+		_fails.append("Esc 를 한 번 더 눌렀는데 일시정지 메뉴가 안 닫혔다")
+	var player := _player()
+	if player != null:
+		var moved := player.global_position.distance_to(_move_from)
+		print("[qa] 메뉴를 닫은 뒤 이동 %.1f" % moved)
+		if moved < 1.0:
+			_fails.append("메뉴를 닫았는데도 W 가 안 먹는다 (이동 %.1f)" % moved)
+	Input.action_release("move_up")
+	_shoot("48_resumed")
+
+
+## "메인 메뉴로 나가기"는 슬롯이 아니라 메인 메뉴로 간다 (docs/DESIGN.md 「조작」).
+func _check_exit_goes_to_main_menu() -> void:
+	if not _find_text("GUNFARM"):
+		_fails.append("일시정지 메뉴의 '메인 메뉴로 나가기' 가 메인 메뉴로 안 갔다")
+	_shoot("49_exit_to_main_menu")
+
+
+func _button_name(label: String) -> String:
+	match label:
+		"계속하기": return "ResumeButton"
+		"설정": return "SettingsButton"
+		_: return "ExitButton"
+
+
+func _player() -> Node2D:
+	return current_scene.get_node_or_null("%Player") as Node2D
+
+
+func _press(node_path: String) -> void:
+	var button := current_scene.get_node_or_null(node_path) as Button
 	if button == null:
-		_fails.append("뒤로 버튼을 못 찾음")
+		_fails.append("버튼을 못 찾음: %s (현재 씬 %s)" % [node_path, current_scene.name])
 		return
 	button.emit_signal("pressed")
-	_steps.append(_check_returned_to_slots)
 
 
-func _check_returned_to_slots() -> void:
-	if not _find_text("캐릭터 선택"):
-		_fails.append("뒤로 버튼을 눌렀는데 슬롯 화면으로 안 갔다")
-	_shoot("45_back_to_slots")
+## Esc 를 실제 입력으로 흘려보낸다 — 화면 스크립트의 _unhandled_input 이 받아야 한다.
+func _press_escape() -> void:
+	var event := InputEventAction.new()
+	event.action = "ui_cancel"
+	event.pressed = true
+	Input.parse_input_event(event)
+
+
+## 다음 단계까지 넉넉히 쉰다 (위 SETTLE_SECONDS 주석 참고).
+func _settle() -> void:
+	_wait_time = SETTLE_SECONDS
+
+
+func _start_clock() -> void:
+	var clock := Timer.new()
+	clock.name = "QaClock"
+	clock.wait_time = CLOCK_SECONDS
+	clock.one_shot = true
+	current_scene.add_child(clock)
+	clock.start()
+
+
+func _clock() -> Timer:
+	return current_scene.get_node_or_null("QaClock") as Timer
 
 
 # --- 도구 -------------------------------------------------------------------
