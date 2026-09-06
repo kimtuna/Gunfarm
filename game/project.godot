@@ -8,7 +8,7 @@ config_version=5
 
 config/name="Gunfarm"
 config/description="당신의 농장은 병참기지다."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 

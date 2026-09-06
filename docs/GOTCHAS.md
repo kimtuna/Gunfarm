@@ -66,3 +66,11 @@
 - **에디터의 "임베디드 Game 패널" 미리보기와 실제 실행/빌드는 다르게 동작할 수
   있다.** "설정을 바꿔도 반영이 안 된다"류 문제는 먼저 에디터 Play 버튼으로 본 건지
   확인할 것 — 실제 검증은 `godot --path .`로 에디터 밖에서 해야 한다.
+- **`--script`(SceneTree) 모드는 `application/run/main_scene`을 자동으로 띄우지 않는다** —
+  `current_scene`이 null이라 화면 검증이 통째로 헛돈다. `_initialize()`에서
+  `change_scene_to_file()`로 직접 올리되, 이건 지연 반영이라 `_process`에서
+  `current_scene != null`이 될 때까지 기다린 뒤 검증을 시작할 것.
+- **GDScript는 null에 메서드를 호출하면 그 함수 호출 전체를 그 자리에서 중단한다**(에러만
+  찍고 다음 문장을 실행하지 않음). 검증 함수 안에서 실패를 기록하는 코드가 그 뒤에 있으면
+  기록이 안 남아 **에러가 났는데도 PASS로 보인다** — 종료 코드로 실패를 알리고(`quit(1)`),
+  로그의 SCRIPT ERROR 유무도 같이 볼 것.
