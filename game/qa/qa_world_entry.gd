@@ -19,8 +19,10 @@ const WorldGen := preload("res://scripts/world_gen.gd")
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
 
-const COLOR_SEA := Color(0.121569, 0.223529, 0.294118)
-const COLOR_LAND := Color(0.286275, 0.415686, 0.243137)
+## 화면의 픽셀을 땅/바다로 가르는 기준색. 지형이 스프라이트가 된 뒤로는 한 지형이
+## 색 하나가 아니라 **램프 4단계**라, 재질별 램프 전체와 견줘서 가장 가까운 쪽을
+## 고른다 (INBOX #12). 색은 손으로 적지 않고 생성기가 내려보낸 표에서 꺼낸다.
+const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")
 
 ## 논리 해상도가 곧 시야다.
 const EXPECTED_RANGE := Rect2(-640, -360, 1280, 720)
@@ -266,11 +268,22 @@ func _visible_world_rect() -> Rect2:
 
 
 func _nearest(color: Color) -> String:
-	var to_land := Vector3(color.r - COLOR_LAND.r, color.g - COLOR_LAND.g, color.b - COLOR_LAND.b).length()
-	var to_sea := Vector3(color.r - COLOR_SEA.r, color.g - COLOR_SEA.g, color.b - COLOR_SEA.b).length()
-	if minf(to_land, to_sea) > 0.12:
-		return "그 외"  # HUD/플레이어처럼 지형이 아닌 것.
+	var to_land := _distance_to(color, TerrainPalettes.LAND_MATERIALS)
+	var to_sea := _distance_to(color, TerrainPalettes.SEA_MATERIALS)
+	# 램프 색과 정확히 맞는 픽셀만 지형으로 본다 — 나머지는 HUD/플레이어다.
+	if minf(to_land, to_sea) > 0.02:
+		return "그 외"
 	return "land" if to_land < to_sea else "sea"
+
+
+func _distance_to(color: Color, materials: Array) -> float:
+	var best := INF
+	for material: String in materials:
+		for step in TerrainPalettes.RAMPS[material].size():
+			var ramp := TerrainPalettes.color_of(material, step)
+			best = minf(best, Vector3(color.r - ramp.r, color.g - ramp.g,
+					color.b - ramp.b).length())
+	return best
 
 
 func _capture() -> Image:

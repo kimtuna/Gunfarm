@@ -1,21 +1,29 @@
 extends Node2D
 
-## 생성된 땅/바다 타일을 그린다. 아직 지형 스프라이트가 없어서([BUILD] 항목이라 그림을
-## 만들지 않는다) 타일 색 사각형으로 그린다 — 그림이 생기면 이 스크립트만 갈아끼운다.
+## 생성된 땅/바다 타일을 **지형 스프라이트로** 그린다 (INBOX #12).
 ##
-## 지도는 256×256 = 65,536칸이라 전부 그리면 낭비다. **화면에 들어오는 칸만** 그리고,
-## 가로로 이어지는 같은 지형은 사각형 하나로 합쳐서 그린다.
+## 지도는 256×256 = 65,536칸이라 전부 그리면 낭비다 — **화면에 들어오는 칸만** 그린다.
+## 칸 하나당 그리기 한 번이면 되고(밑그림과 해안이 한 장에 같이 구워져 있다,
+## `terrain_tiles.gd`), 지도 밖도 그냥 같이 돈다(`WorldGen.at()` 이 바다로 답한다).
+##
+## 예전에는 색 사각형 + 격자선이었다. **격자선은 뺐다** — 인접한 같은 지형이 이어져
+## 보여야 하는데 48px 마다 선이 그이면 그게 안 된다. 건축이 올라갈 때 필요한 격자는
+## 배치 미리보기로 그때 그리는 게 맞다.
 
 const WorldGen := preload("res://scripts/world_gen.gd")
-
-const COLOR_SEA := Color(0.121569, 0.223529, 0.294118)
-const COLOR_LAND := Color(0.286275, 0.415686, 0.243137)
-## 타일 크기가 눈에 보이게 얇게 얹는 격자선. 건축이 이 격자 위에 올라간다.
-const COLOR_GRID := Color(0.0, 0.0, 0.0, 0.09)
+const TerrainTiles := preload("res://scripts/terrain_tiles.gd")
 
 var world: RefCounted = null
 
+var _sheet: Texture2D = null
 var _last_view := Rect2()
+
+
+func _ready() -> void:
+	_sheet = load(TerrainTiles.SHEET_PATH)
+	if _sheet == null:
+		push_error("지형 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다"
+				% TerrainTiles.SHEET_PATH)
 
 
 func set_world(new_world: RefCounted) -> void:
@@ -46,36 +54,18 @@ func _draw() -> void:
 	var view := _visible_world_rect().grow(WorldGen.TILE_SIZE)
 	var from := WorldGen.world_to_tile(view.position)
 	var to := WorldGen.world_to_tile(view.end)
-	var x0 := maxi(from.x, 0)
-	var y0 := maxi(from.y, 0)
-	var x1 := mini(to.x, WorldGen.MAP_TILES - 1)
-	var y1 := mini(to.y, WorldGen.MAP_TILES - 1)
-
-	# 지도 밖(창이 지도보다 클 때)도 바다로 메워서 빈 배경이 비치지 않게 한다.
-	draw_rect(view, COLOR_SEA)
-
 	var size := float(WorldGen.TILE_SIZE)
-	for y in range(y0, y1 + 1):
-		var x := x0
-		while x <= x1:
-			var kind: int = world.at(x, y)
-			var run := x + 1
-			while run <= x1 and world.at(run, y) == kind:
-				run += 1
-			if kind == WorldGen.LAND:
-				draw_rect(Rect2(x * size, y * size, (run - x) * size, size), COLOR_LAND)
-			x = run
 
-	_draw_grid(x0, y0, x1, y1)
+	if _sheet == null:
+		# 시트가 없을 때도 화면이 통째로 비지는 않게 — 색으로라도 지형을 보여준다.
+		draw_rect(view, TerrainTiles.color_sea())
+		for y in range(from.y, to.y + 1):
+			for x in range(from.x, to.x + 1):
+				if world.is_land(x, y):
+					draw_rect(Rect2(x * size, y * size, size, size), TerrainTiles.color_grass())
+		return
 
-
-func _draw_grid(x0: int, y0: int, x1: int, y1: int) -> void:
-	var size := float(WorldGen.TILE_SIZE)
-	var top := y0 * size
-	var bottom := (y1 + 1) * size
-	var left := x0 * size
-	var right := (x1 + 1) * size
-	for x in range(x0, x1 + 2):
-		draw_line(Vector2(x * size, top), Vector2(x * size, bottom), COLOR_GRID, 1.0)
-	for y in range(y0, y1 + 2):
-		draw_line(Vector2(left, y * size), Vector2(right, y * size), COLOR_GRID, 1.0)
+	for y in range(from.y, to.y + 1):
+		for x in range(from.x, to.x + 1):
+			draw_texture_rect_region(_sheet, Rect2(x * size, y * size, size, size),
+					TerrainTiles.region_at(world, x, y))

@@ -30,8 +30,9 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 const SHOTS := "user://qa_shots"
 const CELL := 34
 const SCALE := 3
-## 배경은 지형 색(terrain_view.gd 의 땅) — 실제로 그 위에 서 있을 색이다.
-const COLOR_LAND := Color(0.286275, 0.415686, 0.243137)
+## 배경은 실제 지형의 풀색 — 실제로 그 위에 서 있을 색이다. 색을 손으로 적지 않고
+## 생성기가 내려보낸 램프에서 꺼낸다(`terrain_palettes.gd`).
+const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")
 
 ## 눈으로 볼 색 조합. **일부러 극단으로 고른다** — 가장 밝은 조합과 가장 어두운
 ## 조합에서 무너지면 나머지는 볼 것도 없다.
@@ -198,7 +199,7 @@ func _build_board() -> void:
 	# 안 나오고, 그럼 극단 조합을 넣어둔 의미가 없다.
 	var step := CELL * SCALE + 8
 	var board := ColorRect.new()
-	board.color = COLOR_LAND
+	board.color = TerrainPalettes.color_of("grass", 1)
 	board.size = Vector2(step * 4 + 20, step * COMBOS.size() + 20)
 	root.add_child(board)
 	for i in COMBOS.size():

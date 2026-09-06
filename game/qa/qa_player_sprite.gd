@@ -31,8 +31,9 @@ const DIRS := ["down", "left", "right", "up"]
 ## 재질 5종 × 램프 4단계 + 잉크 + 눈 하이라이트 + 투명 = 23. 여유를 조금만 둔다.
 const MAX_COLORS := 26
 const INK := Color8(38, 28, 44)
-## 배경은 지형 색(terrain_view.gd 의 땅)으로 — 실제로 그 위에 서 있을 색이다.
-const COLOR_LAND := Color(0.286275, 0.415686, 0.243137)
+## 배경은 실제 지형의 풀색 — 실제로 그 위에 서 있을 색이다. 색을 손으로 적지 않고
+## 생성기가 내려보낸 램프에서 꺼낸다(`terrain_palettes.gd`).
+const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")
 
 var _fails: Array[String] = []
 var _image: Image = null
@@ -183,7 +184,7 @@ func _process(_delta: float) -> bool:
 func _build_board() -> void:
 	var step := CELL * SCALE + 24
 	var board := ColorRect.new()
-	board.color = COLOR_LAND
+	board.color = TerrainPalettes.color_of("grass", 1)
 	board.size = Vector2(step * DIRS.size() + 40, step * STYLES.size() + 40)
 	root.add_child(board)
 	for s in STYLES.size():

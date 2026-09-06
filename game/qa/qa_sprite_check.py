@@ -8,7 +8,10 @@
 토큰(=이미지를 눈으로 보는 횟수)을 줄이는 것이기 때문이다. 자세한 숫자는 실패한
 검사 줄에만 붙는다.
 
-무엇을 보는가 (전부 기계가 판정할 수 있는 것만):
+시트는 두 갈래다 — **캐릭터 시트**(칸 = 방향×프레임, 배경 투명)와 **지형 타일
+시트**(칸 = 지형 배치, 배경 없음). 스펙의 `kind` 가 어느 검사를 돌릴지 정한다.
+
+무엇을 보는가 — 캐릭터 시트 (전부 기계가 판정할 수 있는 것만):
   규격      캔버스 칸 크기 / 행(방향) 수 / 방향 4개의 바운딩박스가 어긋나지 않는지
   알파      반투명 픽셀이 없는지 (도트는 알파 0 아니면 255)
   팔레트    램프에 없는 색이 섞이지 않았는지, 재질끼리 색이 겹치지 않는지
@@ -17,6 +20,15 @@
   대비      맞닿은 재질끼리 **경계에서** 명도가 갈리는지 (셔츠/바지가 한 덩어리로
             뭉치는 것을 여기서 잡는다 — INBOX #9)
   명도분포  전체가 너무 어둡거나 너무 납작하지 않은지
+
+지형 타일 시트는 보는 게 다르다:
+  규격      칸 크기 / 시트가 칸 수에 맞는지
+  팔레트    재질 램프 밖의 색이 없는지 (여기가 곧 "PNG 가 지금 생성기와 같은가")
+  이음매    **같은 지형이 이어붙었을 때 타일 경계가 안 보이는지** — 경계를 사이에
+            둔 픽셀쌍의 명도차를 타일 안쪽의 명도차와 견준다. 격자가 비치면 여기서
+            숫자로 잡힌다 (INBOX #12 의 "인접한 같은 지형끼리 이어져 보여야 한다")
+  변주      무늬 변주들이 실제로 서로 다른지 (같으면 벽지가 된다)
+  캐릭터대비 풀 위에 선 캐릭터가 배경에 묻히지 않는지 — 풀과 셔츠의 명도차
 
 **팔레트의 원본은 그림을 만든 생성기다** — 스펙이 `gen_character.palette()` 를 그대로
 불러온다. 그래서 "램프 밖의 색" 검사는 곧 "PNG 가 지금 생성기와 같은 상태인가"까지
@@ -49,8 +61,17 @@ def _player_palette():
     return gen.palette(), gen.INK, gen.GLINT
 
 
+def _terrain_palette():
+    """지형 생성기에서 램프를 그대로 가져온다."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
+    import gen_terrain as gen
+    return gen
+
+
 def _player_spec(**over):
     return dict(dict(
+        kind="character",
         cell=34,
         rows=["down", "left", "right", "up"],
         palette=_player_palette,
@@ -86,6 +107,21 @@ def _player_spec(**over):
 # (기준색의 머리는 검정 = 무채색이다). 그래서 그 셋(평균명도/어두운비율/채도)만
 # 시트마다 늦춘다 — 기준을 봐주는 게 아니라 시트가 그리는 대상이 다른 것이다.
 # **나머지 검사(대비/명암폭/실루엣/팔레트/바운딩)는 한 칸도 안 늦춘다.**
+
+# 지형 타일 시트. 캐릭터와 견주는 기준(`shirt_gap`)은 **기준색 1벌의 셔츠**다 —
+# 캐릭터가 풀밭에 서 있을 때 묻히지 않아야 한다(DESIGN.md 「그래픽 파이프라인」 1).
+TERRAIN_SPEC = dict(
+    kind="tile",
+    cell=16,
+    palette=_terrain_palette,
+    # 같은 지형끼리 이어붙였을 때, 타일 경계의 명도차가 안쪽보다 이만큼 넘게
+    # 크면 격자가 비치는 것이다.
+    seam_ratio=1.35,
+    luma_mean={"grass": (90.0, 115.0), "sea": (45.0, 70.0)},
+    chroma_mean={"grass": 28.0, "sea": 30.0},
+    shirt_gap=35.0,
+)
+
 SPECS = {
     "player_idle_short.png": _player_spec(),
     "player_idle_ponytail.png": _player_spec(luma_mean=(94.0, 170.0)),
@@ -93,6 +129,7 @@ SPECS = {
                                         chroma_mean=35.0),
     "player_idle_long.png": _player_spec(luma_mean=(85.0, 170.0), dark_frac=0.30,
                                          chroma_mean=31.0),
+    "terrain_tiles.png": TERRAIN_SPEC,
 }
 
 
@@ -280,6 +317,102 @@ def check_sheet(path, spec):
     return rep
 
 
+# ── 지형 타일 검사 ────────────────────────────────────────────────────────
+def _luma_steps(image):
+    """가로/세로로 이웃한 픽셀쌍의 명도차를, 타일 경계와 안쪽으로 나눠서."""
+    lum = luma(image.astype(np.float32))
+    cell = 16
+    dx = np.abs(np.diff(lum, axis=1))
+    dy = np.abs(np.diff(lum, axis=0))
+    bx = np.zeros(dx.shape[1], bool)
+    bx[cell - 1::cell] = True          # 열 k*cell-1 과 k*cell 사이가 타일 경계
+    by = np.zeros(dy.shape[0], bool)
+    by[cell - 1::cell] = True
+    border = np.concatenate([dx[:, bx].ravel(), dy[by, :].ravel()])
+    inside = np.concatenate([dx[:, ~bx].ravel(), dy[~by, :].ravel()])
+    return float(border.mean()), float(inside.mean())
+
+
+def check_tiles(path, spec):
+    name = os.path.basename(path)
+    rep = Report(name)
+    gen = spec["palette"]()
+    a = np.array(Image.open(path).convert("RGB"), dtype=np.int32)
+    cell = spec["cell"]
+    h, w = a.shape[:2]
+
+    want = gen.TILE_ART if hasattr(gen, "TILE_ART") else gen.TILE
+    ok_size = (cell == want and h % cell == 0 and w % cell == 0
+               and (h // cell) * (w // cell) == gen.TILE_COUNT)
+    rep.add(ok_size, "규격", "%dx%d 는 %dpx 칸 %d개가 아니다" % (w, h, cell, gen.TILE_COUNT),
+            "%dpx × %d칸" % (cell, gen.TILE_COUNT))
+    if not ok_size:
+        rep.dump()
+        return rep
+
+    allowed = {tuple(int(v) for v in c) for ramp in gen.PAL.values() for c in ramp}
+    used = {tuple(int(v) for v in c) for c in np.unique(a.reshape(-1, 3), axis=0)}
+    stray = sorted(used - allowed)
+    rep.add(not stray, "팔레트",
+            "램프 밖 %d색 %s" % (len(stray), " ".join("#%02x%02x%02x" % c for c in stray[:4])),
+            "%d색" % len(used))
+
+    black = int((a.sum(-1) == 0).sum())
+    rep.add(black == 0, "순검정", "%d px" % black)
+
+    # 이음매 — 같은 지형을 넓게 깔았을 때 타일 경계가 보이면 안 된다.
+    lines = []
+    ok_seam = True
+    for what, kind in (("땅", 1), ("바다", 0)):
+        field = gen.compose([[kind] * 9 for _ in range(9)])
+        border, inside = _luma_steps(field)
+        ratio = border / max(inside, 1e-3)
+        ok_seam &= ratio <= spec["seam_ratio"]
+        lines.append("%s %.2f" % (what, ratio))
+    rep.add(ok_seam, "이음매",
+            "타일 경계의 명도차가 안쪽의 %s배 (상한 %.2f) — 48px 격자가 비친다"
+            % ("/".join(lines), spec["seam_ratio"]), " ".join(lines))
+
+    # 변주 — 지형 한가운데 칸들이 서로 다른 그림이어야 한다.
+    for what, land, mask in (("땅", True, 255), ("바다", False, 0)):
+        seen = set()
+        for v in range(gen.VARIANTS):
+            r, c = divmod(gen.tile_index(v, land, mask), gen.SHEET_COLS)
+            seen.add(a[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell].tobytes())
+        rep.add(len(seen) == gen.VARIANTS, "변주",
+                "%s 변주 %d종이 실제로는 %d종 — 벽지가 된다"
+                % (what, gen.VARIANTS, len(seen)), "%d종" % len(seen))
+
+    # 명도/채도 — 지형 한가운데 칸만 본다(해안이 섞이면 값이 흐려진다).
+    stats = {}
+    for what, land, mask in (("grass", True, 255), ("sea", False, 0)):
+        cells = []
+        for v in range(gen.VARIANTS):
+            r, c = divmod(gen.tile_index(v, land, mask), gen.SHEET_COLS)
+            cells.append(a[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell])
+        flat = np.concatenate([c.reshape(-1, 3) for c in cells])
+        stats[what] = (float(luma(flat).mean()),
+                       float((flat.max(-1) - flat.min(-1)).mean()))
+        lo, hi = spec["luma_mean"][what]
+        rep.add(lo <= stats[what][0] <= hi, "평균명도",
+                "%s %.0f (%.0f~%.0f 밖)" % (what, stats[what][0], lo, hi),
+                "%s %.0f" % (what, stats[what][0]))
+        rep.add(stats[what][1] >= spec["chroma_mean"][what], "채도",
+                "%s %.0f < %.0f — 탁하다" % (what, stats[what][1], spec["chroma_mean"][what]),
+                "%s %.0f" % (what, stats[what][1]))
+
+    # 캐릭터가 풀밭에 묻히지 않는가 — 기준색 셔츠와 풀의 명도차.
+    pal, _ink, _glint = _player_palette()
+    shirt = float(luma(np.array(pal["shirt"][1], dtype=np.float32)))
+    gap = abs(shirt - stats["grass"][0])
+    rep.add(gap >= spec["shirt_gap"], "캐릭터대비",
+            "셔츠 %.0f vs 풀 %.0f — 차이 %.0f < %.0f 면 캐릭터가 배경에 묻힌다"
+            % (shirt, stats["grass"][0], gap, spec["shirt_gap"]), "%.0f" % gap)
+
+    rep.dump()
+    return rep
+
+
 def main(argv):
     paths = argv[1:] or [os.path.join(SPRITES, n) for n in SPECS]
     failed = False
@@ -290,7 +423,8 @@ def main(argv):
                   % os.path.basename(p))
             failed = True
             continue
-        failed |= check_sheet(p, spec).failed
+        check = check_tiles if spec.get("kind") == "tile" else check_sheet
+        failed |= check(p, spec).failed
     return 1 if failed else 0
 
 
