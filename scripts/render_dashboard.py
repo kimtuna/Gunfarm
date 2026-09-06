@@ -111,7 +111,6 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <div class="cards">
   <div class="card"><b>{len(done)}</b><span>완료</span></div>
   <div class="card"><b>{len(todo)}</b><span>남음</span></div>
-  <div class="card"><b>{total_cost}</b><span>누적 사용량 (API 환산)</span></div>
 </div>
 <section><h2>다음 항목</h2>{next_html}</section>
 <section><h2>대기 중인 항목</h2><ul>{todo_rows}</ul></section>
