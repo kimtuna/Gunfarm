@@ -497,15 +497,30 @@ CFG = dict(
     leg_top=21.4, foot_y=31.7, boot_h=3.7,
     dither=0.0, key=0.84, amb=0.17, rim=0.10,
     # ── 걷기(walk) ── 진폭은 전부 **네이티브 34px 단위**다. 1 = 화면에서 3px.
-    bob=1.0,            # 몸이 가라앉는 깊이. 착지에서 최대, 통과 자세에서 0
-    lift=1.6,           # 뒤에서 앞으로 넘어오는 발이 뜨는 높이
-    stride=1.7,         # 옆모습에서 다리가 앞뒤로 벌어지는 폭
-    stride_f=0.75,      # 앞/뒷모습 — 앞뒤 움직임이 안 보이므로 좌우로만 조금
-    arm_swing=1.5,      # 옆모습 팔 앞뒤 폭 (다리와 반대 위상)
-    arm_swing_f=0.9,    # 앞/뒷모습 팔 — 앞으로 나오면 짧아 보이므로 위아래로
+    bob=0.8,            # 몸이 가라앉는 깊이(정수 픽셀로 끊는다). 착지에서 1, 통과에서 0
+    lift=2.6,           # 뒤에서 앞으로 넘어오는 발이 뜨는 높이(통과 자세에서 최대)
+    stride=2.8,         # 옆모습에서 다리가 앞뒤로 벌어지는 폭
+    stride_f=1.2,       # 앞/뒷모습 — 뜬 발을 안쪽으로 당기는 폭
+    arm_swing=1.9,      # 옆모습 팔 앞뒤 폭 (다리와 반대 위상)
+    arm_swing_f=1.3,    # 앞/뒷모습 팔 — 앞으로 나오면 짧아 보이므로 위아래로
+    stance_drag=0.9,    # 옆모습 — 딛은 발이 몸 아래에서 뒤로 끌리는 폭
 )
 
 WALK_FRAMES = 6         # DESIGN.md 「캐릭터 애니메이션」의 4~6 프레임 규칙
+
+
+def walk_phases(frames=WALK_FRAMES):
+    """걷기 한 바퀴를 프레임 수로 나눈 위상들.
+
+    **0 부터 고르게 뽑는다.** 반 칸 밀어서(`+0.5`) 뽑는 쪽도 해봤는데, 6프레임에서
+    cos 이 ±0.87, 0, ∓0.87, ∓0.87, 0, ±0.87 이 되어 **가운데 두 프레임이 서로
+    거의 같은 그림**이 된다(발을 든 높이만 다르다). 그러면 여섯 장 중 넉 장만
+    쓰는 셈이라, 남은 네 자리에서 한 번에 크게 건너뛰어 걷기가 뚝뚝 끊긴다 —
+    `qa_sprite_check.py` 「이어짐」이 이걸 숫자로 잡는다(변화량 0.55/0.53/**0.09**
+    /0.53/0.54/**0.08**). 0 부터 뽑으면 cos 이 1, ½, -½, -1, -½, ½ 이라
+    여섯 자세가 전부 다르고 변화량도 고르다(0.33/0.13/0.30/0.29/0.13/0.31).
+    """
+    return [i / frames for i in range(frames)]
 
 
 def walk_pose(direction, phase, cfg):
@@ -513,37 +528,67 @@ def walk_pose(direction, phase, cfg):
 
     한 바퀴를 이렇게 잡았다 — 이 위상 관계가 어긋나면 걷기로 안 보인다:
       - `cos` 로 다리를 앞뒤로 흔든다. 착지(cos=±1)에서 가장 벌어지고,
-        통과 자세(cos=0)에서 두 다리가 겹친다.
-      - **몸은 통과 자세에서 가장 높고 착지에서 가라앉는다.** 위로 띄우지 않고
-        아래로 내리는 쪽을 골랐다 — idle 이 이미 칸 위쪽 1px 만 남기고 꽉 차서,
+        통과 자세(cos=0)에서 두 다리가 거의 겹친다(옆모습).
+      - **몸은 통과 자세에서 가장 높고 착지에서 가라앉는다**(`|cos|`). 위로 띄우지
+        않고 아래로 내리는 쪽을 골랐다 — idle 이 이미 칸 위쪽 1px 만 남기고 꽉 차서,
         올리면 머리 외곽선이 칸 밖으로 잘린다.
       - **발이 뜨는 건 뒤에서 앞으로 넘어오는 동안뿐이다**(sin 의 한쪽 반주기).
         양발이 동시에 뜨면 뛰는 것처럼 보인다.
       - 팔은 다리와 **반대 위상**이다.
     """
     if phase is None:
-        return dict(bob=0.0, leg_dx=(0.0, 0.0), leg_lift=(0.0, 0.0),
+        return dict(bob=0.0, side_merge=0.0, leg_dx=(0.0, 0.0), leg_lift=(0.0, 0.0),
                     arm_dx=(0.0, 0.0), arm_dy=(0.0, 0.0))
     t = 2.0 * np.pi * float(phase)
     sw = float(np.cos(t))                       # +1 = 왼다리가 앞
     sn = float(np.sin(t))
-    lift = (max(0.0, -sn) * cfg["lift"], max(0.0, sn) * cfg["lift"])
-    bob = cfg["bob"] * (1.0 - abs(sn))
+    # **발을 드는 곡선은 sin 그대로가 아니라 제곱이다.** sin 그대로면 착지
+    # 자세에서도 발이 절반쯤 떠 있어서 두 발이 같이 땅에 닿는 프레임이 한 번도
+    # 없다 — 걷는 게 아니라 제자리 행진으로 보인다. 제곱하면 통과 자세에서만
+    # 확실히 뜨고 나머지는 거의 땅에 붙는다.
+    lift = (max(0.0, -sn) ** 2 * cfg["lift"], max(0.0, sn) ** 2 * cfg["lift"])
+    # **몸이 가라앉는 깊이는 정수 픽셀로 끊는다.** 0.6px 처럼 어중간하게 내리면
+    # 머리·몸통은 반 칸만 내려가는데 눈은 격자에 찍히느라 한 칸 내려가서, 눈의
+    # 아랫줄이 턱/옆머리로 밀려 3×3 이 2줄로 깎인다(실제로 단발 시트가 그랬다).
+    # 도트에서 몸통이 반 칸 움직이면 음영도 매 프레임 다시 양자화되어 어른거린다.
+    bob = float(round(cfg["bob"] * abs(sw)))
     if direction in ("left", "right"):
         sx = 1.0 if direction == "right" else -1.0
         return dict(
             bob=bob,
-            leg_dx=(sw * cfg["stride"] * sx, -sw * cfg["stride"] * sx),
+            # `side_merge=1` 은 **두 다리를 한 자리에 포갠 뒤 앞뒤로만 벌린다**는 뜻이다.
+            # idle 처럼 좌우로 벌려 둔 채 흔들면 한쪽 착지에서 두 다리가 정확히 겹치고
+            # 반대쪽 착지에서만 벌어져서, 한 걸음은 있고 한 걸음은 없는 절뚝이 된다.
+            side_merge=1.0,
+            # **땅을 딛고 있는 발은 몸 아래에서 뒤로 끌린다**(`stance_drag`).
+            # 제자리 걷기라 몸이 안 나가므로, 딛은 발이 뒤로 밀려야 앞으로 걷는
+            # 것으로 보인다. 이게 없으면 통과 자세에서 두 다리가 정확히 겹쳐
+            # 실루엣이 폭 3px 짜리 **곧은 기둥 하나**가 되고(옆선 9줄 —「각짐」),
+            # 걷는 게 아니라 외다리로 미끄러지는 것처럼 보인다.
+            # `1 - 든 높이/최대` 라 딛은 발에만 걸리고, 두 다리가 반 바퀴마다
+            # 역할을 맞바꾸므로 좌우 착지는 그대로 대칭이다.
+            leg_dx=tuple((sw * cfg["stride"] * (1 if i == 0 else -1)
+                          - cfg["stance_drag"] * (1.0 - lift[i] / max(cfg["lift"], 1e-6))) * sx
+                         for i in (0, 1)),
             leg_lift=lift,
             arm_dx=(-sw * cfg["arm_swing"] * sx,) * 2,
             arm_dy=(0.0, 0.0),
         )
+    # 앞/뒷모습은 다리를 `cos` 으로 좌우로 흔들면 안 된다 — 한쪽 착지에서 두 다리가
+    # 모이고 반대쪽 착지에서 벌어져서 **제자리 뜀뛰기**가 된다(두 착지가 대칭이
+    # 아니다). 앞뒤 움직임은 어차피 안 보이므로, **뜬 발만 안쪽으로 조금 당긴다** —
+    # 앞으로 나온 발이 짧아 보이는 만큼이다. 그러면 두 착지가 저절로 대칭이 된다.
+    pull = tuple(cfg["stride_f"] * v / max(cfg["lift"], 1e-6) for v in lift)
     return dict(
         bob=bob,
-        leg_dx=(sw * cfg["stride_f"], -sw * cfg["stride_f"]),
+        side_merge=0.0,
+        leg_dx=(pull[0], -pull[1]),
         leg_lift=lift,
+        # 앞/뒷모습에서 앞으로 나온 팔은 짧아 보인다 — **위아래로만** 흔든다.
+        # 손을 좌우로도 흔들어봤는데, 손이 허벅지 옆선과 같은 자리에 오는 프레임이
+        # 생겨서 몸 옆선이 7px 곧게 이어졌다(「각짐」). 위아래만으로도 상체가
+        # 정지해 보이지 않는다.
         arm_dx=(0.0, 0.0),
-        # 앞/뒷모습에서 앞으로 나온 팔은 짧고 살짝 올라가 보인다
         arm_dy=(sw * cfg["arm_swing_f"], -sw * cfg["arm_swing_f"]),
     )
 
@@ -566,22 +611,38 @@ def _body(b, d, cfg, pose):
     # 옆모습은 두 다리가 거의 겹치므로 간격을 좁히고 앞뒤(x)로만 벌린다.
     lw = 3.9 if not side else 3.3
     gap = 0.6 if not side else 0.0
-    for i, sgn in enumerate((-1, 1)):
-        lx = cx + sgn * (lw / 2 + gap) + pose["leg_dx"][i]
+    # 옆모습으로 걸을 때만 두 다리를 한 자리로 모은다(`side_merge`) — 그래야 앞뒤
+    # 착지가 좌우 대칭이 된다. idle 은 0 이라 #13 에서 확정된 서 있는 자세 그대로다.
+    spread = (lw / 2 + gap) * (1.0 - pose["side_merge"])
+    far = []
+    # **먼 쪽 다리(1번)를 먼저 그린다** — 나중에 그린 것이 위를 덮으므로, 순서를
+    # 안 뒤집으면 뒤쪽 다리가 앞쪽 다리를 가려서 실루엣이 조각조각 끊겨 보인다.
+    order = [(1, 1), (0, -1)] if pose["side_merge"] else [(0, -1), (1, 1)]
+    for i, sgn in order:
+        lx = cx + sgn * spread                 # 엉덩이(다리가 붙은 자리) — 안 움직인다
+        step = pose["leg_dx"][i]               # 발이 그 아래에서 얼마나 벗어나는가
         foot = cfg["foot_y"] - pose["leg_lift"][i]
         # 다리도 **허벅지에서 발목으로 가늘어진다** — 폭이 일정한 상자면 옆선이
         # 다리 길이만큼 곧은 직선이 된다(「각짐」).
         ankle = lw / 2 - cfg["leg_taper"]
-        b.add(_fall_shape(lx, lw / 2, cfg["leg_top"] + bob, foot - cfg["boot_h"] + 0.3,
-                          taper=cfg["leg_taper"], tip=0.6), "pants")
+        # **다리는 통째로 옮기지 않고 엉덩이에서 꺾는다**(`slant`). 통째로 옮기면
+        # 엉덩이가 몸통 밖으로 빠져나가고, 무엇보다 다리 옆선이 그 길이만큼 완전한
+        # 수직선으로 남는다(「각짐」) — 걷는 동안 서 있는 다리도 기둥으로 보인다.
+        leg = b.add(_fall_shape(lx, lw / 2, cfg["leg_top"] + bob, foot - cfg["boot_h"] + 0.3,
+                                taper=cfg["leg_taper"], tip=0.6, slant=step), "pants")
         # 옆모습 신발은 **보는 쪽으로 코가 나온다** — 안 그러면 다리부터 발끝까지
         # 앞선이 한 줄로 곧게 이어진다.
         toe = cfg["toe"] * sx if side else 0.0
         # 앞/뒷모습 신발은 **발끝이 살짝 바깥으로** 벌어진다. 발목보다 넓어져서
         # 다리에서 발까지 곧게 이어지던 옆선이 거기서 한 칸 꺾인다(「각짐」).
-        out = 0.0 if side else sgn * cfg["foot_out"]
-        b.add(rbox(lx + out - ankle - 0.4 + min(toe, 0.0), foot - cfg["boot_h"],
-                   lx + out + ankle + 0.4 + max(toe, 0.0), foot, r=1.0), "boot")
+        out = (0.0 if side else sgn * cfg["foot_out"]) + step
+        shoe = b.add(rbox(lx + out - ankle - 0.4 + min(toe, 0.0), foot - cfg["boot_h"],
+                          lx + out + ankle + 0.4 + max(toe, 0.0), foot, r=1.0), "boot")
+        # 옆모습으로 걸으면 두 다리가 같은 자리에서 앞뒤로만 엇갈린다 — 색까지 같으면
+        # 한 덩어리로 뭉쳐서 다리가 하나로 보인다. **먼 쪽 다리를 한 단계 어둡게** 해서
+        # 앞뒤를 가른다. idle 은 두 다리가 좌우로 놓여 있어(`side_merge=0`) 해당 없다.
+        if pose["side_merge"] and i == 1:
+            far += [leg, shoe]
 
     # 목 (몸통보다 먼저 — 뒤로 간다). 짧다 — 치비는 목이 거의 없다.
     b.add(rbox(cx - 1.6, top - 2.4, cx + 1.6, top + 1.2, r=1.1), "skin")
@@ -597,7 +658,7 @@ def _body(b, d, cfg, pose):
     xs = [sx * cfg["side_arm"]] if side else [-off, off]
     limbs = []
     for i, offx in enumerate(xs):
-        ax = cx + offx + pose["arm_dx"][i]
+        ax = cx + offx                          # 어깨 — 다리와 같은 이유로 안 움직인다
         ay = bob + pose["arm_dy"][i]
         arm_top, arm_bot = cfg["torso_top"] + 1.1 + ay, cfg["torso_bot"] - 1.6 + ay
         # 소매는 **어깨에서 손목으로 좁아지며 몸 쪽으로 기운다**(2026-09-06, INBOX #13).
@@ -606,12 +667,14 @@ def _body(b, d, cfg, pose):
         # 앞/뒷모습은 손목이 **몸 쪽으로**(어깨가 처져 보인다), 옆모습은 손목이
         # **앞쪽으로** 기운다 — 옆모습에서 뒤로 기울이면 팔·다리 앞선이 한 줄로
         # 곧게 이어져 버린다(「각짐」).
-        lean = cfg["arm_slant"] * sx if side else -cfg["arm_slant"] * (1.0 if offx > 0 else -1.0)
+        # 팔도 어깨에서 꺾는다 — `pose["arm_dx"]` 는 **손이** 앞뒤로 나가는 폭이다.
+        lean = (cfg["arm_slant"] * sx if side
+                else -cfg["arm_slant"] * (1.0 if offx > 0 else -1.0)) + pose["arm_dx"][i]
         limbs.append(b.add(_fall_shape(ax, aw / 2, arm_top, arm_bot, taper=cfg["arm_taper"],
                                        tip=0.9, slant=lean), "shirt"))
         # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다
         limbs.append(b.add(ellipsoid(ax + lean, arm_bot + 0.9, 1.45, 1.4), "skin"))
-    return limbs
+    return limbs + far
 
 
 def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3, slant=0.0, wave=0.0):
@@ -997,9 +1060,28 @@ def idle_sheet(pal=None, **over):
     return sheet(lambda d: [character(d, pal=pal, **over)])
 
 
-def idle_path(style):
+def walk_sheet(pal=None, **over):
+    """걷기 시트 — 행 = 방향, 열 = `WALK_FRAMES` 개의 위상.
+
+    **idle 과 같은 `character()` 를 부른다** — 프레임마다 형태를 다시 정의하지
+    않고 `walk_pose()` 가 준 오프셋만 넣는다. 그래야 프레임 사이에서 캐릭터가
+    차지하는 크기와 자세가 어긋나지 않는다(DESIGN.md 「캐릭터 애니메이션」).
+    """
+    phases = walk_phases()
+    return sheet(lambda d: [character(d, phase=ph, pal=pal, **over) for ph in phases])
+
+
+def motion_path(motion, style):
     """머리모양 하나당 시트 하나. `player_frames.gd` 의 `sheet_path()` 와 같은 규칙이다."""
-    return f"{SPRITES}/player_idle_{style}.png"
+    return f"{SPRITES}/player_{motion}_{style}.png"
+
+
+def idle_path(style):
+    return motion_path("idle", style)
+
+
+def walk_path(style):
+    return motion_path("walk", style)
 
 
 # ── Godot 쪽 팔레트 표 ─────────────────────────────────────────────────────
@@ -1093,9 +1175,10 @@ const CLOTHES := {
 
 if __name__ == "__main__":
     for style in HAIR_STYLES:
-        p = idle_path(style)
-        idle_sheet(hair=style).save(p)
-        print("saved", p)
+        for motion, make in (("idle", idle_sheet), ("walk", walk_sheet)):
+            p = motion_path(motion, style)
+            make(hair=style).save(p)
+            print("saved", p)
     print("saved", export_palettes())
     if os.environ.get("GEN_OUT"):     # 후보 비교용 — 저장소를 더럽히지 않는다
         strip([to_img(character(d), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
@@ -1104,3 +1187,10 @@ if __name__ == "__main__":
                for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x6.png")
         stack([strip([to_img(character(d, hair=s), 3) for d in DIRS])
                for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x3.png")
+        # 걷기는 **idle 을 맨 앞에 붙여서** 본다 — 프레임끼리 이어지는지만이 아니라
+        # idle 에서 걷기로 넘어갈 때 자세가 뚝 끊기지 않는지도 같이 봐야 한다
+        # (DESIGN.md 「캐릭터 애니메이션」).
+        for scale in (6, 3):
+            stack([strip([to_img(character(d), scale)]
+                         + [to_img(character(d, phase=ph), scale) for ph in walk_phases()])
+                   for d in DIRS]).save(f"{OUT}/walk_x{scale}.png")

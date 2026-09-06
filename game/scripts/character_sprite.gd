@@ -9,6 +9,8 @@ extends RefCounted
 ##
 ## 왜 색 바꿔치기인가: 5(피부) × 6(머리) × 6(옷) × 4(머리모양) = 720 벌을 구워둘
 ## 수는 없다. 머리모양만 시트를 나누고(형태가 다르므로) 색은 실행 중에 만든다.
+## **모션(idle/걷기/…)마다 시트가 한 장씩 더 붙지만 램프는 그대로다** — 같은 색을
+## 칠하는 것이라 `recolor_map()` 을 모션 수만큼 다시 만들 뿐 팔레트는 안 늘어난다.
 ##
 ## 램프 색의 원본은 그림을 만든 생성기다 — `character_palettes.gd` 는
 ## `game/tools/gen_character.py` 가 뽑아준 자동 생성 파일이다(손으로 고치지 말 것).
@@ -56,25 +58,34 @@ static func recolor_map(appearance: Dictionary) -> Dictionary:
 	return map
 
 
-## 머리모양에 맞는 시트를 읽어 고른 색으로 칠한 텍스처. 실패하면 null.
-static func idle_texture(appearance: Dictionary) -> ImageTexture:
+## 머리모양에 맞는 **한 모션의** 시트를 읽어 고른 색으로 칠한 텍스처. 실패하면 null.
+static func motion_texture(appearance: Dictionary, motion: String) -> ImageTexture:
 	var a := Appearance.normalize(appearance)
-	var sheet: Texture2D = load(PlayerFrames.sheet_path("idle", String(a["hairstyle"])))
+	var sheet: Texture2D = load(PlayerFrames.sheet_path(motion, String(a["hairstyle"])))
 	if sheet == null:
-		push_error("캐릭터 시트를 못 읽었다 — `--import` 를 안 돌렸을 수 있다")
+		push_error("캐릭터 시트를 못 읽었다(%s) — `--import` 를 안 돌렸을 수 있다" % motion)
 		return null
 	return ImageTexture.create_from_image(recolored(sheet.get_image(), a))
 
 
-## 고른 외형으로 칠한 idle `SpriteFrames` — **월드의 플레이어가 쓰는 것**이다.
-## 미리보기(`appearance_preview.gd`)는 시트를 직접 잘라 쓰지만, 실제 캐릭터는
-## `AnimatedSprite2D` 라 애니메이션으로 잘라둔 게 필요하다. 칸을 자르는 규칙은
-## 여전히 `player_frames.gd` 한 곳에만 있다.
-static func idle_frames(appearance: Dictionary) -> SpriteFrames:
-	var texture := idle_texture(appearance)
-	if texture == null:
-		return null
-	return PlayerFrames.slice_sheet(texture, "idle", PlayerFrames.IDLE_FPS)
+## 서 있는 모습 한 장. 커스터마이징 미리보기(`appearance_preview.gd`)가 쓴다 —
+## 미리보기는 걷지 않으므로 걷기 시트까지 칠할 이유가 없다.
+static func idle_texture(appearance: Dictionary) -> ImageTexture:
+	return motion_texture(appearance, "idle")
+
+
+## 고른 외형으로 칠한 **모든 모션**의 `SpriteFrames` — 월드의 플레이어가 쓰는 것이다.
+## 미리보기는 시트를 직접 잘라 쓰지만, 실제 캐릭터는 `AnimatedSprite2D` 라
+## 애니메이션으로 잘라둔 게 필요하다. 칸을 자르는 규칙과 **모션 목록**은 여전히
+## `player_frames.gd` 한 곳에만 있다 — 도구별 모션이 늘어도 여기는 안 고친다.
+static func sprite_frames(appearance: Dictionary) -> SpriteFrames:
+	var frames := PlayerFrames.new_frames()
+	for motion in PlayerFrames.MOTIONS:
+		var texture := motion_texture(appearance, motion)
+		if texture == null:
+			return null
+		PlayerFrames.add_motion(frames, texture, motion, PlayerFrames.MOTIONS[motion])
+	return frames
 
 
 ## 기준색 이미지 한 장을 고른 색으로 칠한 새 이미지.

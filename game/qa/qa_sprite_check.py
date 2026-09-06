@@ -31,6 +31,22 @@
             폭보다 넓은가**(치비 비율의 핵심 — 아니면 그냥 작은 사람이다)
   눈        흰 하이라이트가 있는가, 눈 덩어리가 3×3 이상인가
 
+**「이어짐」 갈래**(INBOX #15) — 프레임이 여러 장인 시트(걷기 등)에만 돈다.
+`DESIGN.md` 「캐릭터 애니메이션」의 "프레임 사이의 움직임이 자연스럽게 이어져야
+한다"를 숫자로 옮긴 것이다. 한 장씩 보면 다 멀쩡한데 **넘겨보면 뚝뚝 끊기는** 경우를
+잡는다:
+  프레임수  4~6 장인가 (DESIGN.md 「캐릭터 애니메이션」)
+  이어짐    연속한 두 프레임 사이에 **몸 픽셀이 얼마나 바뀌는가**. 너무 크면 한
+            프레임에서 순간이동하고, 너무 작으면 그 프레임이 죽어 있다(앞 프레임과
+            사실상 같은 그림이라 프레임 수만 늘린 셈이다). 마지막→첫 프레임도 본다
+            (걷기는 도는 애니메이션이다)
+  고르게    가장 큰 변화 ÷ 가장 작은 변화. 몇 장이 서로 붙어 있고 남은 자리에서
+            한꺼번에 건너뛰면 여기서 걸린다
+  자리      실루엣 바운딩박스가 한 프레임에 움직이는 거리 — 캐릭터가 칸 안에서
+            미끄러지면 안 된다
+  이음      **idle 시트의 첫 프레임 → 이 시트의 첫 프레임**. 걷기 안에서의 가장 큰
+            변화보다 크게 벌어지면 걷기 시작하는 순간 다른 캐릭터가 된다
+
 지형 타일 시트는 보는 게 다르다:
   규격      칸 크기 / 시트가 칸 수에 맞는지
   팔레트    재질 램프 밖의 색이 없는지 (여기가 곧 "PNG 가 지금 생성기와 같은가")
@@ -128,7 +144,47 @@ def _player_spec(**over):
         # 눈을 확인할 방향. 뒷모습(up)은 얼굴이 없으니 뺀다.
         eye_dirs=("down", "left", "right"),
         eye_min=(3, 3),
+        # 프레임이 한 장뿐인 시트(idle)는 「이어짐」을 돌 게 없다 — `motion` 을 준
+        # 시트만 본다.
+        motion=None,
     ), **over)
+
+
+def _walk_spec(style):
+    """걷기 시트 — idle 스펙에서 **두 가지만** 다르다.
+
+    1) `bands["legs"]`/`bands["shoes"]`: 비율 검사는 "신발 맨 윗줄"을 다리와 신발의
+       경계로 삼는데, 걷기는 **한 발이 떠 있어서** 그 줄이 든 높이만큼 올라간다 —
+       신발이 그만큼 길어 보이고 다리는 그만큼 짧아 보인다. 서 있는 그림의
+       값에서 최대로 드는 높이(2px)만큼 양쪽으로 넓힌다.
+    2) `straight_max`: **딛고 선 다리는 그 자체가 곧은 기둥**이다(허벅지에서 발목까지
+       0.5px 밖에 안 좁아지고 신발이 허벅지보다 넓지 않다). 서 있는 idle 이 5px 에서
+       끊기는 건 두 다리가 나란하고 손이 허벅지를 덮어서일 뿐이고, 걷는 동안 손이
+       올라가면 그 선이 6px 로 이어진다. **한 칸만 늦춘다** — 7px 부터는 실제로
+       각져 보인다.
+    나머지(팔레트·대비·비율·눈·단색·색상차)는 한 칸도 안 늦춘다.
+    """
+    return _player_spec(
+        bands=dict(torso=(4, 8), legs=(2, 7), shoes=(3, 7)),
+        straight_max=6,
+        motion=dict(
+            # DESIGN.md 「캐릭터 애니메이션」: walk 는 4~6 프레임.
+            frames=(4, 6),
+            # 연속한 두 프레임 사이에 바뀌는 몸 픽셀 비율. 위는 순간이동, 아래는
+            # **죽은 프레임**(앞 프레임과 사실상 같은 그림)을 잡는다.
+            change=(0.05, 0.40),
+            # 가장 큰 변화 ÷ 가장 작은 변화. 실제로 이걸로 잡았다: 위상을 반 칸
+            # 밀어 뽑았더니 6장 중 2장이 서로 거의 같은 그림이 되고 나머지 자리에서
+            # 한꺼번에 건너뛰었다 — 비 4.9. 지금 값은 1.2~2.0 이다.
+            even=3.0,
+            # 실루엣 바운딩박스가 한 프레임에 움직일 수 있는 px.
+            shift=2,
+            # idle 시트의 첫 프레임과 이 시트의 첫 프레임이 벌어져도 되는 정도
+            # (걷기 안에서의 가장 큰 변화의 몇 배까지).
+            idle="player_idle_%s.png" % style,
+            from_idle=1.5,
+        ),
+    )
 
 
 # 머리모양 4종은 **형태만 다르고 팔레트·비율·광원이 같다** — 그래서 스펙도 하나를
@@ -151,15 +207,20 @@ TERRAIN_SPEC = dict(
     shirt_gap=35.0,
 )
 
-SPECS = {
-    "player_idle_short.png": _player_spec(),
-    "player_idle_ponytail.png": _player_spec(luma_mean=(94.0, 170.0)),
-    "player_idle_bob.png": _player_spec(luma_mean=(90.0, 170.0), dark_frac=0.26,
-                                        chroma_mean=31.0),
-    "player_idle_long.png": _player_spec(luma_mean=(85.0, 170.0), dark_frac=0.30,
-                                         chroma_mean=29.0),
-    "terrain_tiles.png": TERRAIN_SPEC,
+# 머리모양별로 늦추는 세 값(평균명도/어두운비율/채도)은 **idle 과 걷기가 같다** —
+# 같은 머리를 같은 팔레트로 그린 같은 캐릭터라, 모션이 바뀐다고 머리가 더 밝아지지
+# 않는다. 그래서 한 곳에 적고 두 스펙에 같이 먹인다.
+_BY_STYLE = {
+    "short": {},
+    "ponytail": dict(luma_mean=(94.0, 170.0)),
+    "bob": dict(luma_mean=(90.0, 170.0), dark_frac=0.26, chroma_mean=31.0),
+    "long": dict(luma_mean=(85.0, 170.0), dark_frac=0.30, chroma_mean=29.0),
 }
+
+SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
+for _style, _over in _BY_STYLE.items():
+    SPECS["player_idle_%s.png" % _style] = _player_spec(**_over)
+    SPECS["player_walk_%s.png" % _style] = dict(_walk_spec(_style), **_over)
 
 
 # ── 검사 ──────────────────────────────────────────────────────────────────
@@ -411,9 +472,109 @@ def check_sheet(path, spec):
             "%.0f < %.0f — 탁하다" % (ch, spec["chroma_mean"]), "%.0f" % ch)
 
     _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, glint)
+    if spec.get("motion"):
+        _check_motion(rep, spec["motion"], os.path.dirname(path), rgb, body, cell, rows, cols)
 
     rep.dump()
     return rep
+
+
+# ── 「이어짐」 (INBOX #15) ────────────────────────────────────────────────
+# 프레임이 여러 장인 시트만 본다. 앞의 검사들은 **한 장씩** 보므로, 여섯 장이
+# 저마다 멀쩡한데 넘겨보면 뚝뚝 끊기는 걸 못 잡는다.
+def _frame(rgb, body, cell, r, c):
+    sl = (slice(r * cell, (r + 1) * cell), slice(c * cell, (c + 1) * cell))
+    return rgb[sl], body[sl]
+
+
+def _box(mask):
+    ys, xs = np.nonzero(mask)
+    return np.array([ys.min(), ys.max(), xs.min(), xs.max()])
+
+
+def _shifted(a, dy, dx):
+    out = np.zeros_like(a)
+    ys, yd = slice(max(dy, 0), a.shape[0] + min(dy, 0)), slice(max(-dy, 0), a.shape[0] + min(-dy, 0))
+    xs, xd = slice(max(dx, 0), a.shape[1] + min(dx, 0)), slice(max(-dx, 0), a.shape[1] + min(-dx, 0))
+    out[ys, xs] = a[yd, xd]
+    return out
+
+
+def _changed(a, ba, b, bb):
+    ch = (ba != bb) | (ba & bb & np.any(a != b, axis=-1))
+    return float(ch.sum()) / max(int(ba.sum()), int(bb.sum()), 1)
+
+
+def _delta(a, ba, b, bb):
+    """두 프레임 사이 (바뀐 몸 픽셀 비율, 실루엣 바운딩박스가 움직인 px).
+
+    **바뀐 비율**은 색까지 본다 — 실루엣만 보면 팔이 몸 앞에서 움직이는 것처럼
+    테두리가 안 바뀌는 움직임을 통째로 놓친다.
+
+    다만 **몸 전체가 1px 통짜로 움직인 몫은 빼고 본다**(뒤 프레임을 ±1px 씩
+    밀어보고 가장 적게 바뀌는 값을 쓴다). 걷기는 착지마다 몸이 한 칸 가라앉는데,
+    그 한 칸만으로 몸 픽셀의 절반 넘게 값이 바뀐다 — 그걸 그대로 재면 **정상적인
+    바운스가 "순간이동"으로 잡히고**, 정작 보려던 팔다리의 움직임은 그 잡음에
+    묻힌다. 바운딩박스가 움직인 거리는 따로 재므로 통짜 이동을 놓치지 않는다.
+    """
+    ratio = min(_changed(a, ba, _shifted(b, dy, dx), _shifted(bb, dy, dx))
+                for dy in (-1, 0, 1) for dx in (-1, 0, 1))
+    return ratio, int(np.abs(_box(ba) - _box(bb)).max())
+
+
+def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols):
+    lo, hi = mo["frames"]
+    rep.add(lo <= cols <= hi, "프레임수", "%d장 (%d~%d장이어야 한다)" % (cols, lo, hi),
+            "%d장" % cols)
+
+    clo, chi = mo["change"]
+    jumpy, dead, slid, ratios = [], [], [], []
+    for r, d in enumerate(rows):
+        deltas = []
+        for c in range(cols):
+            a, ba = _frame(rgb, body, cell, r, c)
+            b, bb = _frame(rgb, body, cell, r, (c + 1) % cols)   # 도는 애니메이션이다
+            ch, shift = _delta(a, ba, b, bb)
+            deltas.append(ch)
+            tag = "%s#%d→%d" % (d, c, (c + 1) % cols)
+            if ch > chi:
+                jumpy.append("%s %.2f" % (tag, ch))
+            if ch < clo:
+                dead.append("%s %.2f" % (tag, ch))
+            if shift > mo["shift"]:
+                slid.append("%s %dpx" % (tag, shift))
+        ratios.append(max(deltas) / max(min(deltas), 1e-6))
+    rep.add(not jumpy and not dead, "이어짐",
+            ("%s 가 한 프레임에 너무 크게 바뀐다(상한 %.2f)" % (" ".join(jumpy[:3]), chi)
+             if jumpy else "")
+            + ("%s 가 앞 프레임과 같은 그림이다(하한 %.2f)" % (" ".join(dead[:3]), clo)
+               if dead else ""),
+            "%.2f~%.2f" % (clo, chi))
+    rep.add(max(ratios) <= mo["even"], "고르게",
+            "변화량 최대/최소 %.1f배 > %.1f배 — 몇 장이 붙어 있고 남은 자리에서 건너뛴다"
+            % (max(ratios), mo["even"]), "%.1f배" % max(ratios))
+    rep.add(not slid, "자리", "%s — 캐릭터가 칸 안에서 미끄러진다(상한 %dpx)"
+            % (" ".join(slid[:3]), mo["shift"]))
+
+    if not mo.get("idle"):
+        return
+    path = os.path.join(folder, mo["idle"])
+    prev = np.array(Image.open(path).convert("RGBA"))
+    pr, pa = prev[..., :3].astype(np.int32), prev[..., 3] == 255
+    worst = max(max(_delta(*_frame(rgb, body, cell, r, c),
+                           *_frame(rgb, body, cell, r, (c + 1) % cols))[0]
+                    for c in range(cols)) for r in range(len(rows)))
+    bad, show = [], 0.0
+    for r, d in enumerate(rows):
+        b, bb = _frame(rgb, body, cell, r, 0)
+        ch, shift = _delta(*_frame(pr, pa, cell, r, 0), b, bb)
+        show = max(show, ch)
+        if ch > worst * mo["from_idle"] or shift > mo["shift"]:
+            bad.append("%s %.2f/%dpx" % (d, ch, shift))
+    rep.add(not bad, "이음",
+            "%s ← idle 에서 넘어오는 순간이 걷기 안의 가장 큰 변화(%.2f)의 %.1f배를 넘는다"
+            % (" ".join(bad[:3]), worst, mo["from_idle"]),
+            "%.2f (걷기 최대 %.2f)" % (show, worst))
 
 
 # ── 「자연스러움」 (INBOX #13) ────────────────────────────────────────────

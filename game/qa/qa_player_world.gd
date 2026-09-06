@@ -16,7 +16,7 @@ extends SceneTree
 ##      6) 스폰 칸에 플레이어가 서 있고 카메라가 그 위에 있다.
 ##      7) 발밑이 노드 원점이다(스프라이트가 땅에 서 있지, 공중에 뜨거나 파묻히지 않는다).
 ##      8) WASD 를 누르면 그 방향으로 움직이고 **카메라가 따라온다**.
-##      9) 방향에 맞는 애니메이션으로 바뀐다.
+##      9) 방향에 맞는 애니메이션으로 바뀐다 (움직이면 `walk_<방향>`).
 ##
 ## 눈으로 볼 몫은 `user://qa_shots/` 에 캡처로 남긴다.
 
@@ -281,7 +281,9 @@ func _expect_moved(action: String, want: Vector2, dir_name: String) -> void:
 		_fails.append("%s 로 움직였는데 카메라가 안 따라왔다 (%s vs %s)"
 				% [action, camera.global_position, player.global_position])
 	var sprite := player.get_node_or_null("Sprite") as AnimatedSprite2D
-	var want_anim := "idle_%s" % dir_name
+	# 움직이는 동안은 **그 방향의 걷기**여야 한다 (INBOX #15 에서 걷기 시트가 생겼다).
+	# 방향과 시트의 행이 어긋나면 옆으로 걸으면서 앞모습이 나온다.
+	var want_anim := "walk_%s" % dir_name
 	if sprite.animation != want_anim:
 		_fails.append("%s 로 움직이는데 애니메이션이 %s 다 — %s 여야 한다"
 				% [action, sprite.animation, want_anim])

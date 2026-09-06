@@ -55,7 +55,7 @@ func _ready() -> void:
 func _apply_appearance() -> void:
 	if _sprite == null:
 		return
-	var frames := CharacterSprite.idle_frames(appearance)
+	var frames := CharacterSprite.sprite_frames(appearance)
 	if frames == null:
 		frames = PlayerFrames.build()  # 칠하기에 실패해도 기준색으로는 서 있게 한다.
 	_sprite.sprite_frames = frames
@@ -113,7 +113,8 @@ func _update_animation() -> void:
 	if motion == null:
 		return
 	var dir: String = PlayerFrames.DIR_NAMES[motion.facing]
-	# 걷기 시트(INBOX #13)가 생기면 자동으로 그쪽을 쓴다. 아직 없으면 idle 로 둔다.
+	# 걷는 중이면 걷기 시트를 쓴다(INBOX #15). 어떤 이유로 그 시트가 안 실렸으면
+	# 서 있는 그림으로 떨어진다 — 캐릭터가 통째로 안 보이는 것보다는 낫다.
 	var wanted := "walk_%s" % dir if motion.is_moving else "idle_%s" % dir
 	if not _sprite.sprite_frames.has_animation(wanted):
 		wanted = "idle_%s" % dir
