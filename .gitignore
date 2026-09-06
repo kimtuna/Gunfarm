@@ -1,0 +1,13 @@
+# 하네스 런타임 상태 (로그/PID/바퀴별 JSON)
+.harness/
+
+# Python venv (Pillow) — 로컬 도구, 커밋하지 않는다
+.venv/
+
+# Godot
+game/.godot/
+game/android/
+*.translation
+
+# macOS
+.DS_Store

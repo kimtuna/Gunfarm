@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gunfarm — 진행 상황</title>
+<style>
+:root { color-scheme: light dark; --bg:#faf9f6; --fg:#23201b; --dim:#6b665c; --line:#ddd8cc; --card:#fff; --accent:#3c6e47; }
+@media (prefers-color-scheme: dark) { :root { --bg:#16150f; --fg:#e8e4d8; --dim:#8f897a; --line:#2f2c22; --card:#1e1c14; --accent:#7bb98a; } }
+* { box-sizing:border-box; }
+body { margin:0; padding:2rem 1rem; background:var(--bg); color:var(--fg);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+main { max-width:760px; margin:0 auto; }
+h1 { font-size:1.5rem; margin:0 0 .2rem; }
+.sub { color:var(--dim); margin:0 0 1.6rem; font-size:.9rem; }
+.cards { display:flex; gap:.75rem; margin-bottom:1.5rem; flex-wrap:wrap; }
+.card { flex:1 1 120px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.9rem 1rem; }
+.card b { display:block; font-size:1.9rem; line-height:1.1; color:var(--accent); font-variant-numeric:tabular-nums; }
+.card span { color:var(--dim); font-size:.8rem; }
+section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:1rem 1.2rem; margin-bottom:1rem; }
+h2 { font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:0 0 .6rem; font-weight:600; }
+ul { margin:0; padding-left:1.1rem; } li { margin:.15rem 0; }
+.num { color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }
+.idle { color:var(--dim); }
+pre { margin:.4rem 0 0; white-space:pre-wrap; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+code { font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.warn { background:#7a2618; color:#fff; border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.2rem; }
+footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; }
+</style></head><body><main>
+<h1>Gunfarm</h1>
+<p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
+
+<div class="cards">
+  <div class="card"><b>0</b><span>완료</span></div>
+  <div class="card"><b>3</b><span>남음</span></div>
+</div>
+<section><h2>다음 항목</h2><span class="num">#1</span> [BUILD] 메인 메뉴 화면: 플레이 / 설정 / 나가기 세 버튼. &quot;나가기&quot;는 실제로 앱을 종료하고, &quot;플레이&quot;와 &quot;설정&quot;은 아직 빈 화면으로 이동만 한다(각각 #2, #3에서 채운다). 프로젝트 진입 씬을 이 메인 메뉴로 바꾼다.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#1</span> [BUILD] 메인 메뉴 화면: 플레이 / 설정 / 나가기 세 버튼. &quot;나가기&quot;는 실제로 앱을 종료하고, &quot;플레이&quot;와 &quot;설정&quot;은 아직 빈 화면으로 이동만 한다(각각 #2, #3에서 채운다). 프로젝트 진입 씬을 이 메인 메뉴로 바꾼다.</li>
+<li><span class="num">#2</span> [BUILD] 캐릭터 슬롯 화면(코어키퍼 스타일 3개 슬롯). 빈 슬롯을 고르면 캐릭터 커스터마이징 화면으로, 캐릭터가 있는 슬롯을 고르면 월드 입장으로 넘어가는 자리만 만든다(커스터마이징 항목과 월드 생성 자체는 범위 밖 — DESIGN.md &quot;범위 밖 / 아직 미정&quot; 참고). 슬롯 데이터는 `user://` 저장/불러오기로 유지된다.</li>
+<li><span class="num">#3</span> [BUILD] 설정 화면의 해상도 옵션. **해상도를 바꿔도 카메라가 보여주는 월드 범위는 모든 해상도에서 동일해야 한다**(DESIGN.md &quot;카메라 / 해상도&quot; PvP 공정성 규칙). 서로 다른 해상도 2개 이상에서 실제로 같은 월드 범위가 보이는지 스크린샷으로 검증할 것.</li></ul></section>
+<section><h2>마지막 커밋</h2><code>(없음)</code>
+  <p class="sub" style="margin:.3rem 0 0"></p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>(아직 첫 바퀴를 돌지 않았다.)
+
+## 다음에 할 것
+
+INBOX의 가장 작은 번호 미완료 항목.</pre></section>
+<footer>갱신: 2026-09-06 14:13 KST</footer>
+</main></body></html>
