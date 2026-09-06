@@ -24,7 +24,7 @@ func _initialize() -> void:
 	_steps = [
 		_step_main_menu,
 		func(): _press("Layout/PlayButton"),
-		func(): _expect_screen("캐릭터 슬롯", "01_play"),
+		func(): _expect_screen("캐릭터 선택", "01_play"),
 		func(): _press("Layout/BackButton"),
 		func(): _expect_screen("GUNFARM", "02_back_from_play"),
 		func(): _press("Layout/SettingsButton"),

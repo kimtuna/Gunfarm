@@ -1,6 +1,6 @@
 extends Control
 
-## 아직 내용이 없는 화면(캐릭터 슬롯=INBOX #2, 설정=INBOX #3)의 자리만 잡아두는 스크립트.
+## 아직 내용이 없는 화면(설정=INBOX #3)의 자리만 잡아두는 스크립트.
 ## 제목만 보여주고 메인 메뉴로 돌아가는 길만 열어둔다 — 실제 내용은 각 항목에서 채운다.
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"

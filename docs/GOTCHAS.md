@@ -42,6 +42,11 @@
   있다.** 마우스 방향을 강제로 바꿔야 하는 검증(예: 4방향 스크린샷)은
   `set_physics_process(false)`로 마우스 추종 로직을 멈추고 방향/텍스처 갱신 함수를
   직접 호출하는 방식을 우선 시도할 것.
+- **`--script` 자체 QA에서 키 입력(Esc 등)은 `InputEventAction` + `Input.parse_input_event()`로
+  흘려보낼 수 있다.** `event.action`에 액션 이름, `pressed = true`를 넣으면 씬의
+  `_unhandled_input()`이 실제로 받는다 — 버튼처럼 `emit_signal`로 우회하지 않아도 된다.
+- **`JSON.parse_string()`은 모든 숫자를 float로 준다.** 저장 파일의 `version` 같은 정수 필드를
+  `==`로 바로 비교하면 `1 != 1.0`으로 어긋난다 — 읽을 때 `int(...)`로 감싸서 비교할 것.
 - **Area2D/RigidBody 충돌은 `add_child` 직후 바로 확인하면 false negative가 난다.**
   최소 2~3 물리 프레임 진행 후 신호나 결과로 확인할 것.
 - **캐릭터/오브젝트 이동 함수를 검증할 때 한 번에 큰 이동량을 넘기면 충돌 판정을

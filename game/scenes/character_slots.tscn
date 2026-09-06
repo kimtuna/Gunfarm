@@ -1,9 +1,21 @@
-[gd_scene load_steps=3 format=3 uid="uid://bgunfarmslots0"]
+[gd_scene load_steps=4 format=3 uid="uid://bgunfarmslots0"]
 
-[ext_resource type="Script" path="res://scripts/menu_placeholder.gd" id="1_placeholder"]
+[ext_resource type="Script" path="res://scripts/character_slots.gd" id="1_slots"]
 [ext_resource type="Theme" path="res://ui/menu_theme.tres" id="2_theme"]
 
-[node name="Screen" type="Control"]
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_confirm"]
+content_margin_left = 24.0
+content_margin_top = 20.0
+content_margin_right = 24.0
+content_margin_bottom = 20.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
+
+[node name="CharacterSlots" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -11,7 +23,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 theme = ExtResource("2_theme")
-script = ExtResource("1_placeholder")
+script = ExtResource("1_slots")
 
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
@@ -29,31 +41,91 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -240.0
-offset_top = -120.0
-offset_right = 240.0
-offset_bottom = 120.0
+offset_left = -320.0
+offset_top = -240.0
+offset_right = 320.0
+offset_bottom = 240.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 12
 alignment = 1
 
 [node name="Title" type="Label" parent="Layout"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
-theme_override_font_sizes/font_size = 40
-text = "캐릭터 슬롯"
+theme_override_font_sizes/font_size = 44
+text = "캐릭터 선택"
 horizontal_alignment = 1
 
 [node name="Note" type="Label" parent="Layout"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.603922, 0.627451, 0.560784, 1)
 theme_override_font_sizes/font_size = 18
-text = "여기에 캐릭터 슬롯 3개가 들어온다. (INBOX #2)"
+text = "빈 슬롯을 고르면 새 캐릭터를 만들고, 캐릭터가 있는 슬롯을 고르면 월드로 들어간다."
 horizontal_alignment = 1
 
 [node name="Gap" type="Control" parent="Layout"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+
+[node name="Slots" type="VBoxContainer" parent="Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Slot0" type="HBoxContainer" parent="Layout/Slots"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Choose" type="Button" parent="Layout/Slots/Slot0"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "슬롯 1"
+alignment = 0
+
+[node name="Delete" type="Button" parent="Layout/Slots/Slot0"]
+custom_minimum_size = Vector2(110, 64)
+layout_mode = 2
+disabled = true
+text = "삭제"
+
+[node name="Slot1" type="HBoxContainer" parent="Layout/Slots"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Choose" type="Button" parent="Layout/Slots/Slot1"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "슬롯 2"
+alignment = 0
+
+[node name="Delete" type="Button" parent="Layout/Slots/Slot1"]
+custom_minimum_size = Vector2(110, 64)
+layout_mode = 2
+disabled = true
+text = "삭제"
+
+[node name="Slot2" type="HBoxContainer" parent="Layout/Slots"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Choose" type="Button" parent="Layout/Slots/Slot2"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "슬롯 3"
+alignment = 0
+
+[node name="Delete" type="Button" parent="Layout/Slots/Slot2"]
+custom_minimum_size = Vector2(110, 64)
+layout_mode = 2
+disabled = true
+text = "삭제"
+
+[node name="Gap2" type="Control" parent="Layout"]
+custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 
 [node name="BackButton" type="Button" parent="Layout"]
@@ -62,4 +134,70 @@ custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 text = "뒤로"
 
+[node name="DeleteConfirm" type="Control" parent="."]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="DeleteConfirm"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.045098, 0.0352941, 0.78)
+
+[node name="Box" type="PanelContainer" parent="DeleteConfirm"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -280.0
+offset_top = -120.0
+offset_right = 280.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_confirm")
+
+[node name="BoxLayout" type="VBoxContainer" parent="DeleteConfirm/Box"]
+layout_mode = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="DeleteMessage" type="Label" parent="DeleteConfirm/Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.909804, 0.894118, 0.847059, 1)
+theme_override_font_sizes/font_size = 22
+text = "이 캐릭터를 지울까요?"
+horizontal_alignment = 1
+
+[node name="Buttons" type="HBoxContainer" parent="DeleteConfirm/Box/BoxLayout"]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="DeleteYesButton" type="Button" parent="DeleteConfirm/Box/BoxLayout/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+text = "삭제한다"
+
+[node name="DeleteNoButton" type="Button" parent="DeleteConfirm/Box/BoxLayout/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(180, 56)
+layout_mode = 2
+text = "그만둔다"
+
 [connection signal="pressed" from="Layout/BackButton" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="DeleteConfirm/Box/BoxLayout/Buttons/DeleteYesButton" to="." method="_on_delete_confirmed"]
+[connection signal="pressed" from="DeleteConfirm/Box/BoxLayout/Buttons/DeleteNoButton" to="." method="_on_delete_canceled"]
