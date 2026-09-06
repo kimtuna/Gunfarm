@@ -35,7 +35,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>다음 항목</h2><span class="num">#24</span> [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.</section>
 <section><h2>대기 중인 항목</h2><ul><li><span class="num">#24</span> [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>5b3aba4  chore(dashboard): 진행 상황 갱신</code>
+<section><h2>마지막 커밋</h2><code>2069f68  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-07 08:45</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #23 ([BUILD] 인벤토리 + 핫바 — 데이터 구조와 UI) 완료.
 
@@ -49,7 +49,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <ul class="later"><li><strong>맵에 마크(표식) 찍기</strong> — M 맵 위에 플레이어가 직접 표식을 남기고 지우는 기능. (2026-09-07 사람이 &quot;나중에 할 것&quot;으로 넣음.) 정해야 할 것: 표식 종류가 몇 개인지, 이름/메모를 붙일 수 있는지, 슬롯 저장에 어떻게 들어가는지(탐험 기록과 같은 자리), 그리고 <strong>멀티에서 표식을 팀원과 공유하는지</strong> — 공유한다면 `DESIGN.md` 「맵 (M)」의 &quot;맵에 다른 플레이어를 표시하지 않는다&quot;와 어디까지 어긋나는지 먼저 판단해야 한다.</li>
 <li><strong>도구 6종을 차례대로 추가</strong> — 총(사냥) / 곡괭이(채광) / 낫(채집·수확) / 괭이(밭 일구기) / 물뿌리개(물 주기) / 낚싯대(낚시). <strong>도끼(INBOX #24)가 파이프라인을 세운 뒤</strong> 같은 방식으로 하나씩 올린다 — 절차는 `DESIGN.md` 「새 도구를 추가하는 절차」에 고정돼 있고, 도구 하나에 [DESIGN] 한 바퀴 + [BUILD] 한 바퀴다.</li>
 <li><strong>밭 시스템(농사)</strong> — 괭이·물뿌리개가 실제로 쓸 밭 타일 상태(일궈짐 / 물 준 상태 / 마름)와 작물 성장. 규칙은 `DESIGN.md` 「생활 스킬 — 생산 계열」에 스타듀식으로 정해뒀고, 작물별 성장 일수·계절 제한은 아직 범위 밖이다.</li></ul></section>
-<footer>갱신: 2026-09-07 08:45 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-07 08:46 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -62,7 +62,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907084559";
+  var STAMP = "20260907084604";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
