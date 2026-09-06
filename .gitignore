@@ -9,7 +9,9 @@ game/.godot/
 game/android/
 *.translation
 
-# `*.gd.uid` 는 여기 넣지 않는다 — **커밋하는 쪽으로 정했다**(2026-09-06, INBOX #6).
+# `*.gd.uid` 와 `*.import` 는 여기 넣지 않는다 — **둘 다 커밋하는 쪽으로 정했다**
+# (2026-09-06, INBOX #6 / #7). 특히 `*.import` 의 `[params]` 는 지우면 기본값으로
+# 되돌아가는 임포트 설정이라 무시하면 그림 품질이 클론마다 달라진다.
 # 이유는 CLAUDE.md 「git」 참고. 검증은 game/qa/qa_uid_files.gd.
 
 # macOS
