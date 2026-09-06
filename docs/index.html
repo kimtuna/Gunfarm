@@ -35,8 +35,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>다음 항목</h2><span class="num">#13</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). #9 의 검사 스크립트를 먼저 돌려 통과시킨 뒤 눈으로 확인할 것. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지도 `qa_sprite_check.py` 에 검사로 추가한다**(끊겨 보이는 애니메이션을 숫자로 잡는다). Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</section>
 <section><h2>대기 중인 항목</h2><ul><li><span class="num">#13</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). #9 의 검사 스크립트를 먼저 돌려 통과시킨 뒤 눈으로 확인할 것. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지도 `qa_sprite_check.py` 에 검사로 추가한다**(끊겨 보이는 애니메이션을 숫자로 잡는다). Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</li>
 <li><span class="num">#14</span> [BUILD] 월드 안의 플레이어에게 **슬롯에 저장된 외형을 입힌다.** #11 로 커스터마이징 화면은 고른 색·머리모양을 그대로 보여주는데, 정작 월드에 들어가면 기준색·짧은머리 고정이다(`player.gd` 가 `PlayerFrames.build()` 를 인자 없이 부른다). 재료는 다 있다 — `SlotStore` 에서 그 슬롯의 `appearance` 를 읽어 `character_sprite.gd` 로 시트를 칠하고, 머리모양에 맞는 시트를 고르면 된다. **슬롯을 거치지 않고 월드 씬을 직접 띄운 경우(자체 QA 가 그렇게 한다)에도 기본 외형으로 멀쩡히 떠야 한다.**</li></ul></section>
-<section><h2>마지막 커밋</h2><code>2839cd0  [INBOX #12] 지형을 타일 스프라이트로 — 땅/바다 + 이어지는 해안</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 22:45</p></section>
+<section><h2>마지막 커밋</h2><code>ec440bd  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 22:46</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #12 ([DESIGN] 지형 타일 스프라이트 — 땅/바다 2종 + 해안) 완료.
 
 ## 만든 것
@@ -56,7 +56,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260906224606";
+  var STAMP = "20260906224628";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
