@@ -4,7 +4,7 @@ extends Node2D
 ##
 ## 슬롯에 저장된 `world_seed` 로 월드를 만든다. **같은 시드는 항상 같은 월드**여야 하므로
 ## 생성 자체는 scripts/world_gen.gd(노드를 상속하지 않는 순수 클래스)가 맡고, 여기서는
-## 그 결과를 화면에 올리고 카메라를 스폰 지점에 놓기만 한다.
+## 그 결과를 화면에 올리고 플레이어를 스폰 지점에 세우기만 한다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -35,11 +35,10 @@ func _ready() -> void:
 	world.build(seed_value)
 
 	(%TerrainView as Node2D).set_world(world)
-	var spawn := WorldGen.tile_center(world.spawn_tile)
-	(%SpawnMarker as Node2D).position = spawn
-	# 카메라는 확대/축소하지 않는다 — 보이는 월드 범위는 모든 해상도에서 고정이다
-	# (docs/DESIGN.md "카메라 / 해상도" PvP 공정성 규칙).
-	(%Camera as Camera2D).position = spawn
+	# 플레이어를 스폰 칸에 세운다. 카메라는 플레이어의 자식이라 따로 따라다니게 만들
+	# 코드가 없다 — 확대/축소도 하지 않는다(보이는 월드 범위는 모든 해상도에서 고정,
+	# docs/DESIGN.md "카메라 / 해상도" PvP 공정성 규칙).
+	(%Player as Node2D).setup(world, world.spawn_tile)
 
 	(%WhoLabel as Label).text = character_name
 	(%InfoLabel as Label).text = "시드 %d   ·   스폰 (%d, %d)   ·   지도 %d×%d칸   ·   바다 %d%%" % [

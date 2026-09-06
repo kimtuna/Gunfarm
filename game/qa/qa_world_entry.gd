@@ -7,7 +7,8 @@ extends SceneTree
 ##
 ## 확인하는 것:
 ##   1) 캐릭터가 있는 슬롯으로 들어가면 그 슬롯의 시드로 만든 지형이 화면에 그려진다.
-##   2) 카메라가 스폰 지점에 있고 스폰 주변은 땅이다(바다 한가운데서 시작하지 않는다).
+##   2) 플레이어와 카메라가 스폰 지점에 있고 스폰 주변은 땅이다(바다 한가운데서
+##      시작하지 않는다). 카메라는 플레이어의 자식이라 위치를 볼 때 global 로 본다.
 ##   3) **보이는 월드 범위는 여전히 1280×720 고정**이다 (docs/DESIGN.md "카메라 / 해상도").
 ##   4) 시드가 다르면 화면도 다르고, 같은 시드로 다시 들어오면 같은 화면이다.
 ##   5) 뒤로 버튼으로 슬롯 화면에 돌아갈 수 있다.
@@ -116,8 +117,9 @@ func _check_view_range() -> void:
 		return
 	var world := _world()
 	var spawn: Vector2 = WorldGen.tile_center(world.spawn_tile)
-	if not camera.position.is_equal_approx(spawn):
-		_fails.append("카메라가 %s 인데 스폰 %s 에 있어야 한다" % [camera.position, spawn])
+	# 카메라는 플레이어의 자식이라(따라다니게 만들 코드가 없다) 로컬 좌표는 항상 0이다.
+	if not camera.global_position.is_equal_approx(spawn):
+		_fails.append("카메라가 %s 인데 스폰 %s 에 있어야 한다" % [camera.global_position, spawn])
 	if not camera.zoom.is_equal_approx(Vector2.ONE):
 		_fails.append("카메라 zoom 이 %s 다 — 확대/축소하면 시야가 달라져 PvP 공정성이 깨진다" % camera.zoom)
 	var rect := _visible_world_rect()
@@ -126,7 +128,7 @@ func _check_view_range() -> void:
 		_fails.append("보이는 월드 범위가 %s — %s 여야 한다 (PvP 공정성)" % [rect, expected])
 
 
-## 스폰 주변이 땅이어야 한다. 화면 한가운데는 스폰 표식(금색)이 덮고 있으므로 조금 비켜서 본다.
+## 스폰 주변이 땅이어야 한다. 화면 한가운데는 플레이어가 덮고 있으므로 조금 비켜서 본다.
 func _check_spawn_is_land() -> void:
 	var image := _capture()
 	if image == null:
@@ -145,7 +147,7 @@ func _check_spawn_is_land() -> void:
 		_fails.append("스폰 주변 %d/%d 칸이 바다다 — 바다 한가운데서 시작하면 안 된다" % [total - land, total])
 
 
-## 해안으로 카메라를 옮기면 한 화면에 땅과 바다가 같이 보여야 한다
+## 해안으로 플레이어를 옮기면(카메라가 따라간다) 한 화면에 땅과 바다가 같이 보여야 한다
 ## (지형이 실제로 두 종류로 그려지는지 = 렌더러가 도는지 확인).
 func _look_at_coast() -> void:
 	var world := _world()
@@ -169,9 +171,9 @@ func _look_at_coast() -> void:
 	if best.x < 0:
 		_fails.append("자연 해안 타일을 못 찾았다 — 지도가 전부 땅이거나 전부 바다다")
 		return
-	var camera := current_scene.get_node_or_null("%Camera") as Camera2D
-	camera.position = WorldGen.tile_center(best)
-	print("[qa] 스폰에서 가장 가까운 해안 %s 로 카메라 이동" % best)
+	var player := current_scene.get_node_or_null("%Player") as Node2D
+	player.place_at(WorldGen.tile_center(best))
+	print("[qa] 스폰에서 가장 가까운 해안 %s 로 플레이어 이동" % best)
 
 
 func _check_coast_shows_both() -> void:
@@ -238,7 +240,7 @@ func _overview_shot() -> void:
 	# 지도 전체(12288 월드 단위)가 720px 세로 안에 들어오는 배율.
 	var fit := root.get_visible_rect().size.y / WorldGen.world_size().y
 	camera.zoom = Vector2(fit, fit)
-	camera.position = WorldGen.world_size() * 0.5
+	camera.global_position = WorldGen.world_size() * 0.5
 	_steps.insert(_step, func(): _shoot("44_island_overview_QA만_축소"))
 
 
@@ -267,7 +269,7 @@ func _nearest(color: Color) -> String:
 	var to_land := Vector3(color.r - COLOR_LAND.r, color.g - COLOR_LAND.g, color.b - COLOR_LAND.b).length()
 	var to_sea := Vector3(color.r - COLOR_SEA.r, color.g - COLOR_SEA.g, color.b - COLOR_SEA.b).length()
 	if minf(to_land, to_sea) > 0.12:
-		return "그 외"  # HUD/스폰 표식처럼 지형이 아닌 것.
+		return "그 외"  # HUD/플레이어처럼 지형이 아닌 것.
 	return "land" if to_land < to_sea else "sea"
 
 
