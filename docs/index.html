@@ -30,18 +30,17 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 
 <div class="cards">
   <div class="card"><b>0</b><span>완료</span></div>
-  <div class="card"><b>2</b><span>남음</span></div>
+  <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#4</span> [BUILD] 캐릭터 커스터마이징 화면: 이름 입력 + 피부색/머리색/옷색(각각 고정 팔레트에서 선택) + 머리모양 3~4종 선택 + 확정. DESIGN.md &quot;캐릭터 커스터마이징 항목&quot; 참고. **이번 항목은 선택값을 슬롯에 저장하는 데이터/UI까지만** — 실제 캐릭터 그림은 아직 없으므로 미리보기는 색 견본(색 사각형 등)으로 대신하고, 그림이 생기면 별도 항목에서 붙인다.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#4</span> [BUILD] 캐릭터 커스터마이징 화면: 이름 입력 + 피부색/머리색/옷색(각각 고정 팔레트에서 선택) + 머리모양 3~4종 선택 + 확정. DESIGN.md &quot;캐릭터 커스터마이징 항목&quot; 참고. **이번 항목은 선택값을 슬롯에 저장하는 데이터/UI까지만** — 실제 캐릭터 그림은 아직 없으므로 미리보기는 색 견본(색 사각형 등)으로 대신하고, 그림이 생기면 별도 항목에서 붙인다.</li>
-<li><span class="num">#5</span> [BUILD] 월드 생성 1단계 + 입장: `opensimplex` 시드 기반 절차적 지형(땅/바다)과 스폰 지점까지만. 같은 시드는 항상 같은 월드를 만들어야 한다. 자원 배치(나무/채광 포인트/낚시 스팟)는 그 자원을 만드는 바퀴에 붙이므로 **이번 범위가 아니다**. 정한 맵 크기·바다 비율 수치는 DESIGN.md &quot;월드 생성&quot;에 기록할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>e5ad433  [INBOX #3] 설정 화면 해상도 옵션 — 해상도를 바꿔도 보이는 월드 범위는 고정</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 15:10</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #3 (설정 화면 해상도 옵션) 완료.
+<section><h2>다음 항목</h2><span class="num">#5</span> [BUILD] 월드 생성 1단계 + 입장: `opensimplex` 시드 기반 절차적 지형(땅/바다)과 스폰 지점까지만. 같은 시드는 항상 같은 월드를 만들어야 한다. 자원 배치(나무/채광 포인트/낚시 스팟)는 그 자원을 만드는 바퀴에 붙이므로 **이번 범위가 아니다**. 정한 맵 크기·바다 비율 수치는 DESIGN.md &quot;월드 생성&quot;에 기록할 것.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#5</span> [BUILD] 월드 생성 1단계 + 입장: `opensimplex` 시드 기반 절차적 지형(땅/바다)과 스폰 지점까지만. 같은 시드는 항상 같은 월드를 만들어야 한다. 자원 배치(나무/채광 포인트/낚시 스팟)는 그 자원을 만드는 바퀴에 붙이므로 **이번 범위가 아니다**. 정한 맵 크기·바다 비율 수치는 DESIGN.md &quot;월드 생성&quot;에 기록할 것.</li></ul></section>
+<section><h2>마지막 커밋</h2><code>d97a3c6  [INBOX #4] 캐릭터 커스터마이징 화면 — 이름 + 고정 팔레트 3색 + 머리모양 4종</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 15:19</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #4 (캐릭터 커스터마이징 화면) 완료.
 
-- `game/scripts/settings_store.gd`: 해상도 저장/불러오기/적용. `user://settings.json`
-  (`{&quot;version&quot;: 1, &quot;resolution_width&quot;: .., &quot;resolution_height&quot;: ..}`). slot_store.gd 와
-  같은 이유로 노드를 상속하지 않는 순수 클래스다(오토로드는 `--script` 자체 QA에서
-  컴파일 에러 — GOTCHAS). 모니터에 안 들어가는 해상도는 목록에서 걸러낸다.</pre></section>
-<footer>갱신: 2026-09-06 15:10 KST</footer>
+- `game/scripts/character_appearance.gd`: 고정 팔레트(피부 5 / 머리색 6 / 옷색 6 /
+  머리모양 4)와 기본값·되감기·정규화·이름 다듬기. slot_store.gd 와 같은 이유로 노드를
+  상속하지 않는 순수 클래스다. **저장에는 색이 아니라 id 문자열**을 넣는다 — 스프라이트를
+  팔레트 교체로 만들 때 그 id 가 그대로 팔레트 키가 된다. 정한 값은 `docs/DESIGN.md`</pre></section>
+<footer>갱신: 2026-09-06 15:20 KST</footer>
 </main></body></html>
