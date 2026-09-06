@@ -29,25 +29,24 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>8</b><span>완료</span></div>
-  <div class="card"><b>5</b><span>남음</span></div>
-  <div class="card"><b>$29.43</b><span>누적 사용량 (API 환산)</span></div>
+  <div class="card"><b>9</b><span>완료</span></div>
+  <div class="card"><b>4</b><span>남음</span></div>
+  <div class="card"><b>$37.20</b><span>누적 사용량 (API 환산)</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#9</span> [DESIGN] **스프라이트 자동 검사 스크립트를 만들고, 그걸로 #8 의 대비 문제를 고친다.** 지금 [DESIGN] 바퀴는 결과를 매번 눈으로만 확인해서 턴이 100번 넘게 돌고 컨텍스트에 이미지가 쌓인다 — 기계로 판정할 수 있는 것부터 코드로 걸러내면 이미지를 볼 횟수 자체가 줄어든다.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#9</span> [DESIGN] **스프라이트 자동 검사 스크립트를 만들고, 그걸로 #8 의 대비 문제를 고친다.** 지금 [DESIGN] 바퀴는 결과를 매번 눈으로만 확인해서 턴이 100번 넘게 돌고 컨텍스트에 이미지가 쌓인다 — 기계로 판정할 수 있는 것부터 코드로 걸러내면 이미지를 볼 횟수 자체가 줄어든다.</li>
-<li><span class="num">#10</span> [BUILD] 플레이어를 월드에 실제로 배치한다 — 지금은 `SpawnMarker`(빈 위치 표식)만 있고 플레이어 엔티티가 없어서 월드에 들어가도 캐릭터가 안 보인다. 스폰 지점에 `AnimatedSprite2D`(#8/#9 스프라이트) 를 붙인 플레이어 노드를 만들고, WASD 이동 + 카메라 추적 + 바다 타일 충돌을 붙인다. **DESIGN.md 「서버 권위 / 클라이언트 신뢰」를 처음부터 지킬 것** — 위치가 아니라 입력만 다루는 구조로 만들고, 이동 계산은 노드가 아닌 순수 클래스에 둔다(나중에 서버가 같은 코드를 돌린다).</li>
+<section><h2>다음 항목</h2><span class="num">#10</span> [BUILD] 플레이어를 월드에 실제로 배치한다 — 지금은 `SpawnMarker`(빈 위치 표식)만 있고 플레이어 엔티티가 없어서 월드에 들어가도 캐릭터가 안 보인다. 스폰 지점에 `AnimatedSprite2D`(#8/#9 스프라이트) 를 붙인 플레이어 노드를 만들고, WASD 이동 + 카메라 추적 + 바다 타일 충돌을 붙인다. **DESIGN.md 「서버 권위 / 클라이언트 신뢰」를 처음부터 지킬 것** — 위치가 아니라 입력만 다루는 구조로 만들고, 이동 계산은 노드가 아닌 순수 클래스에 둔다(나중에 서버가 같은 코드를 돌린다).</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#10</span> [BUILD] 플레이어를 월드에 실제로 배치한다 — 지금은 `SpawnMarker`(빈 위치 표식)만 있고 플레이어 엔티티가 없어서 월드에 들어가도 캐릭터가 안 보인다. 스폰 지점에 `AnimatedSprite2D`(#8/#9 스프라이트) 를 붙인 플레이어 노드를 만들고, WASD 이동 + 카메라 추적 + 바다 타일 충돌을 붙인다. **DESIGN.md 「서버 권위 / 클라이언트 신뢰」를 처음부터 지킬 것** — 위치가 아니라 입력만 다루는 구조로 만들고, 이동 계산은 노드가 아닌 순수 클래스에 둔다(나중에 서버가 같은 코드를 돌린다).</li>
 <li><span class="num">#11</span> [BUILD] 커스터마이징 화면의 색 사각형 미리보기(`appearance_preview.gd`)를 #8 스프라이트로 교체하고, 피부/머리/옷 색 선택이 **팔레트 교체**로 반영되게 한다(형태를 다시 그리지 않는다 — STYLE_GUIDE 2번). 머리모양 4종도 실제 스프라이트로 보이게 할 것.</li>
 <li><span class="num">#12</span> [DESIGN] 지형 타일 스프라이트 — 땅/바다 2종. 아트 16px × 3배 = 화면 48px(STYLE_GUIDE 1번). 지금은 `terrain_view.gd` 가 색 사각형 + 격자선으로 그리고 있다. 인접한 같은 지형끼리 이어져 보여야 하고, 땅↔바다 경계가 자연스러워야 한다. 캐릭터(#8)와 나란히 놓고 팔레트·픽셀 크기가 어울리는지 확인할 것.</li>
 <li><span class="num">#13</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). #9 의 검사 스크립트를 먼저 돌려 통과시킨 뒤 눈으로 확인할 것. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지도 `qa_sprite_check.py` 에 검사로 추가한다**(끊겨 보이는 애니메이션을 숫자로 잡는다). Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>53a628c  chore(dashboard): 자동 새로고침 주기 45초 → 10초</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 21:17</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #8 (플레이어 캐릭터 스프라이트, 기준색 1벌 × 4방향 idle) 완료.
+<section><h2>마지막 커밋</h2><code>3d49a0f  [INBOX #9] 스프라이트 자동 검사 스크립트(qa_sprite_check.py) + 그걸로 #8 대비 수정</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 21:35</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #9 (스프라이트 자동 검사 스크립트 + 그걸로 #8 대비 고치기) 완료.
 
 ## 만든 것
 
-- `game/assets/sprites/player_idle.png` — 34px 칸, **행 = 방향**(down/left/right/up) ×
-  **열 = 프레임**(지금은 idle 1장). 걷기(#9)는 열이 늘어난다.</pre></section>
-<footer>갱신: 2026-09-06 21:18 KST · <span id="live">자동 새로고침 10초</span></footer>
+- **`game/qa/qa_sprite_check.py`** — `.venv/bin/python` 으로 도는 그림 검사기.
+  짧은 리포트를 찍고 불합격이면 종료 코드 1. 보는 것: 규격 / 반투명 / 재질끼리 색</pre></section>
+<footer>갱신: 2026-09-06 21:35 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -60,7 +59,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260906211845";
+  var STAMP = "20260906213532";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
