@@ -46,16 +46,25 @@ const AIM := {"right": 0.0, "down": PI * 0.5, "left": PI, "up": -PI * 0.5}
 const AIM_REACH := 0.3
 
 ## 애니메이션이 실제로 넘어가는지 보려면 한 프레임(1/`WALK_FPS` 초)보다 확실히
-## 오래 눌러야 한다. 60fps 기준 25프레임 ≈ 0.42초 ≈ 걷기 4프레임.
-const HOLD_FRAMES := 25
+## 오래 눌러야 한다. 0.5초 = 걷기 5프레임.
+##
+## **프레임 수가 아니라 시간으로 센다**(2026-09-07, INBOX #20). `--script` 로 띄운
+## 창은 수직동기화가 없어 수백~수천 fps 로 돌아서(docs/GOTCHAS.md), "25프레임
+## 기다리기"가 실제로는 몇 ms 라 10fps 애니메이션이 한 칸도 안 넘어간다 — 빠른
+## 기계에서 이 검사가 통째로 거짓 실패했다.
+const HOLD_SECONDS := 0.5
 
-## 걷기 프레임 미리보기 배율. 34px 칸이라 그냥 저장하면 눈으로 판정할 수 없다.
-const STRIP_ZOOM := 5
+## 상태를 바꾼 뒤 다음 단계까지 두는 여유(초). 캡처가 한 프레임 전을 찍지 않게,
+## 그리고 고정 틱(1/60초) 위에서 도는 로직이 실제로 몇 번 돌게 하려면 필요하다.
+const SETTLE_SECONDS := 0.15
+
+## 걷기 프레임 미리보기 배율. 17px 칸이라 그냥 저장하면 눈으로 판정할 수 없다.
+const STRIP_ZOOM := 8
 
 var _fails: Array[String] = []
 var _steps: Array[Callable] = []
 var _step := 0
-var _wait := 0
+var _wait_time := 0.0
 var _seen_frames := {}
 
 
@@ -94,17 +103,17 @@ func _initialize() -> void:
 	_steps.append(_save_strip)
 
 
-func _process(_delta: float) -> bool:
+func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
-	if _wait > 0:
-		_wait -= 1
+	if _wait_time > 0.0:
+		_wait_time -= delta
 		return false
 	if _step >= _steps.size():
 		return _report()
 	var step: Callable = _steps[_step]
 	_step += 1
-	_wait = 3  # 상태를 바꾼 직후 캡처하면 한 프레임 전이 찍힌다 (docs/GOTCHAS.md).
+	_wait_time = SETTLE_SECONDS
 	step.call()
 	return false
 
@@ -227,11 +236,13 @@ func _press(move_dir: String, aim_dir: String) -> void:
 	_aim(aim_dir)
 	Input.action_press(KEYS[move_dir])
 	_seen_frames[aim_dir] = 0
-	_wait = HOLD_FRAMES + 5
-	# 누르고 있는 동안 몇 종류의 프레임이 나왔는지 센다.
+	_wait_time = HOLD_SECONDS + SETTLE_SECONDS
+	# 누르고 있는 **실제 시간** 동안 몇 종류의 프레임이 나왔는지 센다 — 프레임 수로
+	# 세면 창이 빠를수록 짧게 눌러서, 걷기가 멀쩡해도 한 칸도 안 넘어간다.
 	var seen := {}
 	var sprite := _sprite()
-	for i in HOLD_FRAMES:
+	var until := Time.get_ticks_msec() + int(HOLD_SECONDS * 1000.0)
+	while Time.get_ticks_msec() < until:
 		await process_frame
 		if sprite != null:
 			seen[sprite.frame] = true
