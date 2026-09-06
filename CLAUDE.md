@@ -19,22 +19,45 @@ PATH 에 `godot` 이 없다. 항상 전체 경로로 부른다:
 - **화면 캡처는 `--headless` 로 안 된다** — 캡처가 필요하면 `--headless` 를 빼고
   실제 렌더러로 띄운다. 자세한 함정은 `docs/GOTCHAS.md` 참고.
 
-## Python / Pillow
+## Python — 그림 생성 / 절차적 생성
 
-시스템 `python3` 은 3.9 이고 **Pillow 가 없다.** 그림 생성은 저장소 안의 venv 를 쓴다:
+시스템 `python3` 은 3.9 이고 **Pillow 가 없다.** 그림·노이즈는 저장소 안의 venv 를 쓴다:
 
 ```
-.venv/bin/python        # Python 3.13 + Pillow 12.3
+.venv/bin/python        # Python 3.13
 ```
+
+들어있는 것:
+
+| 패키지 | 쓰임 |
+|---|---|
+| `PIL` (Pillow) 12.3 | 도트 직접 찍기 — `[DESIGN]` 항목의 기본 도구 |
+| `numpy` 2.5 | 배열로 픽셀 다루기. 팔레트 교체/색상 변형(옷색만 바꾸기)에 쓴다 |
+| `opensimplex` 0.4.5 | 심리스 노이즈 — **절차적 맵 생성** |
+| `hitherdither` | Floyd-Steinberg / Bayer 디더링 — 제한 팔레트에서 그라데이션 |
+| `pyxelate` | 이미지 → 픽셀아트 변환(다운샘플 + 팔레트 양자화) |
+| `skimage` 0.26 | 외곽선 추출, 형태 연산 |
 
 venv 는 `.gitignore` 되어 있다(커밋하지 않는다). 없어졌으면 다시 만든다:
 
 ```
-/opt/homebrew/bin/python3.13 -m venv .venv && .venv/bin/pip install Pillow
+/opt/homebrew/bin/python3.13 -m venv .venv \
+  && .venv/bin/pip install Pillow numpy opensimplex hitherdither pyxelate scikit-image
 ```
 
-대시보드 렌더러(`scripts/render_dashboard.py`)만은 Pillow 가 필요 없어서 시스템
+대시보드 렌더러(`scripts/render_dashboard.py`)만은 이것들이 필요 없어서 시스템
 `/usr/bin/python3` 로 돈다.
+
+### 그림 방식 (사람이 정한 것)
+
+**절차 생성이 기본이다.** AI 생성물을 자산으로 쓰지 않는다 — `DESIGN.md` 「그래픽
+파이프라인」 그대로다. 로컬에 `Draw Things.app` 이 깔려 있지만 그건 사람이
+**참고 이미지**(`docs/design_reference/`)를 만들 때 쓰는 것이지, 세션이 자산을
+생성하는 경로가 아니다.
+
+근거: 도구 4종 × 4방향 × (들고있기/사용/걷기) 세트가 서로 어긋나면 안 된다는
+「캐릭터 애니메이션 — 절대 되돌리지 말 것」 규칙은, 같은 함수에 각도만 바꿔
+호출하는 절차 생성이라야 공짜로 지켜진다.
 
 ## git
 
