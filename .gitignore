@@ -16,3 +16,4 @@ game/android/
 
 # macOS
 .DS_Store
+__pycache__/
