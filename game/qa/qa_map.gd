@@ -15,6 +15,10 @@ extends SceneTree
 ##   5) 돌아다니면 채워진다.
 ##   6) **저장했다 불러와도 기록이 남는다** — 메인 메뉴로 나갔다 같은 슬롯으로 다시
 ##      들어와서 확인한다(슬롯 파일을 거치는 진짜 경로다).
+##   7) **마우스 휠 줌**(docs/DESIGN.md 「맵 줌」) — 1/2/4/8배가 **화면 픽셀로 재서**
+##      정말 그 배율인지, 확대하면 내가 화면 한가운데에 오는지, **지도 귀퉁이에서
+##      지도 밖이 안 보이는지**, 배율을 바꿔도 안 가본 칸은 여전히 안 보이는지,
+##      휠이 지도 뒤로 새지 않는지, 닫았다 열어도 배율이 남는지.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -36,6 +40,14 @@ const PAUSE_BOX := "HUD/PauseMenu/Box/BoxLayout"
 ## 화면 픽셀을 색으로 판정할 때의 허용 오차.
 const COLOR_EPSILON := 0.02
 
+## 줌 검사에서 지도 밖이 보이는지 확인할 네 귀퉁이(테두리는 언제나 바다다).
+const CORNER_TILES: Array[Vector2i] = [Vector2i(1, 1), Vector2i(254, 1),
+		Vector2i(1, 254), Vector2i(254, 254)]
+
+## 줌 검사 동안 화살표가 가리킬 방향(위). 픽셀로 크기를 잴 때 **가로로 훑는 자리에
+## 화살표가 끼어들지 않게** 세로로 세워둔다.
+const ZOOM_AIM_ANGLE := -PI * 0.5
+
 var _steps: Array[Callable] = []
 var _step := 0
 var _wait := 0
@@ -46,6 +58,24 @@ var _fails: Array[String] = []
 var _far_tile := Vector2i(-1, -1)
 var _never_tile := Vector2i(-1, -1)
 var _count_before_exit := 0
+
+## 줌 검사를 서서 할 자리(지도 한가운데 근처)와 휠 감시자.
+var _center_tile := Vector2i(-1, -1)
+var _spy: Node = null
+
+
+## 지도가 먹어야 할 휠이 **그 뒤로 새어 나가는지** 보는 감시자 (docs/DESIGN.md 「맵 줌」의
+## "휠 입력이 다른 곳으로 새지 않게"). 나중에 핫바 스크롤이 붙을 자리를 미리 흉내낸다.
+class WheelSpy extends Node:
+	var seen := 0
+
+	func _unhandled_input(event: InputEvent) -> void:
+		var button := event as InputEventMouseButton
+		if button == null:
+			return
+		if button.button_index == MOUSE_BUTTON_WHEEL_UP \
+				or button.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			seen += 1
 
 
 func _initialize() -> void:
@@ -83,6 +113,42 @@ func _initialize() -> void:
 		_press_map_key,
 		_check_reloaded_map_draws,
 	]
+	_steps.append_array(_zoom_steps())
+
+
+## 7) 줌. 여기 들어올 때 지도는 열려 있고 배율은 아직 기본(2배)이다.
+func _zoom_steps() -> Array[Callable]:
+	var steps: Array[Callable] = [
+		_check_zoom_default,
+		_stand_at_center,
+		_settle,
+		_add_wheel_spy,
+		func(): _wheel(-1),                       # 2 → 1
+		func(): _check_zoom(1, "54_zoom_1x"),
+		_check_wheel_did_not_leak,
+		func(): _wheel(-1),                       # 1 에서 더 내려도 1
+		func(): _check_zoom_clamped(1, "가장 작은"),
+		func(): _wheel(1),                        # 1 → 2
+		func(): _check_zoom(2, "55_zoom_2x"),
+		func(): _wheel(1),                        # 2 → 4
+		func(): _check_zoom(4, "56_zoom_4x"),
+		func(): _wheel(1),                        # 4 → 8
+		func(): _check_zoom(8, "57_zoom_8x"),
+		func(): _wheel(1),                        # 8 에서 더 올려도 8
+		func(): _check_zoom_clamped(8, "가장 큰"),
+		_press_map_key,                           # 닫고
+		func(): _wheel(-1),                       # 닫힌 채로 휠을 돌려본다
+		_check_wheel_only_while_map_open,
+		_press_map_key,                           # 다시 열기
+		_settle,
+		_check_zoom_kept_after_reopen,
+	]
+	# 네 귀퉁이 — 가장 확대한 8배에서 지도 밖이 한 점도 안 보여야 한다.
+	for index in CORNER_TILES.size():
+		steps.append(func(): _stand_at_corner(index))
+		steps.append(_settle)
+		steps.append(func(): _check_corner_stays_inside(index))
+	return steps
 
 
 func _process(delta: float) -> bool:
@@ -397,6 +463,343 @@ func _check_reloaded_map_draws() -> void:
 	_shoot("53_map_after_reload")
 
 
+# --- 7) 줌 (docs/DESIGN.md 「맵 줌 (마우스 휠)」) -------------------------------
+#
+# **판정을 API 값에만 기대지 않는다** — `map_rect()` 가 뭘 돌려주든 실제로 칠해진
+# 화면 픽셀을 재서 1/2/4/8배인지 본다. 그래서 줌 검사는 지도 한가운데 근처의
+# **아직 아무것도 안 적힌 육지**에 서서 한다: 기록 반경이 지도 위에 지름 13칸짜리
+# 동그라미 하나로 홀로 찍혀서, 그 동그라미의 픽셀 크기가 곧 배율이 된다.
+
+func _check_zoom_default() -> void:
+	var canvas := _canvas()
+	if canvas == null:
+		_fails.append("줌 검사를 시작하는데 지도가 닫혀 있다")
+		return
+	if canvas.zoom_scale() != 2:
+		_fails.append("지도를 열었을 때 배율이 %d배다 — 기본은 2배여야 한다" % canvas.zoom_scale())
+
+
+## 지도 한가운데 근처의 육지 중 **주변에 이미 적힌 칸이 하나도 없는** 자리로 옮긴다.
+func _stand_at_center() -> void:
+	var world := _world()
+	var center := Vector2i(WorldGen.MAP_TILES / 2, WorldGen.MAP_TILES / 2)
+	var candidates: Array[Vector2i] = []
+	for y in range(center.y - 40, center.y + 41):
+		for x in range(center.x - 40, center.x + 41):
+			if world.is_land(x, y):
+				candidates.append(Vector2i(x, y))
+	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return Vector2(a - center).length_squared() < Vector2(b - center).length_squared())
+	var clear := _explore_radius() + 3
+	for tile in candidates:
+		if _is_untouched(tile, clear):
+			_center_tile = tile
+			break
+	if _center_tile.x < 0:
+		_fails.append("지도 한가운데 근처에서 '아직 아무것도 안 적힌 육지'를 못 찾았다")
+		return
+	print("[qa] 줌 검사 자리 %s (한가운데에서 %.0f칸)"
+			% [_center_tile, Vector2(_center_tile - center).length()])
+	_stand_at(_center_tile)
+
+
+func _is_untouched(tile: Vector2i, radius: int) -> bool:
+	var explored: RefCounted = _explored()
+	for dy in range(-radius, radius + 1):
+		for dx in range(-radius, radius + 1):
+			if explored.is_explored(tile.x + dx, tile.y + dy):
+				return false
+	return true
+
+
+## 그 칸으로 옮기고 조준을 위로 세운다. 지도가 열려 있는 동안은 플레이어 입력이 끊겨
+## 있어서(`input_enabled`) 여기 넣은 각도가 마우스에 덮이지 않는다.
+func _stand_at(tile: Vector2i) -> void:
+	var player := _player()
+	if player == null:
+		_fails.append("플레이어를 못 찾아 %s 로 못 옮긴다" % tile)
+		return
+	player.place_at(WorldGen.tile_center(tile))
+	if player.motion != null:
+		player.motion.aim_angle = ZOOM_AIM_ANGLE
+
+
+## `world.gd` 의 기록 반경. 같은 숫자를 여기 또 적지 않으려고 스크립트에서 직접 읽는다.
+func _explore_radius() -> int:
+	return int(current_scene.get_script().get_script_constant_map()
+			.get("EXPLORE_RADIUS_TILES", 6))
+
+
+func _add_wheel_spy() -> void:
+	_spy = WheelSpy.new()
+	_spy.name = "WheelSpy"
+	current_scene.add_child(_spy)
+
+
+## 마우스 휠 한 칸을 **실제 입력 경로로** 흘려보낸다 — 지도의 `_input` 이 이걸 받는다.
+func _wheel(steps: int) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_WHEEL_UP if steps > 0 else MOUSE_BUTTON_WHEEL_DOWN
+	event.pressed = true
+	event.position = root.get_visible_rect().get_center()
+	Input.parse_input_event(event)
+
+
+## 한 배율에서 볼 것을 한 번에 본다.
+func _check_zoom(zoom: int, shot_name: String) -> void:
+	var canvas := _canvas()
+	if canvas == null:
+		_fails.append("%d배 검사 중인데 지도가 닫혀 있다" % zoom)
+		return
+	if canvas.zoom_scale() != zoom:
+		_fails.append("휠을 돌렸더니 %d배다 — %d배여야 한다" % [canvas.zoom_scale(), zoom])
+		return
+	var rect: Rect2 = canvas.map_rect()
+	var want := float(WorldGen.MAP_TILES * zoom)
+	if not is_equal_approx(rect.size.x, want) or not is_equal_approx(rect.size.y, want):
+		_fails.append("%d배인데 지도를 %s 크기로 그린다 — %.0f×%.0f 여야 한다"
+				% [zoom, rect.size, want, want])
+	var image := _capture()
+	if image == null:
+		return
+	_check_map_edge_not_shown(image, zoom)
+	_check_map_stays_in_window(image, zoom)
+	_check_drawn_scale_in_pixels(image, zoom)
+	_check_tiles_at_zoom(image, zoom)
+	_check_player_centered(canvas, zoom)
+	_shoot(shot_name)
+
+
+func _check_zoom_clamped(zoom: int, label: String) -> void:
+	var canvas := _canvas()
+	if canvas != null and canvas.zoom_scale() != zoom:
+		_fails.append("%s 배율(%d배)에서 휠을 더 돌렸더니 %d배가 됐다"
+				% [label, zoom, canvas.zoom_scale()])
+
+
+## **확대한 상태에서는 지도 밖(여백색)이 한 점도 보이면 안 된다** — 가장자리에서 중심을
+## 안쪽으로 물리고 있다는 뜻이다. 1배는 반대로 지도(256px)가 창(512px)보다 작아서
+## 여백이 보이는 게 맞다.
+func _check_map_edge_not_shown(image: Image, zoom: int) -> void:
+	var rect := _canvas().get_global_rect()
+	var outside := 0
+	var samples := 0
+	for iy in 33:
+		for ix in 33:
+			var point := rect.position + Vector2(
+					lerpf(1.0, rect.size.x - 1.0, ix / 32.0),
+					lerpf(1.0, rect.size.y - 1.0, iy / 32.0))
+			samples += 1
+			if _is_color(_pixel(image, point), MapCanvas.BACKDROP_COLOR):
+				outside += 1
+	if zoom == 1:
+		if outside == 0:
+			_fails.append("1배인데 지도 밖 여백이 한 점도 안 보인다 — 지도가 창을 꽉 채우고 있다")
+	elif outside > 0:
+		_fails.append("%d배에서 짚어본 %d자리 중 %d자리가 지도 밖이다 — 지도 밖이 보이면 안 된다"
+				% [zoom, samples, outside])
+
+
+## **확대한 지도가 자기 창 밖으로 넘쳐 그려지면 안 된다.** Control 은 `_draw` 가 자기
+## 사각형을 벗어나도 잘라주지 않아서, 8배(2048px)면 지도가 창틀·제목·월드 화면까지
+## 통째로 덮어버린다. 창 바로 바깥(지도 상자 안쪽 여백)을 짚어서 지도 색이 나오는지 본다.
+func _check_map_stays_in_window(image: Image, zoom: int) -> void:
+	var rect := _canvas().get_global_rect()
+	var spilled := 0
+	for i in 17:
+		var along := lerpf(2.0, rect.size.x - 2.0, i / 16.0)
+		var down := lerpf(2.0, rect.size.y - 2.0, i / 16.0)
+		for point: Vector2 in [
+			Vector2(rect.position.x + along, rect.position.y - 5.0),
+			Vector2(rect.position.x + along, rect.end.y + 5.0),
+			Vector2(rect.position.x - 8.0, rect.position.y + down),
+			Vector2(rect.end.x + 8.0, rect.position.y + down),
+		]:
+			var color := _pixel(image, point)
+			if _is_color(color, MapCanvas.UNEXPLORED_COLOR) \
+					or _is_color(color, MapCanvas.BACKDROP_COLOR):
+				spilled += 1
+	if spilled > 0:
+		_fails.append("%d배에서 지도가 자기 창 밖으로 %d자리나 넘쳐 그려졌다 (clip_contents 확인)"
+				% [zoom, spilled])
+
+
+## **배율을 화면 픽셀로 잰다.**
+##  - 1배: 지도가 창보다 작으니 여백과의 경계까지 재면 지도 가로폭이 그대로 나온다.
+##  - 2배 이상: 창이 꽉 차서 경계가 없다. 대신 홀로 찍힌 방문 동그라미의 **세로 길이**를
+##    잰다 — 화살표에 안 걸리게 중심에서 10px 이상 옆으로 비킨 세로줄에서 잰다.
+func _check_drawn_scale_in_pixels(image: Image, zoom: int) -> void:
+	var rect := _canvas().get_global_rect()
+	if zoom == 1:
+		var left := -1.0
+		var right := -1.0
+		var y := rect.get_center().y
+		for i in int(rect.size.x):
+			var x := rect.position.x + i + 0.5
+			# **지도 그림인 픽셀**만 센다 — 여백도, 가장자리 선도 지도 넓이가 아니다.
+			if not _is_map_content(_pixel(image, Vector2(x, y))):
+				continue
+			if left < 0.0:
+				left = x
+			right = x
+		var got := right - left + 1.0
+		print("[qa] 1배 — 지도 가로폭이 화면에서 %.0f (논리px), %d칸이어야 한다"
+				% [got, WorldGen.MAP_TILES])
+		if absf(got - float(WorldGen.MAP_TILES)) > 3.0:
+			_fails.append("1배인데 지도 가로폭이 %.0f px 다 — %d px 여야 한다"
+					% [got, WorldGen.MAP_TILES])
+		return
+	if _center_tile.x < 0:
+		return
+	var radius := _explore_radius()
+	var offset := int(ceilf(10.0 / float(zoom)))  # 화살표(반폭 8px)를 확실히 비켜난 칸 수.
+	var half := floori(sqrt(float(radius * radius - offset * offset)))
+	var column := _tile_point(_center_tile + Vector2i(offset, 0))
+	var top := column.y
+	var bottom := column.y
+	for i in range(1, int(rect.size.y)):
+		var point := Vector2(column.x, column.y - i)
+		if not rect.has_point(point) or _is_hidden(_pixel(image, point)):
+			break
+		top = point.y
+	for i in range(1, int(rect.size.y)):
+		var point := Vector2(column.x, column.y + i)
+		if not rect.has_point(point) or _is_hidden(_pixel(image, point)):
+			break
+		bottom = point.y
+	var got := bottom - top + 1.0
+	var want := float((2 * half + 1) * zoom)
+	print("[qa] %d배 — 방문 동그라미의 세로 길이가 화면에서 %.0f (논리px), %.0f 여야 한다"
+			% [zoom, got, want])
+	if absf(got - want) > float(zoom) + 2.0:
+		_fails.append("%d배인데 방문 자국이 화면에서 %.0f px 다 — %.0f px(%d칸 × %d배)여야 한다"
+				% [zoom, got, want, 2 * half + 1, zoom])
+
+
+## 배율이 바뀌어도 **안 가본 칸은 여전히 안 보이고**, 보이는 칸의 지형은 월드와 같다.
+## 화살표가 덮는 자리는 건너뛴다.
+func _check_tiles_at_zoom(image: Image, zoom: int) -> void:
+	var canvas := _canvas()
+	var world := _world()
+	var explored: RefCounted = _explored()
+	var marker := _screen_point(canvas.map_position(_player().global_position))
+	var wrong_terrain := 0
+	var leaked := 0
+	var seen := 0
+	var hidden := 0
+	for ty in range(0, WorldGen.MAP_TILES, 2):
+		for tx in range(0, WorldGen.MAP_TILES, 2):
+			var tile := Vector2i(tx, ty)
+			if not _tile_visible(tile):
+				continue
+			var point := _tile_point(tile)
+			if point.distance_to(marker) < MapCanvas.MARKER_LENGTH + 3.0:
+				continue
+			var color := _pixel(image, point)
+			if not explored.is_explored(tx, ty):
+				hidden += 1
+				if not _is_color(color, MapCanvas.UNEXPLORED_COLOR):
+					leaked += 1
+				continue
+			var got := _terrain_of(color)
+			if got == "그 외":
+				continue
+			seen += 1
+			if got != ("land" if world.is_land(tx, ty) else "sea"):
+				wrong_terrain += 1
+	print("[qa] %d배 — 보이는 칸 대조: 기록된 %d칸(어긋남 %d) / 안 가본 %d칸(새어나온 것 %d)"
+			% [zoom, seen, wrong_terrain, hidden, leaked])
+	if leaked > 0:
+		_fails.append("%d배에서 안 가본 칸 %d개가 지도에 보인다" % [zoom, leaked])
+	if wrong_terrain > 0:
+		_fails.append("%d배에서 %d칸의 지형이 월드와 다르게 그려졌다" % [zoom, wrong_terrain])
+	if seen < 8 or hidden < 50:
+		_fails.append("%d배에서 대조한 칸이 너무 적다 (기록 %d / 안 가봄 %d)" % [zoom, seen, hidden])
+
+
+## 지도가 창보다 커지는 배율에서는 **내가 화면 한가운데**여야 한다(지도 가장자리가
+## 아닐 때). 줌 검사 자리는 지도 한가운데라 물러날 일이 없다.
+func _check_player_centered(canvas: Control, zoom: int) -> void:
+	if float(WorldGen.MAP_TILES * zoom) <= canvas.size.x:
+		return
+	var at: Vector2 = canvas.map_position(_player().global_position)
+	var center: Vector2 = canvas.size * 0.5
+	if at.distance_to(center) > 2.0:
+		_fails.append("%d배에서 내 위치가 창 %s 에 있다 — 한가운데(%s)여야 한다"
+				% [zoom, at, center])
+
+
+## 지도가 열려 있을 때의 휠은 지도가 먹는다 — 뒤로 새어 나가면 안 된다.
+func _check_wheel_did_not_leak() -> void:
+	if _spy != null and _spy.seen > 0:
+		_fails.append("지도가 열려 있는데 휠 %d건이 지도 뒤까지 흘러갔다 — 지도가 소비해야 한다"
+				% _spy.seen)
+
+
+## 반대로 지도가 닫혀 있으면 휠은 그대로 뒤로 가고 배율도 안 바뀐다. 이걸 같이 봐야
+## 위의 "안 샜다"가 **감시자가 고장 나서 통과한 것**이 아님을 알 수 있다.
+func _check_wheel_only_while_map_open() -> void:
+	if _map() != null:
+		_fails.append("M 을 눌렀는데 지도가 안 닫혔다 (휠 범위 검사)")
+		return
+	if _spy == null:
+		return
+	if _spy.seen == 0:
+		_fails.append("지도를 닫고 돌린 휠이 아무 데도 안 갔다 — 감시자가 고장 났거나 휠이 안 들어갔다")
+	if MapCanvas.zoom_index != MapCanvas.ZOOM_STEPS.size() - 1:
+		_fails.append("지도가 닫혀 있는데 휠이 배율을 %d배로 바꿨다"
+				% MapCanvas.ZOOM_STEPS[MapCanvas.zoom_index])
+
+
+## 닫았다 열어도 배율은 그대로다. 다만 **슬롯에 저장하지는 않는다**.
+func _check_zoom_kept_after_reopen() -> void:
+	var canvas := _canvas()
+	if canvas == null:
+		_fails.append("다시 M 을 눌렀는데 지도가 안 열렸다")
+		return
+	if canvas.zoom_scale() != 8:
+		_fails.append("지도를 닫았다 열었더니 배율이 %d배로 돌아갔다 — 8배여야 한다"
+				% canvas.zoom_scale())
+	var slot: Dictionary = SlotStore.load_slots()[0]
+	for key: String in slot.keys():
+		if key.findn("zoom") != -1:
+			_fails.append("슬롯 저장에 줌이 들어갔다 (`%s`) — 저장하지 않기로 했다" % key)
+	_shoot("58_zoom_kept_after_reopen")
+
+
+func _stand_at_corner(index: int) -> void:
+	_stand_at(CORNER_TILES[index])
+
+
+## 지도 귀퉁이에 서도 **지도 밖 빈 공간이 나오면 안 된다**.
+func _check_corner_stays_inside(index: int) -> void:
+	var canvas := _canvas()
+	if canvas == null:
+		_fails.append("귀퉁이 검사 중인데 지도가 닫혀 있다")
+		return
+	var tile: Vector2i = CORNER_TILES[index]
+	var rect: Rect2 = canvas.map_rect()
+	if rect.position.x > 0.0 or rect.position.y > 0.0 \
+			or rect.end.x < canvas.size.x or rect.end.y < canvas.size.y:
+		_fails.append("귀퉁이 %s 에서 지도(%s)가 창(%s)을 다 못 덮는다" % [tile, rect, canvas.size])
+	var image := _capture()
+	if image == null:
+		return
+	_check_map_edge_not_shown(image, canvas.zoom_scale())
+	_check_map_stays_in_window(image, canvas.zoom_scale())
+	_shoot("59_zoom_corner_%d" % index)
+
+
+## 지도 그림(안 가본 칸 + 지형)인가 — 여백/가장자리 선/화살표는 아니다.
+func _is_map_content(color: Color) -> bool:
+	return _is_color(color, MapCanvas.UNEXPLORED_COLOR) or _terrain_of(color) != "그 외"
+
+
+func _is_hidden(color: Color) -> bool:
+	return _is_color(color, MapCanvas.UNEXPLORED_COLOR) \
+			or _is_color(color, MapCanvas.BACKDROP_COLOR)
+
+
 # --- 도구 ---------------------------------------------------------------------
 
 func _enter_world() -> void:
@@ -462,15 +865,37 @@ func _to_pixels(point: Vector2) -> Vector2:
 	return point * (pixels / logical)
 
 
-## 지도에서 그 타일이 그려진 픽셀 하나.
+## 지도에서 그 타일이 그려진 픽셀 하나. **자리는 캔버스에게 물어본다** — 줌과 중심
+## 이동이 거기 한 곳에 있으므로, 배율이 뭐든 이 함수 하나로 맞는 픽셀을 찍는다.
 func _map_pixel(image: Image, tile: Vector2i) -> Color:
 	var canvas := _canvas()
 	if canvas == null:
 		return Color.MAGENTA
-	var rect := canvas.get_global_rect()
-	var per_tile := rect.size / float(WorldGen.MAP_TILES)
-	var point := _to_pixels(rect.position + (Vector2(tile) + Vector2(0.5, 0.5)) * per_tile)
-	return image.get_pixelv(Vector2i(point).clamp(Vector2i.ZERO, image.get_size() - Vector2i.ONE))
+	return _pixel(image, _tile_point(tile))
+
+
+## 그 타일이 그려진 자리(논리 좌표, 화면 기준). 확대하면 창 밖일 수도 있다.
+func _tile_point(tile: Vector2i) -> Vector2:
+	return _screen_point(_canvas().map_position(WorldGen.tile_center(tile)))
+
+
+## 지도 창 안의 좌표 → 화면(논리) 좌표.
+func _screen_point(canvas_point: Vector2) -> Vector2:
+	return _canvas().get_global_transform() * canvas_point
+
+
+## 논리 좌표 한 점의 화면 픽셀.
+func _pixel(image: Image, point: Vector2) -> Color:
+	var at := Vector2i(_to_pixels(point))
+	return image.get_pixelv(at.clamp(Vector2i.ZERO, image.get_size() - Vector2i.ONE))
+
+
+## 그 타일이 지금 지도 창 안에 보이는가(확대하면 대부분은 창 밖이다).
+func _tile_visible(tile: Vector2i) -> bool:
+	var canvas := _canvas()
+	if canvas == null:
+		return false
+	return canvas.get_global_rect().grow(-2.0).has_point(_tile_point(tile))
 
 
 func _is_color(color: Color, want: Color) -> bool:
