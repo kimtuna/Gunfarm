@@ -28,14 +28,18 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </style></head><body><main>
 <h1>Gunfarm</h1>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
+<div class="warn"><strong>루프 멈춤</strong><pre>INBOX #24 이 3회 연속 미완료입니다 — 사람이 확인해 주세요.
+  항목: [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.
+  docs/STATUS.md 의 &#x27;막힌 것 / 보류&#x27;를 보세요.
 
+(2026-09-07 08:46:53)</pre></div>
 <div class="cards">
   <div class="card"><b>23</b><span>완료</span></div>
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>다음 항목</h2><span class="num">#24</span> [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.</section>
 <section><h2>대기 중인 항목</h2><ul><li><span class="num">#24</span> [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>5249591  chore(dashboard): 진행 상황 갱신</code>
+<section><h2>마지막 커밋</h2><code>3627424  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-07 08:46</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #23 ([BUILD] 인벤토리 + 핫바 — 데이터 구조와 UI) 완료.
 
@@ -62,7 +66,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907084631";
+  var STAMP = "20260907084653";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
