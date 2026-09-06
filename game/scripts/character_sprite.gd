@@ -21,14 +21,18 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 
 ## 재질 순서는 의미가 없다 — 램프끼리 색이 겹치지만 않으면 된다.
 ## (겹치면 바꿔치기가 모호해진다. `qa_character_sprite.gd` 가 그걸 검사한다.)
-const MATERIALS := ["skin", "hair", "shirt", "pants", "boot"]
+## `blush`(볼 홍조)는 단계가 하나뿐인 램프다 — 피부색을 따라가므로 `SKIN` 표가
+## 피부 램프와 함께 들고 있다.
+const MATERIALS := ["skin", "blush", "hair", "shirt", "pants", "boot"]
 
 
 ## 한 외형의 재질별 램프(4단계). 키는 `MATERIALS`, 값은 `PackedColorArray`.
 static func ramps(appearance: Dictionary) -> Dictionary:
 	var a := Appearance.normalize(appearance)
+	var skin: Dictionary = _pick(Palettes.SKIN, String(a["skin"]), String(Palettes.BASE["skin"]))
 	var out := {
-		"skin": _ramp(Palettes.SKIN, String(a["skin"]), String(Palettes.BASE["skin"])),
+		"skin": _to_colors(skin["skin"]),
+		"blush": _to_colors(skin["blush"]),
 		"hair": _ramp(Palettes.HAIR, String(a["hair_color"]), String(Palettes.BASE["hair_color"])),
 	}
 	var cloth: Dictionary = _pick(Palettes.CLOTHES, String(a["clothes_color"]),

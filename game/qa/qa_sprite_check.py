@@ -21,6 +21,16 @@
             뭉치는 것을 여기서 잡는다 — INBOX #9)
   명도분포  전체가 너무 어둡거나 너무 납작하지 않은지
 
+**「자연스러움」 갈래**(INBOX #13) — 위가 "틀렸는가"라면 이쪽은 "어색한가"다.
+`docs/STYLE_GUIDE.md` 「자연스러움」의 항목들을 숫자로 옮긴 것이다:
+  단색      재질마다 램프 4단계 중 몇 개를 실제로 썼는가 / 한 단계가 그 재질 영역의
+            70% 를 넘는가 — 넘으면 색종이를 오려 붙인 것처럼 보인다
+  색상차    상의와 하의의 **hue** 가 충분히 다른가 (명도만 다르면 몸이 한 덩어리다)
+  각짐      실루엣 옆선/윗선에 5px 넘게 곧은 구간이 있는가 (있으면 각져 보인다)
+  비율      머리/몸통/다리/신발 높이가 STYLE_GUIDE 표 범위인가, **머리 폭이 어깨+팔
+            폭보다 넓은가**(치비 비율의 핵심 — 아니면 그냥 작은 사람이다)
+  눈        흰 하이라이트가 있는가, 눈 덩어리가 3×3 이상인가
+
 지형 타일 시트는 보는 게 다르다:
   규격      칸 크기 / 시트가 칸 수에 맞는지
   팔레트    재질 램프 밖의 색이 없는지 (여기가 곧 "PNG 가 지금 생성기와 같은가")
@@ -99,6 +109,25 @@ def _player_spec(**over):
         # 일부러 무채색인 색(옷색 「잿빛」 등)으로 팔레트를 갈아끼운 시트를 새로
         # 등록할 때는 그 시트의 스펙에서 이 값을 따로 낮춰 잡을 것.
         chroma_mean=34.0,
+
+        # ── 아래는 「자연스러움」 갈래 (INBOX #13) ──────────────────────────
+        # 램프 4단계를 실제로 몇 개나 쓰는지 볼 재질. 넓은 면만 본다 —
+        # 신발처럼 몇 px 짜리 재질에 4단계를 요구하면 얼룩이 된다.
+        flat=("shirt", "pants", "skin", "hair"),
+        flat_steps=3,           # 최소 이만큼의 단계를 실제로 써야 한다
+        flat_share=0.70,        # 한 단계가 그 재질의 이 비율을 넘으면 단색이다
+        # 상의/하의는 **색상(hue)**이 달라야 한다. 명도 계단은 위 「대비」가 따로 본다.
+        hue_pairs=(("shirt", "pants", 25.0),),
+        # 실루엣 옆선/윗선의 곧은 구간 상한(px).
+        straight_max=5,
+        # 비율 (STYLE_GUIDE 3번 표). 머리는 전체 높이에 대한 비, 나머지는 px.
+        head_frac=(0.42, 0.55),
+        # 몸통 하한이 표(6px)보다 낮은 건 **머리카락이 어깨를 덮으면 보이는 상의가
+        # 한두 줄 줄어들기 때문**이다 — 단발 뒷모습이 그렇다.
+        bands=dict(torso=(4, 8), legs=(4, 7), shoes=(3, 5)),
+        # 눈을 확인할 방향. 뒷모습(up)은 얼굴이 없으니 뺀다.
+        eye_dirs=("down", "left", "right"),
+        eye_min=(3, 3),
     ), **over)
 
 
@@ -126,9 +155,9 @@ SPECS = {
     "player_idle_short.png": _player_spec(),
     "player_idle_ponytail.png": _player_spec(luma_mean=(94.0, 170.0)),
     "player_idle_bob.png": _player_spec(luma_mean=(90.0, 170.0), dark_frac=0.26,
-                                        chroma_mean=35.0),
+                                        chroma_mean=31.0),
     "player_idle_long.png": _player_spec(luma_mean=(85.0, 170.0), dark_frac=0.30,
-                                         chroma_mean=31.0),
+                                         chroma_mean=29.0),
     "terrain_tiles.png": TERRAIN_SPEC,
 }
 
@@ -161,6 +190,74 @@ def _neighbors(mask):
     out[:, 1:] |= mask[:, :-1]
     out[:, :-1] |= mask[:, 1:]
     return out
+
+
+def _hue(rgb):
+    """색상환 각도(0~360). 무채색이면 None — 비교할 색상이 없다는 뜻이다."""
+    r, g, b = (float(v) for v in rgb)
+    mx, mn = max(r, g, b), min(r, g, b)
+    if mx - mn < 8.0:
+        return None
+    if mx == r:
+        h = 60.0 * (((g - b) / (mx - mn)) % 6.0)
+    elif mx == g:
+        h = 60.0 * ((b - r) / (mx - mn) + 2.0)
+    else:
+        h = 60.0 * ((r - g) / (mx - mn) + 4.0)
+    return h % 360.0
+
+
+def _hue_gap(a, b):
+    d = abs(a - b) % 360.0
+    return min(d, 360.0 - d)
+
+
+def _longest_run(profile):
+    """같은 값이 연속으로 몇 칸 이어지는가. `None`(빈 줄)에서 끊긴다."""
+    best = cur = 0
+    prev = None
+    for v in profile:
+        if v is None:
+            cur, prev = 0, None
+            continue
+        cur = cur + 1 if v == prev else 1
+        prev = v
+        best = max(best, cur)
+    return best
+
+
+def _straight_run(mask):
+    """실루엣 옆선/윗선에서 가장 긴 **곧은** 구간(px).
+
+    줄마다 바깥쪽 끝 좌표를 뽑아 같은 값이 몇 줄 이어지는지 센다 — 6줄 내리
+    같은 자리면 그 옆선은 자로 그은 직선이다(STYLE_GUIDE 「자연스러움」).
+
+    **아랫변(발바닥)만 빼고 본다** — 캐릭터는 땅을 딛고 서 있어서 신발 밑창이
+    평평한 게 맞다. 여기를 같이 재면 발이 클수록 불합격이 되는데, 그건 각진
+    실루엣과 아무 상관이 없다.
+    """
+    best = 0
+    for m, both in ((mask, True), (mask.T, False)):
+        lo, hi = [], []
+        for line in m:
+            xs = np.nonzero(line)[0]
+            lo.append(None if xs.size == 0 else int(xs[0]))
+            hi.append(None if xs.size == 0 else int(xs[-1]))
+        best = max(best, _longest_run(lo))
+        if both:
+            best = max(best, _longest_run(hi))
+    return best
+
+
+def _width(mask, y0, y1):
+    """행 y0..y1 안에서 실루엣이 가장 넓은 줄의 폭."""
+    if y1 < y0:
+        return 0
+    sub = mask[y0:y1 + 1]
+    if not sub.any():
+        return 0
+    return int(max(int(np.nonzero(r)[0][-1] - np.nonzero(r)[0][0] + 1)
+                   for r in sub if r.any()))
 
 
 def check_sheet(path, spec):
@@ -313,8 +410,137 @@ def check_sheet(path, spec):
     rep.add(ch >= spec["chroma_mean"], "채도",
             "%.0f < %.0f — 탁하다" % (ch, spec["chroma_mean"]), "%.0f" % ch)
 
+    _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, glint)
+
     rep.dump()
     return rep
+
+
+# ── 「자연스러움」 (INBOX #13) ────────────────────────────────────────────
+# 위의 검사들이 "틀렸는가"(팔레트 밖의 색, 순검정, 조각난 실루엣)를 본다면 여기는
+# **"어색한가"** 를 본다. 눈으로만 잡히던 지적 — "상하의가 단색이다", "각져 보인다",
+# "짜리몽땅하지 않다" — 을 숫자로 옮긴 것이라, 여기서 걸리면 눈으로 볼 단계가 아니다.
+def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, glint):
+    # 단색 — 램프 4단계 중 실제로 몇 개를 썼고, 한 단계가 얼마나 차지하는가.
+    step_of = {}
+    for mat, ramp in pal.items():
+        if mat in ("eye", "glint"):
+            continue
+        for i, c in enumerate(ramp):
+            step_of.setdefault(tuple(int(v) for v in c), i)
+    stepmap = np.full(matmap.shape, -1, np.int16)
+    for c, i in step_of.items():
+        stepmap[body & np.all(rgb == np.array(c), axis=-1)] = i
+    bad, show = [], []
+    for mat in spec["flat"]:
+        sel = (matmap == mat) & (stepmap >= 0)
+        n = int(sel.sum())
+        if n < 8:
+            bad.append("%s 가 거의 없다" % mat)
+            continue
+        cnt = np.bincount(stepmap[sel], minlength=len(pal[mat]))
+        used, share = int((cnt > 0).sum()), float(cnt.max()) / n
+        show.append("%s %d단%.0f%%" % (mat, used, share * 100))
+        if used < spec["flat_steps"]:
+            bad.append("%s 가 %d단계뿐" % (mat, used))
+        if share > spec["flat_share"]:
+            bad.append("%s 의 한 단계가 %.0f%%" % (mat, share * 100))
+    rep.add(not bad, "단색",
+            "%s — 색종이를 오려 붙인 것처럼 보인다 (%d단계 이상 / 한 단계 %.0f%% 이하)"
+            % (", ".join(bad), spec["flat_steps"], spec["flat_share"] * 100),
+            " ".join(show))
+
+    # 색상차 — 상하의가 명도만 다르면 몸이 한 덩어리로 뭉친다.
+    bad, show = [], []
+    for m1, m2, need in spec["hue_pairs"]:
+        h1, h2 = _hue(pal[m1][1]), _hue(pal[m2][1])
+        if h1 is None or h2 is None:
+            show.append("%s|%s 무채색" % (m1, m2))
+            continue
+        gap = _hue_gap(h1, h2)
+        show.append("%s|%s %.0f°" % (m1, m2, gap))
+        if gap < need:
+            bad.append("%s|%s %.0f° < %.0f°" % (m1, m2, gap, need))
+    rep.add(not bad, "색상차", " ".join(bad) + " — 명도만 다르면 한 덩어리로 뭉친다",
+            " ".join(show))
+
+    # 아래 셋은 프레임마다 본다.
+    angular, prop, eyes, worst = [], [], [], 0
+    head_show = ""
+    for r, d in enumerate(rows):
+        for c in range(cols):
+            sub = body[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            mm = matmap[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            px = rgb[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            tag = "%s#%d" % (d, c)
+
+            run = _straight_run(sub)
+            worst = max(worst, run)
+            if run > spec["straight_max"]:
+                angular.append("%s %dpx" % (tag, run))
+
+            # 비율은 **외곽선을 뺀 알맹이**로 잰다 — STYLE_GUIDE 3번 표가 그
+            # 기준이다(외곽선은 위아래로 1px 씩 더 붙는다).
+            fill = mm != ""
+            ys = np.nonzero(fill.any(1))[0]
+            top, bot = int(ys[0]), int(ys[-1])
+
+            def first(mat):
+                got = np.nonzero((mm == mat).any(1))[0]
+                return None if got.size == 0 else int(got[0])
+
+            shirt, pants, boot = first("shirt"), first("pants"), first("boot")
+            if None in (shirt, pants, boot):
+                prop.append("%s 재질 없음" % tag)
+                continue
+            total = bot - top + 1
+            band = dict(torso=pants - shirt, legs=boot - pants, shoes=bot - boot + 1)
+            frac = (shirt - top) / float(total)
+            lo, hi = spec["head_frac"]
+            if not lo <= frac <= hi:
+                prop.append("%s 머리 %.0f%%" % (tag, frac * 100))
+            for k, (blo, bhi) in spec["bands"].items():
+                if not blo <= band[k] <= bhi:
+                    prop.append("%s %s %dpx" % (tag, k, band[k]))
+            # **머리가 어깨+팔보다 넓어야 치비다** (STYLE_GUIDE 3번).
+            hw, sw = _width(fill, top, shirt - 1), _width(fill, shirt, pants - 1)
+            if hw <= sw:
+                prop.append("%s 머리폭 %d ≤ 어깨폭 %d" % (tag, hw, sw))
+            if not head_show:
+                head_show = "머리 %.0f%% %dpx / 어깨 %dpx / 몸통%d 다리%d 신발%d" % (
+                    frac * 100, hw, sw, band["torso"], band["legs"], band["shoes"])
+
+            if d not in spec["eye_dirs"]:
+                continue
+            # 눈 = **피부에 둘러싸인** 잉크/하이라이트 덩어리. 그냥 "안쪽 잉크"로
+            # 잡으면 머리와 어깨 사이, 두 다리 사이에 낀 외곽선까지 눈으로 센다.
+            glintm = np.all(px == np.array(glint), axis=-1)
+            inky = sub & (np.all(px == np.array(ink), axis=-1) | glintm)
+            lab = measure.label(inky, connectivity=2)
+            skinish = (mm == "skin") | (mm == "blush")
+            blobs = []
+            for i in range(int(lab.max())):
+                blob = lab == i + 1
+                around = _neighbors(blob) & sub & ~blob
+                if around.any() and float((around & skinish).sum()) / int(around.sum()) >= 0.7:
+                    blobs.append(np.nonzero(blob))
+            if not blobs:
+                eyes.append("%s 눈 없음" % tag)
+                continue
+            if not (inky & glintm).any():
+                eyes.append("%s 하이라이트 없음" % tag)
+            need_h, need_w = spec["eye_min"]
+            for ys2, xs2 in blobs:
+                bh, bw = ys2.max() - ys2.min() + 1, xs2.max() - xs2.min() + 1
+                if bh < need_h or bw < need_w:
+                    eyes.append("%s 눈 %dx%d" % (tag, bw, bh))
+                    break
+    rep.add(not angular, "각짐",
+            "%s 곧은 구간 (상한 %dpx) — 어깨·머리 모서리를 굴릴 것"
+            % (" ".join(angular[:4]), spec["straight_max"]), "최대 %dpx" % worst)
+    rep.add(not prop, "비율", " ".join(prop[:4]), head_show)
+    rep.add(not eyes, "눈", " ".join(eyes[:4]) + " (최소 %dx%d + 흰 하이라이트)"
+            % (spec["eye_min"][1], spec["eye_min"][0]))
 
 
 # ── 지형 타일 검사 ────────────────────────────────────────────────────────

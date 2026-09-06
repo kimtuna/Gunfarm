@@ -174,7 +174,7 @@ func _is_base_choice(field: String, id: String) -> bool:
 func _material_of(field: String) -> Array:
 	match field:
 		"skin":
-			return ["skin"]
+			return ["skin", "blush"]
 		"hair_color":
 			return ["hair"]
 		"clothes_color":

@@ -36,13 +36,21 @@ BASE_SKIN_ID, BASE_SKIN = "light", "f0c8a0"       # 밝은
 BASE_HAIR_ID, BASE_HAIR = "black", "211c1a"       # 검정
 BASE_CLOTH_ID, BASE_CLOTH = "grass", "4e7a3a"     # 풀색
 
-# 바지/신발은 옷색을 어둡게 쓴다 — 팔레트를 늘리지 않고 상하의를 구분한다
-# (DESIGN.md 「캐릭터 커스터마이징 항목」). 실제 어두워지는 정도는 아래 BANDS 의
-# 목표 명도가 정한다 — 여기 계수는 "무슨 색을 어둡게 쓸 것인가"(색상)만 정한다.
-PANTS_DARKEN = 0.62
-SHOES_DARKEN = 0.44
+# 바지/신발 색은 옷색에서 **색상(hue)까지 옮겨서** 만든다 (2026-09-06, INBOX #13).
+# 전에는 옷색을 그냥 어둡게 썼는데, 그러면 상의와 하의의 색상이 같아서 몸이 초록
+# 기둥 하나로 뭉쳤다(사람 피드백: "상하의가 너무 단색이라서 그런 것 같기도 하다").
+# `docs/STYLE_GUIDE.md` 「자연스러움」: **상의와 하의는 서로 다른 색상.**
+#
+# 고정 각도로 색상환을 돌리지 않는다 — 옷색에 따라 형광 분홍 바지가 나온다.
+# 대신 **바지다운 색 두 개(흙빛/데님)** 를 두고, 옷색에서 먼 쪽에 붙인 뒤 옷색을
+# 조금 섞어 상의와 이어지게 한다. 팔레트가 늘어나지는 않는다(여전히 옷색 하나에서
+# 셔츠/바지/신발이 나온다 — DESIGN.md 「캐릭터 커스터마이징 항목」).
+PANTS_WARM = (110, 80, 52)      # 흙빛 — 초록·파랑·자주처럼 차가운 옷색에 붙는다
+PANTS_COOL = (62, 76, 108)      # 데님 — 옷색이 이미 흙빛일 때(주홍·흙색)
+PANTS_MIX = 0.25                # 옷색을 이만큼 섞는다. 더 섞으면 색상차가 사라진다
+PANTS_NEAR = 46.0               # 옷색이 흙빛과 이만큼 안쪽이면 데님으로 간다(도)
 
-MATS = ["skin", "hair", "shirt", "pants", "boot", "eye", "glint"]
+MATS = ["skin", "hair", "shirt", "pants", "boot", "blush", "eye", "glint"]
 
 BAYER4 = np.array([
     [0, 8, 2, 10],
@@ -147,6 +155,44 @@ def darken(rgb, f):
     return tuple(int(round(c * f)) for c in rgb)
 
 
+def hue_of(rgb):
+    """색상환 각도(도). 무채색이면 None — 돌릴 색상이 없다는 뜻이다."""
+    r, g, b = (float(c) for c in rgb)
+    mx, mn = max(r, g, b), min(r, g, b)
+    if mx - mn < 10.0:
+        return None
+    if mx == r:
+        h = 60.0 * (((g - b) / (mx - mn)) % 6.0)
+    elif mx == g:
+        h = 60.0 * ((b - r) / (mx - mn) + 2.0)
+    else:
+        h = 60.0 * ((r - g) / (mx - mn) + 4.0)
+    return h % 360.0
+
+
+def hue_gap(a, b):
+    d = abs(a - b) % 360.0
+    return min(d, 360.0 - d)
+
+
+def pants_color(cloth_rgb):
+    """옷색 → 바지색. **명도가 아니라 색상을 옮기는 게 요점이다.**
+
+    옷색이 이미 흙빛이면(주홍·흙색) 흙빛 바지는 상의와 붙어 보이므로 데님으로
+    간다. 명도는 여기서 정하지 않는다 — `bands_for()` 의 목표 명도가 정한다.
+    """
+    h = hue_of(cloth_rgb)
+    warm = hue_of(PANTS_WARM)
+    anchor = PANTS_COOL if (h is not None and hue_gap(h, warm) < PANTS_NEAR) else PANTS_WARM
+    return tuple(int(round(v)) for v in _mix(anchor, cloth_rgb, PANTS_MIX))
+
+
+def blush_color(skin_rgb):
+    """볼 홍조 — 피부색에 장미빛을 섞고 살짝 어둡게. 피부 램프와 겹치지 않는다."""
+    return tuple(int(round(v)) for v in
+                 set_luma(_mix(skin_rgb, (214, 92, 96), 0.42), max(luma(skin_rgb) * 0.93, 74.0)))
+
+
 # ── 재질별 **기본 단계 목표 명도**(=밴드) ─────────────────────────────────
 # 이 값들이 "옷과 바지가 한눈에 구분되는가"를 혼자 결정한다. 두 부류를 다르게 다룬다:
 #
@@ -163,7 +209,7 @@ SHIRT_RANGE = (138.0, 168.0)
 PANTS_RATIO = 0.70          # 셔츠 대비 — 이 비율이 상하의를 가르는 계단이다
 BOOT_RATIO = 0.45
 SKIN_MIN = 88.0             # 가장 짙은 피부도 이 아래로는 안 내려간다(형태가 안 읽힌다)
-HAIR_MIN = 50.0             # 검정 머리는 색이 아니라 광택 단차로 읽힌다 — 램프를
+HAIR_MIN = 56.0             # 검정 머리는 색이 아니라 광택 단차로 읽힌다 — 램프를
                             # 띄울 자리가 필요하다
 
 
@@ -195,10 +241,13 @@ def palette(skin=BASE_SKIN, hair=BASE_HAIR, cloth=BASE_CLOTH, bands=None):
         "hair": make_ramp(hair_rgb, band["hair"], hi_to=COOL, hi_mix=0.22,
                           ramp=(1.52, 1.0, 0.78, 0.62), floor=HAIR_FLOOR),
         "shirt": make_ramp(cloth_rgb, band["shirt"], hi_mix=0.26),
-        # 바지·신발은 같은 옷색을 쓰되 목표 명도로 밴드를 갈라놓는다.
-        "pants": make_ramp(darken(cloth_rgb, PANTS_DARKEN), band["pants"], hi_mix=0.14),
-        "boot": make_ramp(darken(cloth_rgb, SHOES_DARKEN), band["boot"], hi_mix=0.12,
+        # 바지·신발은 **색상을 옮긴** 바지색에서 나온다(`pants_color()`). 둘은 같은
+        # 계열이고(신발이 바지와 따로 놀면 발만 떠 보인다) 목표 명도로 갈린다.
+        "pants": make_ramp(pants_color(cloth_rgb), band["pants"], hi_mix=0.14),
+        "boot": make_ramp(pants_color(cloth_rgb), band["boot"], hi_mix=0.12,
                           ramp=(1.30, 1.0, 0.88, 0.80)),
+        # 볼 홍조는 단계가 하나다 — 1~2px 이라 램프를 줘봐야 쓸 자리가 없다.
+        "blush": [blush_color(skin_rgb)],
         "eye": [INK] * 4,
         "glint": [GLINT] * 4,
     }
@@ -248,6 +297,29 @@ def rbox(x0, y0, x1, y1, r=1.2, dome=None, axis="x"):
     else:
         t = np.clip(np.abs(GY - cy) / max(hh, 1e-6), 0, 1)
     h = np.sqrt(np.clip(1 - t * t, 0, 1)) * dome
+    return m, h * m
+
+
+def head_shape(cx, cy, rx, ry, p_top=1.6, p_bot=2.4, squash=None):
+    """치비 머리 — 정수리는 좁고 **턱은 넓은** 달걀. (마스크, 높이)
+
+    **완전한 원을 쓰지 않는다**(2026-09-06, INBOX #13). 지름 14px 짜리 원은 옆선이
+    7~8줄 내리 정확히 같은 자리에 놓여서 — 원의 가운데는 거의 수직이다 — 실루엣이
+    각져 보인다(`qa_sprite_check.py` 「각짐」). 위아래 지수를 따로 준다:
+      `p_top` < 2  정수리가 좁아지고 옆선이 매 줄 조금씩 움직인다
+      `p_bot` > 2  턱이 넓게 남는다. 아래도 2 미만으로 하면 **턱이 뾰족해져서
+                   목처럼 보인다**(실제로 한 번 그렇게 나왔다)
+    """
+    t = np.clip((GY - cy) / ry, -1.0, 1.0)
+    at = np.abs(t)
+    p = np.where(t < 0, p_top, p_bot)
+    w = rx * np.power(np.clip(1.0 - np.power(at, p), 0, 1), 1.0 / p)
+    dx = np.abs(GX - cx)
+    m = (dx <= w) & (np.abs((GY - cy) / ry) < 1.0)
+    if squash is None:
+        squash = ROUND * min(rx, ry)
+    # 높이는 (초타원이 아니라) 타원체로 잡는다 — 실루엣 안쪽에서 매끄러운 돔이 된다.
+    h = np.sqrt(np.clip(1.0 - (dx / rx) ** 2 - t * t, 0, 1)) * squash
     return m, h * m
 
 
@@ -407,16 +479,22 @@ def outline(rgb, mat):
 
 
 # ── 캐릭터 정의 ────────────────────────────────────────────────────────────
-# 비율(STYLE_GUIDE 3번): 머리 2~15.5 / 몸통 15~24 / 다리 24~29 / 신발 29~31.5
+# 비율(STYLE_GUIDE 3번 표, 2026-09-06 INBOX #13 로 재조정 — "더 짜리몽땅하게"):
+#   머리 2~16(14px, 전체의 47%) / 몸통 16~22 / 다리 22~28 / 신발 28~31.7
+# **머리(폭 14)가 어깨+팔(폭 12)보다 넓다** — 이게 치비의 핵심이고,
+# `qa_sprite_check.py` 의 「비율」이 숫자로 지킨다.
 CFG = dict(
-    head_rx=6.0, head_ry=6.5, head_cy=8.8,
-    torso_w=10.2, torso_top=15.2, torso_bot=23.6,
-    side_torso_w=8.4,
-    arm_w=2.7,
-    belt=True, limb_shade=0.18, contact=0.18, cuff=0.30,
-    torso_r=2.3, ears=0, arm_in=0.95, shoe_lip=0.30,
-    fringe=9.2, fringe_tilt=1.5, side_hair=13.2,
-    eye_y=11, eye_dx=2, glint=True,
+    head_rx=6.8, head_ry=7.0, head_cy=9.0, head_p=1.6, head_pb=2.4, head_puff=1.7,
+    torso_w=9.4, torso_top=15.9, torso_bot=22.0,
+    side_torso_w=8.0,
+    arm_w=2.5,
+    arm_slant=0.6, arm_taper=0.4, leg_taper=0.5, toe=1.2, foot_out=0.45, side_arm=2.4,
+    belt=True, limb_shade=0.16, contact=0.18, cuff=0.28, collar=0.26,
+    torso_r=1.4, ears=0, arm_in=1.05, shoe_lip=0.30,
+    fringe=8.9, fringe_tilt=1.4, side_hair=13.2,
+    eye_y=10, eye_dx=3.0, eye_style="stripe", glint=True, blush=True,
+    hair_shine=0.30,
+    leg_top=21.4, foot_y=31.7, boot_h=3.7,
     dither=0.0, key=0.84, amb=0.17, rim=0.10,
     # ── 걷기(walk) ── 진폭은 전부 **네이티브 34px 단위**다. 1 = 화면에서 3px.
     bob=1.0,            # 몸이 가라앉는 깊이. 착지에서 최대, 통과 자세에서 0
@@ -486,16 +564,27 @@ def _body(b, d, cfg, pose):
 
     # 다리 — 사이를 1.2px 비워 두면 외곽선이 그 틈에 들어가 두 다리로 읽힌다.
     # 옆모습은 두 다리가 거의 겹치므로 간격을 좁히고 앞뒤(x)로만 벌린다.
-    lw = 3.9 if not side else 3.7
+    lw = 3.9 if not side else 3.3
     gap = 0.6 if not side else 0.0
     for i, sgn in enumerate((-1, 1)):
         lx = cx + sgn * (lw / 2 + gap) + pose["leg_dx"][i]
-        foot = 31.5 - pose["leg_lift"][i]
-        b.add(rbox(lx - lw / 2, 23.2 + bob, lx + lw / 2, foot - 2.2, r=1.3), "pants")
-        b.add(rbox(lx - lw / 2 - 0.4, foot - 2.7, lx + lw / 2 + 0.4, foot, r=1.0), "boot")
+        foot = cfg["foot_y"] - pose["leg_lift"][i]
+        # 다리도 **허벅지에서 발목으로 가늘어진다** — 폭이 일정한 상자면 옆선이
+        # 다리 길이만큼 곧은 직선이 된다(「각짐」).
+        ankle = lw / 2 - cfg["leg_taper"]
+        b.add(_fall_shape(lx, lw / 2, cfg["leg_top"] + bob, foot - cfg["boot_h"] + 0.3,
+                          taper=cfg["leg_taper"], tip=0.6), "pants")
+        # 옆모습 신발은 **보는 쪽으로 코가 나온다** — 안 그러면 다리부터 발끝까지
+        # 앞선이 한 줄로 곧게 이어진다.
+        toe = cfg["toe"] * sx if side else 0.0
+        # 앞/뒷모습 신발은 **발끝이 살짝 바깥으로** 벌어진다. 발목보다 넓어져서
+        # 다리에서 발까지 곧게 이어지던 옆선이 거기서 한 칸 꺾인다(「각짐」).
+        out = 0.0 if side else sgn * cfg["foot_out"]
+        b.add(rbox(lx + out - ankle - 0.4 + min(toe, 0.0), foot - cfg["boot_h"],
+                   lx + out + ankle + 0.4 + max(toe, 0.0), foot, r=1.0), "boot")
 
-    # 목 (몸통보다 먼저 — 뒤로 간다)
-    b.add(rbox(cx - 1.6, 12.8 + bob, cx + 1.6, top + 1.2, r=1.1), "skin")
+    # 목 (몸통보다 먼저 — 뒤로 간다). 짧다 — 치비는 목이 거의 없다.
+    b.add(rbox(cx - 1.6, top - 2.4, cx + 1.6, top + 1.2, r=1.1), "skin")
 
     # 몸통
     b.add(rbox(cx - tw / 2, top, cx + tw / 2, bot, r=cfg["torso_r"]), "shirt")
@@ -505,19 +594,27 @@ def _body(b, d, cfg, pose):
     # 어깨 높이에서 몸통과 떨어져 팔만 붕 뜬 2px 조각이 된다.
     aw = cfg["arm_w"]
     off = tw / 2 + aw / 2 - cfg["arm_in"]
-    xs = [sx * 2.0] if side else [-off, off]
+    xs = [sx * cfg["side_arm"]] if side else [-off, off]
     limbs = []
     for i, offx in enumerate(xs):
         ax = cx + offx + pose["arm_dx"][i]
         ay = bob + pose["arm_dy"][i]
         arm_top, arm_bot = cfg["torso_top"] + 1.1 + ay, cfg["torso_bot"] - 1.6 + ay
-        limbs.append(b.add(rbox(ax - aw / 2, arm_top, ax + aw / 2, arm_bot, r=1.25), "shirt"))
+        # 소매는 **어깨에서 손목으로 좁아지며 몸 쪽으로 기운다**(2026-09-06, INBOX #13).
+        # 폭이 일정한 상자로 두면 옆선이 팔 길이만큼 완전한 수직선이 되어 각져
+        # 보인다(`qa_sprite_check.py` 「각짐」). 기울이면 어깨가 자연스럽게 처진다.
+        # 앞/뒷모습은 손목이 **몸 쪽으로**(어깨가 처져 보인다), 옆모습은 손목이
+        # **앞쪽으로** 기운다 — 옆모습에서 뒤로 기울이면 팔·다리 앞선이 한 줄로
+        # 곧게 이어져 버린다(「각짐」).
+        lean = cfg["arm_slant"] * sx if side else -cfg["arm_slant"] * (1.0 if offx > 0 else -1.0)
+        limbs.append(b.add(_fall_shape(ax, aw / 2, arm_top, arm_bot, taper=cfg["arm_taper"],
+                                       tip=0.9, slant=lean), "shirt"))
         # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다
-        limbs.append(b.add(ellipsoid(ax, arm_bot + 1.15, 1.55, 1.5), "skin"))
+        limbs.append(b.add(ellipsoid(ax + lean, arm_bot + 0.9, 1.45, 1.4), "skin"))
     return limbs
 
 
-def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3):
+def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3, slant=0.0, wave=0.0):
     """아래로 흘러내리는 머리단 — 아래로 갈수록 좁아지고 끝이 둥근 기둥.
 
     `rbox` 로는 못 만든다(폭이 일정하다). 도트에서 머리단이 "붙인 판자"로 안
@@ -526,7 +623,9 @@ def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3):
     """
     t = np.clip((GY - y0) / max(y1 - y0, 1e-6), 0.0, 1.0)
     half = np.maximum(hw - taper * t, 0.6)
-    dx = np.abs(GX - cx)
+    # `slant` 는 아래로 갈수록 옆으로 기울고, `wave` 는 좌우로 한 번 굼실거린다 —
+    # 긴 머리단은 곧게 떨어뜨리면 옆선이 자로 그은 직선이 된다(「각짐」).
+    dx = np.abs(GX - (cx + slant * t + wave * np.sin(2.0 * np.pi * t)))
     body = (GY >= y0) & (GY <= y1 - tip) & (dx <= half)
     # 끝동 — 잘린 자리가 자로 그은 듯 반듯하면 가발처럼 보인다
     ty = np.clip((GY - (y1 - tip)) / tip, 0.0, 1.0)
@@ -536,10 +635,13 @@ def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3):
     return m, h * m
 
 
-def _tail(b, part, cx, y0, y1, lift, w=2.2):
-    """묶은 꼬리 — 위아래가 뾰족한 타원. 폭이 일정한 막대기로 만들면 꼬리가
-    아니라 손잡이로 보인다. 머리 껍데기와 겹치게 시작해서 실루엣을 잇는다."""
-    return b.add(ellipsoid(cx, (y0 + y1) * 0.5, w, (y1 - y0) * 0.5),
+def _tail(b, part, cx, y0, y1, lift, w=2.2, slant=0.0):
+    """묶은 꼬리 — 아래로 좁아지며 살짝 휘는 갈래.
+
+    폭이 일정한 막대기로 만들면 꼬리가 아니라 손잡이로 보이고, 큰 타원으로
+    만들면 **옆선이 10줄 내리 같은 자리**에 놓여 각져 보인다(「각짐」).
+    머리 껍데기와 겹치게 시작해서 실루엣을 잇는다."""
+    return b.add(_fall_shape(cx, w, y0, y1, taper=w * 0.62, tip=1.6, slant=slant),
                  "hair", part=part, lift=lift)
 
 
@@ -554,12 +656,19 @@ def _tail(b, part, cx, y0, y1, lift, w=2.2):
 #           짧게만 자르면 「짧은머리」와 붙어 보이고, 길게 늘이면 「긴머리」와 붙는다
 #   back    뒤통수 아래로 이어지는 머리단 길이 (뒷/옆모습에서 보이는 덩어리)
 #   strand  앞머리에 결 한 줄을 넣을지 (좌우대칭을 깨서 밋밋함을 없앤다)
+#   ftop    그 머리단이 시작하는 높이(머리 중심 기준). **눈을 덮으면 안 된다** —
+#           폭이 넓은 단발은 눈보다 아래(광대)에서 시작해야 얼굴이 열린다
+#   wave    그 머리단이 좌우로 굼실거리는 폭. 긴 머리는 곧게 떨어뜨리면 커튼이 된다
 #   tail    묶은 꼬리 길이. 0 이면 없다
 HAIR_STYLES = {
-    "short":    dict(sides=0.0,  fall=0.0, fw=0.0,  back=0.0, strand=True,  tail=0.0),
-    "bob":      dict(sides=2.4,  fall=1.1, fw=2.45, back=2.4, strand=False, tail=0.0),
-    "long":     dict(sides=2.0,  fall=5.8, fw=1.65, back=6.8, strand=False, tail=0.0),
-    "ponytail": dict(sides=-1.2, fall=0.0, fw=0.0,  back=0.0, strand=False, tail=5.2),
+    "short":    dict(sides=0.0,  fall=0.0, fw=0.0,  ftop=1.0, wave=0.0,  back=0.0,
+                     strand=True,  tail=0.0),
+    "bob":      dict(sides=2.4,  fall=1.1, fw=2.45, ftop=3.6, wave=0.0,  back=2.4,
+                     strand=False, tail=0.0),
+    "long":     dict(sides=2.0,  fall=5.8, fw=1.65, ftop=1.0, wave=0.95, back=6.8,
+                     strand=False, tail=0.0),
+    "ponytail": dict(sides=-1.2, fall=0.0, fw=0.0,  ftop=1.0, wave=0.0,  back=0.0,
+                     strand=False, tail=5.2),
 }
 
 
@@ -572,8 +681,25 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     덩어리로 남는다(`qa_sprite_check.py` 「실루엣」).
     """
     st = HAIR_STYLES.get(style, HAIR_STYLES["short"])
-    grow = 0.15 if d == "up" else 0.6   # 뒷모습은 얼굴이 없어 껍데기가 곧 실루엣이다
-    shell = ellipsoid(hx, hy, rx + grow, ry + 0.5)
+    grow = 0.45 if d == "up" else 0.6   # 뒷모습은 얼굴이 없어 껍데기가 곧 실루엣이다
+    shell = head_shape(hx, hy, rx + grow, ry, p_top=cfg["head_p"], p_bot=cfg["head_pb"])
+    side = d in ("left", "right")
+    sx = 1.0 if d == "right" else -1.0
+    if cfg["head_puff"]:
+        # 귀 옆 머리 볼륨. 두 가지 일을 한다 — (1) 머리를 어깨보다 확실히 넓게
+        # 만들고, (2) **실루엣 옆선이 여러 줄 내리 같은 자리에 놓이는 것을 깬다**
+        # (「각짐」). 옆모습은 뒤통수 쪽에만 붙인다(얼굴 앞에 혹이 나면 이상하다).
+        pr = cfg["head_puff"]
+        # 옆모습은 뒤통수 쪽을 크게, 관자놀이 쪽을 작고 높게 준다 — 앞에 큰 혹이
+        # 나면 이상하지만, 아무것도 없으면 얼굴 앞선이 6줄 곧게 이어진다.
+        offs = [(-sx, 1.0, 1.4)] if side else [(-1.0, 1.0, 1.4), (1.0, 1.0, 1.4)]
+        pm, ph = np.zeros_like(shell[0]), np.zeros_like(shell[1])
+        for s, k, dy in offs:
+            mm, hh = ellipsoid(hx + s * (rx + grow - 0.85), hy + dy, pr * k, pr * k * 1.2,
+                               squash=ROUND * (rx + grow) * 0.9)
+            pm |= mm
+            ph = np.maximum(ph, hh)
+        shell = (shell[0] | pm, np.maximum(shell[1], ph))
     sm = shell[0]
     # 머리카락 끝(헤어라인)을 물결지게 만드는 작은 덩어리들 — 실루엣 아랫변이
     # 완전한 원호면 머리가 헬멧처럼 보인다. 도트에서 "머리카락"으로 읽히는 건
@@ -586,8 +712,6 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
             m |= mm
             h = np.maximum(h, hh)
         return m, h
-    side = d in ("left", "right")
-    sx = 1.0 if d == "right" else -1.0
     LIFT = 0.10
 
     if d == "up":
@@ -601,24 +725,27 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         # 아래로 갈수록 좁아지는 사다리꼴이라야 어깨에 얹힌 것처럼 보인다.
         nape = None
         if st["back"] > 0.0:
-            nape = _fall_shape(hx, rx + grow - 0.7, hy, hy + ry + 0.5 + st["back"], taper=1.4)
+            nape = _fall_shape(hx, rx + grow - 0.7, hy, hy + ry + 0.5 + st["back"], taper=2.4)
             b.add(nape, "hair", part=cap, lift=LIFT)
         if st["tail"] > 0.0:
             # 뒷모습 — 꼬리는 **머리보다 확실히 좁아야** 묶인 것으로 읽힌다.
             # 넓게 잡았더니 머리와 이어진 한 덩어리가 되어 긴머리처럼 보였다.
             ty0, ty1 = hy + 4.2, hy + ry + 0.5 + st["tail"]
-            tail = ellipsoid(hx, (ty0 + ty1) * 0.5, 2.15, (ty1 - ty0) * 0.5)
+            tail = _fall_shape(hx, 2.15, ty0, ty1, taper=1.2, tip=1.5)
             b.add(tail, "hair", part=cap, lift=LIFT)
             b.add(tail, "hair", mask=GX > hx + 0.4, lift=LIFT)   # 결 한 줄
-        # 머리결 — **부위 id 만 다른 같은 껍데기**를 세로로 몇 줄 얹으면 그 경계에
-        # 내부선이 들어가 머리카락 가닥이 된다. 이게 없으면 뒷모습이 매끈한
-        # 회색 달걀(=민머리/헬멧)로 보인다. 물결진 헤어라인은 여기서도 덤불이
-        # 됐고, 세로 결이 훨씬 머리카락처럼 읽혔다.
-        for off in (-3.6, 0.3, 3.8):
-            band = np.abs(GX - (hx + off)) < 0.9
-            b.add(shell, "hair", mask=sm & band, lift=LIFT)
-            if nape is not None:
-                b.add(nape, "hair", mask=band, lift=LIFT)
+        # 머리결 — **덩어리(가르마) 두 개**를 얹는다. 부위 id 가 다르므로 그 경계에
+        # 내부선이 들어가 머리카락 가닥이 된다. 매끈한 타원 하나면 뒷모습이 회색
+        # 달걀(=민머리/헬멧)로 보인다.
+        # **폭이 일정한 세로 띠로 하지 않는다**(2026-09-06, INBOX #13) — 곧은 세로
+        # 선 몇 개가 나란히 그이면 머리가 아니라 **빗자루**로 보인다. 아래로 갈수록
+        # 벌어지는 둥근 덩어리라야 경계가 휘어서 머리카락 결로 읽힌다.
+        for off, wide in ((-2.9, 2.5), (3.1, 2.3)):
+            lobe = _fall_shape(hx + off, wide, hy - ry * 0.55,
+                               hy + ry * (1.15 if nape is None else 1.6),
+                               taper=wide * 0.35, tip=1.6, slant=off * 0.35)
+            b.add(lobe, "hair", mask=sm | (nape[0] if nape is not None else sm),
+                  lift=LIFT)
         return
 
     # 앞머리를 비스듬히 자른다 — 수평으로 자르면 바가지머리가 된다
@@ -632,7 +759,7 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         if side and s == sx:
             continue                          # 옆모습에서 얼굴 쪽 옆머리는 없다
         b.add(shell, "hair",
-              mask=(np.abs(GX - hx) > rx - 1.2) & (GY <= down) & (GX * s > hx * s),
+              mask=(np.abs(GX - hx) > rx - 0.8) & (GY <= down) & (GX * s > hx * s),
               part=cap, lift=LIFT)
 
     if side:
@@ -652,16 +779,18 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         xs = [hx - sx * (rx + grow - hw)] if side \
             else [hx - (rx + grow - hw), hx + (rx + grow - hw)]
         for i, fx in enumerate(xs):
-            fall = _fall_shape(fx, hw, hy + 1.0, down + st["fall"], taper=hw * 0.32)
+            out = 1.0 if fx > hx else -1.0
+            fall = _fall_shape(fx, hw, hy + st["ftop"], down + st["fall"], taper=hw * 0.75,
+                               slant=-1.0 * out, wave=st["wave"] * out)
             b.add(fall, "hair", part=cap, lift=LIFT)
             # 결 한 줄 — 넓은 면이 통짜로 남으면 판자처럼 보인다
             b.add(fall, "hair", mask=GX > fx + 0.35, lift=LIFT)
 
     # 뒤통수 아래로 이어지는 덩어리 — 옆모습에서 단발/긴머리의 부피를 만든다
     if st["back"] > 0.0 and side:
-        nw = st["fw"] + 0.5
+        nw = st["fw"] + 1.15
         nape = _fall_shape(hx - sx * (rx + grow - nw), nw, hy + 1.0,
-                           hy + ry + 0.5 + st["back"], taper=nw * 0.45)
+                           hy + ry + 0.5 + st["back"], taper=nw * 0.75, slant=0.8 * sx)
         b.add(nape, "hair", part=cap, lift=LIFT)
 
     if st["tail"] > 0.0:
@@ -670,10 +799,10 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         # 앞모습은 옆으로 흘러내린 곁꼬리, 옆모습은 뒤통수 뒤로 나온다.
         if side:
             _tail(b, cap, hx - sx * (rx + grow - 0.5), hy - 1.0,
-                  down + st["tail"] * 1.6, LIFT, w=2.1)
+                  down + st["tail"] * 1.6, LIFT, w=2.1, slant=1.1 * sx)
         else:
             _tail(b, cap, hx + (rx + grow - 1.0), hy - 1.4,
-                  down + st["tail"] * 1.2, LIFT, w=1.9)
+                  down + st["tail"] * 1.2, LIFT, w=1.9, slant=-0.9)
 
     if st["strand"]:
         # 앞머리 한 갈래 — 위와 같은 방법(부위 id 만 다른 같은 껍데기)으로 결 한 줄.
@@ -701,10 +830,10 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **
     hy, rx, ry = cfg["head_cy"] + bob, cfg["head_rx"], cfg["head_ry"]
     if side:
         rx -= 0.4
-    b.add(ellipsoid(hx, hy, rx, ry), "skin")
+    b.add(head_shape(hx, hy, rx, ry, p_top=cfg["head_p"], p_bot=cfg["head_pb"]), "skin")
     if side:
         # 코 — 실루엣 밖으로 살짝 나온 1px 돌기. 옆모습을 결정적으로 알아보게 한다
-        b.add(ellipsoid(hx + sx * (rx - 0.45), hy + 2.0, 1.0, 0.9), "skin")
+        b.add(ellipsoid(hx + sx * (rx - 0.25), hy + 4.0, 1.15, 1.1), "skin")
     elif cfg["ears"] and direction == "down":
         # 귀는 **실루엣 밖으로 거의 나오지 않게** 붙인다. 조금만 내밀어도 34px
         # 에서는 1px 돌기 + 그 바깥의 외곽선까지 2px 가 되어 요정 귀가 된다.
@@ -717,16 +846,39 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **
     m, l = downsample(b.mat, lum)
     pm = downsample_part(b.part)
 
-    # 눈은 축소 뒤에 네이티브 격자에 직접 찍는다 — 줄이면서 뭉개지면 안 되므로
-    def eye(x, y):
-        for dy in range(2):
-            for dx in range(2):
-                if 0 <= y + dy < N and 0 <= x + dx < N and m[y + dy, x + dx] == MATS.index("skin"):
-                    m[y + dy, x + dx] = MATS.index("eye")
-                    l[y + dy, x + dx] = 0.0
-        if cfg["glint"] and 0 <= y < N and 0 <= x < N and m[y, x] == MATS.index("eye"):
-            m[y, x] = MATS.index("glint")
-            l[y, x] = 1.0
+    # 눈은 축소 뒤에 네이티브 격자에 직접 찍는다 — 줄이면서 뭉개지면 안 되므로.
+    # **최소 3×3 + 흰 하이라이트 1px**(STYLE_GUIDE 「자연스러움」, INBOX #13):
+    # 2×2 잉크 점은 째려보는 인상이 된다. 각진 눈매·눈썹은 넣지 않는다 —
+    # 큰 눈 + 하이라이트만으로 순한 인상이 나온다.
+    # 눈 모양 — 3×3 자리에 무엇을 찍을 것인가. `.`=그대로(피부) `e`=잉크 `*`=하이라이트
+    EYE_ART = {
+        # 통짜 잉크. 크지만 34px 에서는 선글라스처럼 보인다
+        "solid": ("*ee", "eee", "eee"),
+        # 바깥쪽 한 줄이 흰자 — 잉크 덩어리가 반으로 줄어 눈망울로 읽힌다
+        "stripe": ("*ee", "*ee", ".ee"),
+        # 아래를 깎은 둥근 눈
+        "round": (".e.", "*ee", ".ee"),
+    }
+
+    def eye(x, y, flip=False):
+        art = EYE_ART[cfg["eye_style"]]
+        for dy, line in enumerate(art):
+            for dx, ch in enumerate(line[::-1] if flip else line):
+                yy, xx = y + dy, x + dx
+                if ch == "." or not (0 <= yy < N and 0 <= xx < N):
+                    continue
+                if m[yy, xx] != MATS.index("skin"):
+                    continue
+                # 하이라이트는 광원 쪽(왼쪽 위) — 다른 자산과 광원이 같아야 한다.
+                m[yy, xx] = MATS.index("glint" if ch == "*" and cfg["glint"] else "eye")
+                l[yy, xx] = 1.0 if ch == "*" else 0.0
+
+    def blush(x, y, w=2):
+        """볼 홍조 — 눈 아래 바깥쪽으로 1~2px. 입은 그리지 않는다."""
+        for dx in range(w):
+            if 0 <= y < N and 0 <= x + dx < N and m[y, x + dx] == MATS.index("skin"):
+                m[y, x + dx] = MATS.index("blush")
+                l[y, x + dx] = 0.5
 
     # 팔/손은 몸통과 같은 재질이라 밝기가 같으면 실루엣에 녹는다 — 한 단계 그늘로.
     l[np.isin(pm, limbs)] -= cfg["limb_shade"]
@@ -754,20 +906,43 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **
         first = boot & ~np.pad(boot, ((1, 0), (0, 0)))[:-1]
         l[first] += cfg["shoe_lip"]
 
-    # 허리띠 — 상의와 바지가 색 계열이 같아서 이게 없으면 몸이 초록 기둥 하나로 읽힌다.
-    # 3D 덩어리로 넣으면 윗면이 빛을 받아 오히려 밝은 띠가 되므로 축소 뒤 한 줄로 찍는다.
+    # 옷깃 — 상의 맨 윗줄(어깨선)을 한 단계 밝게. 옷에 포인트가 하나도 없으면
+    # 상의가 "색칠한 사각형"으로 읽힌다(STYLE_GUIDE 「자연스러움」).
+    if cfg["collar"]:
+        chest = (m == SHIRT) & ~np.isin(pm, limbs)
+        first = chest & ~np.pad(chest, ((1, 0), (0, 0)))[:-1]
+        l[first] += cfg["collar"]
+
+    # 허리띠 — 상의 맨 아랫줄을 **바지 재질의 가장 어두운 단계**로 찍는다.
+    # 재질을 바지로 두는 이유가 둘이다: (1) 색상이 옮겨진 바지색이라 상의와 확실히
+    # 갈린다, (2) 허리선이 곧 "다리가 시작하는 줄"이라 비율 검사(`qa_sprite_check.py`
+    # 「비율」)가 몸통/다리를 여기서 가른다.
     if cfg["belt"]:
         row = int(round(cfg["torso_bot"] + bob)) - 1
-        sel = m[row] == MATS.index("shirt")
-        m[row][sel] = MATS.index("boot")
-        l[row][sel] = 0.20
+        sel = m[row] == SHIRT
+        m[row][sel] = MATS.index("pants")
+        l[row][sel] = 0.0
+
+    # 머리 하이라이트 띠 — 정수리 쪽 밝은면을 한 단계 더 올린다. 검은 머리는
+    # 색이 아니라 이 광택으로 읽힌다(STYLE_GUIDE 「자연스러움」: 윗면에 밝은 띠).
+    if cfg["hair_shine"]:
+        crown = (m == HAIR) & (np.arange(N)[:, None] <= int(round(hy - ry * 0.35)))
+        top_row = crown & ~np.pad(crown, ((1, 0), (0, 0)))[:-1]
+        l[np.pad(top_row, ((1, 0), (0, 0)))[:-1] & crown] += cfg["hair_shine"]
 
     ex, ey = int(round(hx)), cfg["eye_y"] + int(round(bob))
+    half = 1
     if direction == "down":
-        eye(ex - cfg["eye_dx"] - 1, ey)
-        eye(ex + cfg["eye_dx"] - 1, ey)
+        eye(int(round(ex - cfg["eye_dx"])) - half, ey)
+        eye(int(round(ex + cfg["eye_dx"])) - half, ey)
+        if cfg["blush"]:
+            blush(int(round(ex - cfg["eye_dx"])) - half - 1, ey + 3)
+            blush(int(round(ex + cfg["eye_dx"])) - half + 2, ey + 3)
     elif side:
-        eye(ex + int(round(sx * 1.5)) - (1 if sx > 0 else 0), ey)
+        ax = ex + int(round(sx * 1.6)) - (half if sx < 0 else half + 1)
+        eye(ax, ey)
+        if cfg["blush"]:
+            blush(ax - (1 if sx < 0 else 0), ey + 3)
 
     return outline(inner_lines(quantize(m, l, pal, cfg["dither"]), m, pm, pal), m)
 
@@ -894,6 +1069,7 @@ const BASE := {"skin": "%s", "hair_color": "%s", "clothes_color": "%s"}
 const INK := "%s"
 const GLINT := "%s"
 
+## 피부색 하나가 피부 램프와 **볼 홍조** 색을 함께 정한다(홍조는 단계가 하나다).
 const SKIN := {
 %s
 }
@@ -907,7 +1083,7 @@ const CLOTHES := {
 %s
 }
 ''' % (BASE_SKIN_ID, BASE_HAIR_ID, BASE_CLOTH_ID, _rgb_hex(INK), _rgb_hex(GLINT),
-       ramps("skin", SKIN_IDS, key="skin", mats=["skin"]),
+       ramps("skin", SKIN_IDS, key="skin", mats=["skin", "blush"]),
        ramps("hair", HAIR_IDS, key="hair", mats=["hair"]),
        ramps("cloth", CLOTH_IDS, key="cloth", mats=["shirt", "pants", "boot"]))
     with open(path, "w") as f:
