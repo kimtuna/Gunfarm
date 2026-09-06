@@ -47,7 +47,9 @@ def main():
     done, todo = read_inbox()
     nxt = todo[0] if todo else None
     warning = WARN.read_text(encoding="utf-8").strip() if WARN.exists() else ""
-    # 예산 상한을 없앴으므로(env.sh) 누적 비용은 항상 보이게 둔다.
+    # 예산 상한을 없앴으므로(env.sh) 누적 사용량은 항상 보이게 둔다.
+    # 주의: claude 가 주는 total_cost_usd 는 'API 요금제였다면 얼마' 하는 **환산값**이다.
+    # 구독(Max) 안에서 쓰는 동안은 이 금액이 청구되지 않는다 — 굴린 양을 재는 눈금일 뿐.
     try:
         total_cost = f"${float((ROOT / '.harness' / 'total_cost').read_text().strip()):,.2f}"
     except Exception:
@@ -109,7 +111,7 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <div class="cards">
   <div class="card"><b>{len(done)}</b><span>완료</span></div>
   <div class="card"><b>{len(todo)}</b><span>남음</span></div>
-  <div class="card"><b>{total_cost}</b><span>누적 비용</span></div>
+  <div class="card"><b>{total_cost}</b><span>누적 사용량 (API 환산)</span></div>
 </div>
 <section><h2>다음 항목</h2>{next_html}</section>
 <section><h2>대기 중인 항목</h2><ul>{todo_rows}</ul></section>
