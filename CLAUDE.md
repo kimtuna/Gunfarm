@@ -64,6 +64,21 @@ venv 는 `.gitignore` 되어 있다(커밋하지 않는다). 없어졌으면 다
 `origin` = https://github.com/kimtuna/Gunfarm.git, 기본 브랜치 `main`.
 인증은 `gh` (keyring)로 이미 설정돼 있다 — `git push origin HEAD:main` 이 바로 된다.
 
+### `*.gd.uid` 는 커밋한다 (2026-09-06 결정, INBOX #6)
+
+Godot 은 `.gd` 마다 `res://` 경로를 해시한 uid 를 `<스크립트>.gd.uid` 에 적어둔다.
+**새 스크립트를 만든 바퀴는 그 `.gd.uid` 도 같은 커밋에 같이 넣는다.** 스크립트를
+지우면 짝이 되는 `.uid` 도 같이 지운다(고아 uid 를 남기지 않는다).
+
+- 커밋하는 쪽을 고른 이유: 엔진이 권장하는 방식이고, **파일을 옮기거나 이름을 바꿔도
+  uid 가 그대로 따라가서** 씬의 `uid://` 참조가 안 깨진다. 무시하면 그 순간
+  경로 해시로 새로 만들어져 옛 참조와 어긋난다.
+- diff 가 지저분해지지 않는다: uid 는 경로에서 결정되는 한 줄짜리 값이라 **한 번
+  생기면 다시 바뀌지 않는다** — 새 스크립트당 한 줄 늘어날 뿐이다.
+- 커밋 전에 `--import` 를 한 번 돌려야 새 스크립트의 `.uid` 가 생긴다.
+- 검증: `--headless --path game --script qa/qa_uid_files.gd` (짝 맞음 + 고아 없음 +
+  전부 git 추적 중인지 확인, 종료 코드로 판정).
+
 ## 하네스
 
 `./ctl.sh status|start|stop|graceful-stop|logs`, 설정은 `env.sh`.

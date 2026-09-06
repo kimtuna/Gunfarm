@@ -9,5 +9,8 @@ game/.godot/
 game/android/
 *.translation
 
+# `*.gd.uid` 는 여기 넣지 않는다 — **커밋하는 쪽으로 정했다**(2026-09-06, INBOX #6).
+# 이유는 CLAUDE.md 「git」 참고. 검증은 game/qa/qa_uid_files.gd.
+
 # macOS
 .DS_Store
