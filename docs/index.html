@@ -34,7 +34,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>다음 항목</h2><span class="idle">큐가 비었습니다 — 루프는 세션을 열지 않고 종료합니다.</span></section>
 <section><h2>대기 중인 항목</h2><ul><li class="idle">없음</li></ul></section>
-<section><h2>마지막 커밋</h2><code>de8a8ea  [INBOX #7] *.import 도 커밋하는 쪽으로 결정 + uid QA 를 .import 까지 보게 확장</code>
+<section><h2>마지막 커밋</h2><code>12bbb32  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-06 19:50</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #7 (`*.png.import` 를 커밋할지 정하기) 완료.
 
@@ -42,14 +42,14 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 
 `.gd.uid` 와 같은 결론이지만 **근거는 더 강하다.** 결정과 근거는 `CLAUDE.md` 「git」 절에
 적어뒀고(매 세션이 읽는 파일이라 거기가 제자리다), `.gitignore` 에도 &quot;여기 넣지 않는다&quot;고</pre></section>
-<footer>갱신: 2026-09-06 19:50 KST · <span id="live">자동 새로고침 켜짐</span></footer>
+<footer>갱신: 2026-09-06 19:51 KST · <span id="live">자동 새로고침 켜짐</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
 // 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
 // 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
 (function () {
-  var STAMP = "20260906195045";
+  var STAMP = "20260906195107";
   var EVERY = 45000;
   var el = document.getElementById("live");
   function tick() {
