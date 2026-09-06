@@ -1,0 +1,9 @@
+[gd_scene load_steps=2 format=3 uid="uid://bgfqaprobe000"]
+
+[ext_resource type="Script" path="res://qa/world_range_probe.gd" id="1_probe"]
+
+[node name="WorldRangeProbe" type="Node2D"]
+script = ExtResource("1_probe")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+unique_name_in_owner = true

@@ -71,6 +71,10 @@
 - **에디터의 "임베디드 Game 패널" 미리보기와 실제 실행/빌드는 다르게 동작할 수
   있다.** "설정을 바꿔도 반영이 안 된다"류 문제는 먼저 에디터 Play 버튼으로 본 건지
   확인할 것 — 실제 검증은 `godot --path .`로 에디터 밖에서 해야 한다.
+- **카메라가 실제로 덮는 월드 범위를 창 크기로 계산하면 틀린다.** stretch
+  mode=`canvas_items`에서는 창을 키워도 `root.get_visible_rect()`가 논리 해상도 그대로다 —
+  시야는 `root.get_canvas_transform().affine_inverse() * Rect2(Vector2.ZERO, root.get_visible_rect().size)`
+  로 구할 것.
 - **`--script`(SceneTree) 모드는 `application/run/main_scene`을 자동으로 띄우지 않는다** —
   `current_scene`이 null이라 화면 검증이 통째로 헛돈다. `_initialize()`에서
   `change_scene_to_file()`로 직접 올리되, 이건 지연 반영이라 `_process`에서
