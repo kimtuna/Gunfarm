@@ -10,6 +10,9 @@ const SAVE_PATH := "user://characters.json"
 const SLOT_COUNT := 3
 const FORMAT_VERSION := 1
 
+## 슬롯 안에서 탐험 기록이 앉는 자리 (docs/DESIGN.md 「맵 (M)」).
+const EXPLORED_KEY := "explored"
+
 ## 슬롯 화면에서 고른 슬롯 번호를 다음 화면(커스터마이징 / 월드)으로 넘기는 자리.
 ## 씬이 바뀌어도 스크립트 자체는 살아 있으므로 static 하나면 충분하다.
 static var selected_slot := -1
@@ -47,6 +50,25 @@ static func make_character(character_name: String, appearance: Dictionary = {}, 
 		"appearance": appearance.duplicate(true),
 		"world_seed": world_seed if world_seed != 0 else new_world_seed(),
 	}
+
+
+## 슬롯 하나의 탐험 기록(`explored_map.gd` 이 만든 base64 한 줄)을 저장한다.
+## **캐릭터마다 따로다** — 같은 월드라도 다른 캐릭터는 자기가 가본 곳만 안다
+## (docs/DESIGN.md 「맵 (M)」). 지형은 여기 넣지 않는다(시드로 다시 계산한다).
+static func save_explored(index: int, encoded: String) -> bool:
+	if index < 0 or index >= SLOT_COUNT:
+		return false
+	var slots := load_slots()
+	var slot: Dictionary = slots[index]
+	if slot.is_empty():
+		return false  # 빈 슬롯에는 탐험 기록이 붙을 자리가 없다.
+	slot[EXPLORED_KEY] = encoded
+	slots[index] = slot
+	return save_slots(slots)
+
+
+static func explored_of(slot: Dictionary) -> String:
+	return String(slot.get(EXPLORED_KEY, ""))
 
 
 static func load_slots() -> Array[Dictionary]:

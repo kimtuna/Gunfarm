@@ -1,0 +1,84 @@
+[gd_scene load_steps=5 format=3 uid="uid://bgunfarmmapscr"]
+
+[ext_resource type="Script" path="res://scripts/map_screen.gd" id="1_map"]
+[ext_resource type="Script" path="res://scripts/map_canvas.gd" id="2_canvas"]
+[ext_resource type="Theme" path="res://ui/menu_theme.tres" id="3_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_map"]
+content_margin_left = 20.0
+content_margin_top = 16.0
+content_margin_right = 20.0
+content_margin_bottom = 16.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
+
+[node name="MapScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_map")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.045098, 0.0352941, 0.72)
+
+[node name="Box" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -296.0
+offset_top = -336.0
+offset_right = 296.0
+offset_bottom = 336.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_map")
+
+[node name="BoxLayout" type="VBoxContainer" parent="Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 34
+text = "지도"
+horizontal_alignment = 1
+
+[node name="Canvas" type="Control" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(512, 512)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_canvas")
+
+[node name="InfoLabel" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.803922, 0.827451, 0.760784, 1)
+theme_override_font_sizes/font_size = 20
+text = "내 위치"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 18
+text = "M 또는 Esc — 닫기"
+horizontal_alignment = 1
