@@ -146,9 +146,24 @@ try:
 except Exception:
     print(0)
 " 2>/dev/null)"
-  log "   비용: \$$COST"
-  if /usr/bin/python3 -c "import sys; sys.exit(0 if float('$COST') > float('$MAX_BUDGET_USD_PER_LAP') else 1)" 2>/dev/null; then
-    halt "한 바퀴 예산(\$$MAX_BUDGET_USD_PER_LAP)을 넘었습니다 (이번 바퀴 \$$COST). env.sh 의 MAX_BUDGET_USD_PER_LAP 를 확인하세요."
+  # 누적 비용은 제한과 무관하게 항상 기록한다 — 멈추진 않아도 얼마 썼는지는 보여야 한다.
+  TOTAL="$(/usr/bin/python3 -c "
+prev = 0.0
+try:
+    prev = float(open('$HARNESS/total_cost').read().strip() or 0)
+except Exception:
+    pass
+t = prev + float('$COST' or 0)
+open('$HARNESS/total_cost', 'w').write('%.4f' % t)
+print('%.2f' % t)
+" 2>/dev/null)"
+  log "   비용: \$$COST  (누적 \$$TOTAL)"
+
+  # MAX_BUDGET_USD_PER_LAP=0 이면 무제한 — 예산으로 멈추지 않는다 (env.sh 참고).
+  if /usr/bin/python3 -c "import sys; sys.exit(0 if float('$MAX_BUDGET_USD_PER_LAP') > 0 else 1)" 2>/dev/null; then
+    if /usr/bin/python3 -c "import sys; sys.exit(0 if float('$COST') > float('$MAX_BUDGET_USD_PER_LAP') else 1)" 2>/dev/null; then
+      halt "한 바퀴 예산(\$$MAX_BUDGET_USD_PER_LAP)을 넘었습니다 (이번 바퀴 \$$COST). env.sh 의 MAX_BUDGET_USD_PER_LAP 를 확인하세요."
+    fi
   fi
 
   # GOTCHAS.md 줄 수 — LLM 자율 판단에 맡기지 않고 스크립트가 직접 확인 (README.md 참고)
