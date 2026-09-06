@@ -151,8 +151,9 @@ cmd_status() {
   fi
   local remaining done_n
   # grep -c 는 0건일 때도 "0"을 찍고 exit 1 을 낸다 — `|| echo 0` 을 붙이면 "0\n0" 이 된다.
-  remaining="$(grep -cE '^- \[ \] *#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
-  done_n="$(grep -ciE '^- \[x\] *#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
+  # 완료 항목은 `- [x] (2026-09-06) #1 ...` 처럼 번호 앞에 날짜가 붙으므로 그걸 삼킨다.
+  remaining="$(grep -cE '^- \[ \][^#]*#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
+  done_n="$(grep -cE '^- \[[xX]\][^#]*#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
   remaining="${remaining:-0}"; done_n="${done_n:-0}"
   echo
   echo "INBOX: 완료 $done_n / 남음 $remaining"
