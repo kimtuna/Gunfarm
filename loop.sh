@@ -145,8 +145,9 @@ except Exception:
     log "   경고: docs/GOTCHAS.md 가 ${GL}줄 (>${GOTCHAS_MAX_LINES}) — 사람이 정리할 때가 됐습니다"
   fi
 
-  # 항목이 완료됐는지 확인 (세션이 - [x] 로 바꿨는지)
-  if grep -qE "^- \[x\] *#${NUM}\b" "$INBOX"; then
+  # 항목이 완료됐는지 확인 (세션이 - [x] 로 바꿨는지).
+  # 완료 항목은 `- [x] (2026-09-06) #1 ...` 처럼 번호 앞에 날짜가 붙으므로 그걸 삼킨다.
+  if grep -qE "^- \[[xX]\][^#]*#${NUM}([^0-9]|$)" "$INBOX"; then
     log "-- 완료: INBOX #$NUM"
     rm -f "$LAST_ITEM_FILE" "$REPEAT_FILE"
   else

@@ -36,13 +36,13 @@ func _initialize() -> void:
 		func(): _type_name("모험가 2"),
 		func(): _press("Layout/Buttons/ConfirmButton"),
 		_check_created_enters_world,
-		func(): _press("Layout/BackButton"),
+		func(): _press("HUD/Layout/BackButton"),
 		_check_slot_filled,
 		func(): change_scene_to_file(SLOTS_SCENE),
 		_check_reloaded,
 		func(): _press_slot(1),
 		_check_world,
-		func(): _press("Layout/BackButton"),
+		func(): _press("HUD/Layout/BackButton"),
 		_check_back_from_world,
 		# Esc 로도 메인 메뉴로 나갈 수 있어야 한다 (DESIGN.md "클라이언트 화면 흐름").
 		_press_escape,
@@ -84,7 +84,7 @@ func _check_customize() -> void:
 
 ## 확정하면 곧바로 월드로 들어간다 (DESIGN.md "클라이언트 화면 흐름").
 func _check_created_enters_world() -> void:
-	_expect_screen("월드 입장", "11b_created_enters_world")
+	_expect_screen("시드", "11b_created_enters_world")
 	_expect_text_on_screen("모험가 2")
 
 
@@ -105,7 +105,7 @@ func _check_reloaded() -> void:
 
 ## 캐릭터가 있는 슬롯을 고르면 월드 입장으로 가고, 그 캐릭터가 넘어간다.
 func _check_world() -> void:
-	_expect_screen("월드 입장", "14_world_stub")
+	_expect_screen("시드", "14_world")
 	_expect_text_on_screen("모험가 2")
 
 

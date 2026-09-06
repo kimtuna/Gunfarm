@@ -172,7 +172,7 @@ func _check_hairstyle_wrapped() -> void:
 
 ## 확정하면 월드로 들어가고, 저장 파일에 이름과 외형 id 가 그대로 들어간다.
 func _check_confirmed() -> void:
-	_expect_screen("월드 입장", "38_confirmed_enters_world")
+	_expect_screen("시드", "38_confirmed_enters_world")
 	_expect_text_on_screen("갈대")
 	var slot: Dictionary = SlotStore.load_slots()[0]
 	_expect(slot.get("name", "") == "갈대", "저장된 이름이 '%s'" % slot.get("name", ""))

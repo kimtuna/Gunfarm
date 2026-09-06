@@ -27,16 +27,25 @@ static func is_empty(slot: Dictionary) -> bool:
 	return slot.is_empty()
 
 
+## 월드 시드 하나. 0 은 "아직 안 정해짐"을 뜻하므로 쓰지 않는다.
+static func new_world_seed() -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	return rng.randi_range(1, 0x7FFFFFFF)
+
+
 ## 새 캐릭터 한 명.
 ## `appearance` 는 커스터마이징 화면이 고른 값이다(scripts/character_appearance.gd 의
-## id 들 — 색이 아니라 id 를 저장한다). 월드 시드는 INBOX #5 가 채운다 — 저장 형식을
-## 나중에 갈아엎지 않도록 자리만 미리 잡아둔다.
-static func make_character(character_name: String, appearance: Dictionary = {}) -> Dictionary:
+## id 들 — 색이 아니라 id 를 저장한다).
+## **월드 시드는 캐릭터를 만드는 이 시점에 정해서 슬롯에 박아둔다** — 첫 입장 때 정하면
+## 그 전까지 슬롯이 "월드 없는 캐릭터" 상태로 남고, 같은 슬롯으로 다시 들어왔을 때 같은
+## 월드가 나온다는 보장을 코드 여러 군데에서 따로 지켜야 한다.
+static func make_character(character_name: String, appearance: Dictionary = {}, world_seed: int = 0) -> Dictionary:
 	return {
 		"name": character_name,
 		"created_unix": int(Time.get_unix_time_from_system()),
 		"appearance": appearance.duplicate(true),
-		"world_seed": 0,
+		"world_seed": world_seed if world_seed != 0 else new_world_seed(),
 	}
 
 

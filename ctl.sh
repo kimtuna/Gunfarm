@@ -35,6 +35,8 @@ write_plist() {
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-is</string>
     <string>/bin/bash</string>
     <string>$ROOT/loop.sh</string>
   </array>
@@ -94,7 +96,9 @@ cmd_start() {
 
   echo "launchd 로 뜬 것을 확인하지 못했습니다 — 직접 백그라운드 실행으로 폴백합니다."
   launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1
-  nohup /bin/bash "$ROOT/loop.sh" >>"$HARNESS/nohup.log" 2>&1 &
+  # caffeinate 로 감싼다 — 안 그러면 맥이 Maintenance Sleep 에 들어가면서 세션과
+  # 타임아웃 타이머가 같이 정지한다(무인 루프가 몇 시간씩 멈춰 있게 된다).
+  nohup /usr/bin/caffeinate -is /bin/bash "$ROOT/loop.sh" >>"$HARNESS/nohup.log" 2>&1 &
   local fallback=$!
   sleep 2
   if kill -0 "$fallback" 2>/dev/null; then

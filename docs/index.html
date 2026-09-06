@@ -29,18 +29,47 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>0</b><span>완료</span></div>
+  <div class="card"><b>5</b><span>완료</span></div>
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#5</span> [BUILD] 월드 생성 1단계 + 입장: `opensimplex` 시드 기반 절차적 지형(땅/바다)과 스폰 지점까지만. 같은 시드는 항상 같은 월드를 만들어야 한다. 자원 배치(나무/채광 포인트/낚시 스팟)는 그 자원을 만드는 바퀴에 붙이므로 **이번 범위가 아니다**. 정한 맵 크기·바다 비율 수치는 DESIGN.md &quot;월드 생성&quot;에 기록할 것.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#5</span> [BUILD] 월드 생성 1단계 + 입장: `opensimplex` 시드 기반 절차적 지형(땅/바다)과 스폰 지점까지만. 같은 시드는 항상 같은 월드를 만들어야 한다. 자원 배치(나무/채광 포인트/낚시 스팟)는 그 자원을 만드는 바퀴에 붙이므로 **이번 범위가 아니다**. 정한 맵 크기·바다 비율 수치는 DESIGN.md &quot;월드 생성&quot;에 기록할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>d97a3c6  [INBOX #4] 캐릭터 커스터마이징 화면 — 이름 + 고정 팔레트 3색 + 머리모양 4종</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 15:19</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #4 (캐릭터 커스터마이징 화면) 완료.
+<section><h2>다음 항목</h2><span class="num">#6</span> [BUILD] Godot 이 스크립트마다 만드는 `*.gd.uid` 파일을 커밋할지 `.gitignore` 할지 정한다. 지금은 1바퀴에 만든 3개(`main_menu.gd.uid` 등, 그중 `menu_placeholder.gd.uid` 는 스크립트가 이미 지워진 고아)만 추적되고 나머지는 매 바퀴 untracked 로 쌓여서 `git status` 가 지저분하다. 둘 중 하나로 통일하고, 고아 uid 는 정리할 것.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#6</span> [BUILD] Godot 이 스크립트마다 만드는 `*.gd.uid` 파일을 커밋할지 `.gitignore` 할지 정한다. 지금은 1바퀴에 만든 3개(`main_menu.gd.uid` 등, 그중 `menu_placeholder.gd.uid` 는 스크립트가 이미 지워진 고아)만 추적되고 나머지는 매 바퀴 untracked 로 쌓여서 `git status` 가 지저분하다. 둘 중 하나로 통일하고, 고아 uid 는 정리할 것.</li></ul></section>
+<section><h2>마지막 커밋</h2><code>03c8f34  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 15:20</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #5 (월드 생성 1단계 + 입장) 완료.
 
-- `game/scripts/character_appearance.gd`: 고정 팔레트(피부 5 / 머리색 6 / 옷색 6 /
-  머리모양 4)와 기본값·되감기·정규화·이름 다듬기. slot_store.gd 와 같은 이유로 노드를
-  상속하지 않는 순수 클래스다. **저장에는 색이 아니라 id 문자열**을 넣는다 — 스프라이트를
-  팔레트 교체로 만들 때 그 id 가 그대로 팔레트 키가 된다. 정한 값은 `docs/DESIGN.md`</pre></section>
-<footer>갱신: 2026-09-06 15:20 KST</footer>
-</main></body></html>
+- `game/scripts/world_gen.gd`: 시드 → 땅/바다 타일 + 스폰 지점. 노드를 상속하지 않는
+  순수 클래스이고 전역 난수를 쓰지 않는다(전부 시드에서 결정). 정한 수치(지도 256×256칸,
+  타일 48단위, 바다 약 45~48%)와 근거는 `docs/DESIGN.md` &quot;월드 생성&quot;에 표로 적어뒀다.
+- `game/scripts/terrain_view.gd` / `spawn_marker.gd` / `world.gd` + `scenes/world.tscn`:</pre></section>
+<footer>갱신: 2026-09-06 19:38 KST · <span id="live">자동 새로고침 켜짐</span></footer>
+</main>
+<script>
+// 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
+// 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
+// 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
+(function () {
+  var STAMP = "20260906193808";
+  var EVERY = 45000;
+  var el = document.getElementById("live");
+  function tick() {
+    fetch(location.pathname + "?_=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (!html) return;
+        var m = html.match(/var STAMP = "(\d+)"/);
+        if (m && m[1] !== STAMP) {
+          // 바뀌었다 — 캐시를 타지 않는 새 URL 로 갈아탄다.
+          location.replace(location.pathname + "?t=" + Date.now());
+        } else if (el) {
+          el.textContent = "자동 새로고침 켜짐 · 확인 " +
+            new Date().toLocaleTimeString("ko-KR", { hour12: false });
+        }
+      })
+      .catch(function () { if (el) el.textContent = "자동 새로고침 — 연결 실패"; });
+  }
+  setInterval(tick, EVERY);
+  tick();
+})();
+</script>
+</body></html>

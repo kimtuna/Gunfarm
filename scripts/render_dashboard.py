@@ -17,7 +17,9 @@ STATUS = ROOT / "docs" / "STATUS.md"
 WARN = ROOT / ".harness" / "WARNING"
 OUT = ROOT / "docs" / "index.html"
 
-ITEM_RE = re.compile(r"^- \[( |x|X)\]\s*#(\d+)\s*(.*)$")
+# 완료 항목은 `- [x] (2026-09-06) #1 ...` 처럼 번호 앞에 완료 날짜가 붙는다.
+# 체크박스와 #번호 사이에 뭐가 오든 삼킨다.
+ITEM_RE = re.compile(r"^- \[( |x|X)\]\s*[^#]*#(\d+)\s*(.*)$")
 
 
 def read_inbox():
@@ -47,7 +49,9 @@ def main():
     warning = WARN.read_text(encoding="utf-8").strip() if WARN.exists() else ""
     last_commit = git("log", "-1", "--pretty=%h  %s")
     last_commit_when = git("log", "-1", "--pretty=%cd", "--date=format:%Y-%m-%d %H:%M")
-    now = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d %H:%M KST")
+    now_dt = datetime.now(timezone(timedelta(hours=9)))
+    now = now_dt.strftime("%Y-%m-%d %H:%M KST")
+    stamp = now_dt.strftime("%Y%m%d%H%M%S")
 
     status_head = ""
     if STATUS.exists():
@@ -106,8 +110,37 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <section><h2>마지막 커밋</h2><code>{e(last_commit) or '(없음)'}</code>
   <p class="sub" style="margin:.3rem 0 0">{e(last_commit_when)}</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
-<footer>갱신: {now}</footer>
-</main></body></html>
+<footer>갱신: {now} · <span id="live">자동 새로고침 켜짐</span></footer>
+</main>
+<script>
+// 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
+// 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
+// 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
+(function () {{
+  var STAMP = "{stamp}";
+  var EVERY = 45000;
+  var el = document.getElementById("live");
+  function tick() {{
+    fetch(location.pathname + "?_=" + Date.now(), {{ cache: "no-store" }})
+      .then(function (r) {{ return r.ok ? r.text() : null; }})
+      .then(function (html) {{
+        if (!html) return;
+        var m = html.match(/var STAMP = "(\\d+)"/);
+        if (m && m[1] !== STAMP) {{
+          // 바뀌었다 — 캐시를 타지 않는 새 URL 로 갈아탄다.
+          location.replace(location.pathname + "?t=" + Date.now());
+        }} else if (el) {{
+          el.textContent = "자동 새로고침 켜짐 · 확인 " +
+            new Date().toLocaleTimeString("ko-KR", {{ hour12: false }});
+        }}
+      }})
+      .catch(function () {{ if (el) el.textContent = "자동 새로고침 — 연결 실패"; }});
+  }}
+  setInterval(tick, EVERY);
+  tick();
+}})();
+</script>
+</body></html>
 """, encoding="utf-8")
     print(f"dashboard: done={len(done)} todo={len(todo)} -> {OUT}")
 
