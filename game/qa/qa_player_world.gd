@@ -40,6 +40,20 @@ const SEED := 20260906
 ## 나온다. 0.3초면 60Hz 틱이 확실히 여러 번 돈다.
 const HOLD_SECONDS := 0.35
 
+## 한 단계를 끝낸 뒤 다음 단계까지 두는 여유(초). **여기가 이 검사의 핵심 상수다**
+## (2026-09-07, INBOX #21) — 조준/이동은 `player.gd` 가 프레임 시간을 모아 고정 틱
+## (1/60초)으로 쪼개서 돌리므로, 상태를 바꾼 뒤 **틱이 실제로 몇 번 돌 만큼의 시간**이
+## 지나야 화면에 반영된다. 예전에는 여기가 "3프레임"이었는데, 수직동기화가 없는 이
+## 창에서 3프레임은 수 ms 라 틱이 한 번도 안 돌아 직전 방향이 그대로 나왔다.
+const SETTLE_SECONDS := 0.15
+
+## 45도 경계에서 마우스를 몇 번, 한 자리에 몇 초씩 흔들어보는가.
+## **한 자리에 머무는 시간도 프레임 수가 아니라 초다** — 매 프레임 다른 자리로
+## `warp_mouse()` 하면 OS 가 커서 이동을 합쳐버려서(docs/GOTCHAS.md) 실제로는
+## 마우스가 안 움직인 채 "안 떨었다"로 통과한다.
+const JITTER_SAMPLES := 12
+const JITTER_HOLD_SECONDS := 0.06
+
 ## 물가에 얼마나 바짝 붙어야 하는가(월드 단위 = 화면 픽셀). 1px 이면 눈에 안 보인다.
 const MAX_SHORE_GAP := 1.0
 
@@ -53,7 +67,9 @@ const AIM_REACH := 0.3
 var _fails: Array[String] = []
 var _steps: Array[Callable] = []
 var _step := 0
-var _wait := 0
+
+## 다음 단계까지 남은 **시간**(초). 프레임 수를 세는 변수는 두지 않는다 — 그게
+## INBOX #21 의 거짓 실패 원인이었다.
 var _wait_time := 0.0
 var _world: RefCounted = null
 var _before := Vector2.ZERO
@@ -61,6 +77,11 @@ var _before := Vector2.ZERO
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS)
+	# **일부러 수직동기화를 끈다** (2026-09-07, INBOX #21). 프레임 수로 기다리는 코드가
+	# 다시 들어오면 여기서 바로 걸리게 하려는 것이다 — 켜져 있으면 한 프레임이 16ms 라
+	# "3프레임 기다리기"도 우연히 통과하고, 정작 사람의 빠른 기계(120Hz 이상)에서만
+	# 거짓 실패한다. 꺼두면 이 검사가 늘 최악 조건에서 돈다.
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	_world = WorldGen.new()
 	_world.build(SEED)
 
@@ -109,14 +130,14 @@ func _process(delta: float) -> bool:
 	if _wait_time > 0.0:
 		_wait_time -= delta
 		return false
-	if _wait > 0:
-		_wait -= 1
-		return false
 	if _step >= _steps.size():
 		return _report()
 	var step: Callable = _steps[_step]
 	_step += 1
-	_wait = 3
+	# 단계 자체가 더 오래 걸리면(키를 누르고 있기 등) 그 단계가 이 값을 덮어쓴다.
+	# **비동기(await) 단계는 자기가 도는 전체 시간을 반드시 여기에 적어야 한다** —
+	# 안 그러면 코루틴이 아직 도는 중에 다음 단계가 시작된다.
+	_wait_time = SETTLE_SECONDS
 	step.call()
 	return false
 
@@ -416,17 +437,17 @@ func _check_aim_jitter_on_screen() -> void:
 		return
 	_release_all()
 	_aim_at(0.0)  # 오른쪽에서 시작해 경계로 올라간다.
-	_wait = 50
-	# 오른쪽으로 자리잡을 때까지 몇 프레임 준다 — 여기서 바로 재면 직전 방향(위)이
-	# 섞여 들어와 "떨었다"고 잘못 잡는다.
-	for i in 10:
-		await process_frame
+	# 이 단계는 아래에서 실제로 시간을 쓰며 도는 코루틴이다 — 그 전체 시간을 여기에
+	# 적어둬야 도는 중에 다음 단계가 끼어들지 않는다.
+	_wait_time = SETTLE_SECONDS * 2.0 + JITTER_SAMPLES * JITTER_HOLD_SECONDS
+	# 오른쪽으로 자리잡을 시간을 준다 — 여기서 바로 재면 직전 방향(위)이 섞여 들어와
+	# "떨었다"고 잘못 잡는다. 고정 틱이 여러 번 돌아야 하므로 프레임이 아니라 초다.
+	await _sleep(SETTLE_SECONDS)
 	var seen := {}
-	# 한 자리마다 몇 프레임 머문다 — 매 프레임 마우스를 옮기면 OS 가 그 이동을
-	# 다 반영하지 못해서, 실제로는 마우스가 안 움직인 채 "안 떨었다"가 나온다.
-	for i in 30:
-		_aim_at(PI * 0.25 + (0.02 if (i / 3) % 2 == 0 else -0.02))
-		await process_frame
+	# 한 자리마다 **시간을 두고** 머문다 (위 JITTER_HOLD_SECONDS 주석).
+	for i in JITTER_SAMPLES:
+		_aim_at(PI * 0.25 + (0.02 if i % 2 == 0 else -0.02))
+		await _sleep(JITTER_HOLD_SECONDS)
 		seen[sprite.animation] = true
 	if seen.size() > 1:
 		_fails.append("45도 경계에서 마우스를 흔들었더니 화면 애니메이션이 %s 로 오갔다 — 캐릭터가 떤다"
@@ -508,6 +529,15 @@ func _find_shore(toward: Vector2i) -> Vector2i:
 				best_distance = distance
 				best = Vector2i(x, y)
 	return best
+
+
+## 실제로 `seconds` 초가 지날 때까지 프레임을 넘긴다.
+## **프레임 수로 세는 대기는 이 파일에 두지 않는다** (docs/GOTCHAS.md — 수직동기화가
+## 없는 창에서 N프레임은 수 ms 라 고정 틱이 한 번도 안 돌 수 있다).
+func _sleep(seconds: float) -> void:
+	var until := Time.get_ticks_msec() + int(seconds * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await process_frame
 
 
 func _release_all() -> void:

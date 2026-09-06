@@ -70,6 +70,10 @@ var _seen_frames := {}
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS)
+	# **일부러 수직동기화를 끈다** (2026-09-07, INBOX #21) — `qa_player_world.gd` 와 같은
+	# 이유다. 켜져 있으면 한 프레임이 16ms 라 프레임 수로 기다리는 코드가 우연히
+	# 통과하고, 사람의 빠른 기계(120Hz 이상)에서만 거짓 실패한다.
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	# 이전 실행의 슬롯이 남아 거짓 결과를 내지 않게 지우고 시작한다 (docs/GOTCHAS.md).
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SlotStore.SAVE_PATH))
 	var slots := SlotStore.empty_slots()
