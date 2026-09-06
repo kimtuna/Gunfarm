@@ -29,21 +29,20 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>19</b><span>완료</span></div>
-  <div class="card"><b>2</b><span>남음</span></div>
+  <div class="card"><b>20</b><span>완료</span></div>
+  <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#20</span> [DESIGN] **17px 캐릭터의 walk 6프레임 4방향 × 머리모양 4종.** #19 에서 확정된 새 idle 모양을 그대로 쓴다(형태를 다시 정의하지 않고 `walk_pose()` 오프셋만 넣는 규칙 유지 — `DESIGN.md` 「캐릭터 애니메이션」). 34px 로 만들어져 있는 지금 walk 시트를 대체한다.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#20</span> [DESIGN] **17px 캐릭터의 walk 6프레임 4방향 × 머리모양 4종.** #19 에서 확정된 새 idle 모양을 그대로 쓴다(형태를 다시 정의하지 않고 `walk_pose()` 오프셋만 넣는 규칙 유지 — `DESIGN.md` 「캐릭터 애니메이션」). 34px 로 만들어져 있는 지금 walk 시트를 대체한다.</li>
-<li><span class="num">#21</span> [BUILD] **`qa_player_world.gd` / `qa_player_walk.gd` 가 프레임 수로 기다려서 빠른 기계에서 통째로 거짓 실패한다.** (2026-09-07, INBOX #17 바퀴가 발견 — 이 두 검사는 #17 의 변경과 무관하게 **손대지 않은 `main` 에서도 똑같이 실패한다**. #17 커밋 전에 stash 로 확인했다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>a116385  [INBOX #19] 캐릭터를 17px 캔버스로 다시 만들었다 — idle 4방향 × 머리모양 4종</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 06:36</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #19 ([DESIGN] 캐릭터 캔버스 34px → 17px, idle 4방향 × 머리모양 4종) 완료.
+<section><h2>다음 항목</h2><span class="num">#21</span> [BUILD] **`qa_player_world.gd` / `qa_player_walk.gd` 가 프레임 수로 기다려서 빠른 기계에서 통째로 거짓 실패한다.** (2026-09-07, INBOX #17 바퀴가 발견 — 이 두 검사는 #17 의 변경과 무관하게 **손대지 않은 `main` 에서도 똑같이 실패한다**. #17 커밋 전에 stash 로 확인했다.)</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#21</span> [BUILD] **`qa_player_world.gd` / `qa_player_walk.gd` 가 프레임 수로 기다려서 빠른 기계에서 통째로 거짓 실패한다.** (2026-09-07, INBOX #17 바퀴가 발견 — 이 두 검사는 #17 의 변경과 무관하게 **손대지 않은 `main` 에서도 똑같이 실패한다**. #17 커밋 전에 stash 로 확인했다.)</li></ul></section>
+<section><h2>마지막 커밋</h2><code>a0b02fb  [INBOX #20] 17px 걷기 — 6프레임 × 4방향 × 머리모양 4종을 새 캔버스에서 다시 구웠다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 06:56</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #20 ([DESIGN] 17px 캐릭터의 걷기 6프레임 × 4방향 × 머리모양 4종) 완료.
 
 ## 만든 것
 
-- **idle 시트 4장을 17px 캔버스로 다시 구웠다** (`player_idle_&lt;머리모양&gt;.png`).
-  생성기 `game/tools/gen_character.py` 의 `N` 이 17, 슈퍼샘플 `SS` 가 24(= 해상도 408</pre></section>
-<footer>갱신: 2026-09-07 06:36 KST · <span id="live">자동 새로고침 10초</span></footer>
+- **걷기 시트 4장을 17px 캔버스로 다시 구웠다** (`player_walk_&lt;머리모양&gt;.png`).
+  `gen_character.py` 의 `MOTIONS_NOW` 에 `&quot;walk&quot;` 가 돌아왔고, `CFG` 의 걷기 진폭을</pre></section>
+<footer>갱신: 2026-09-07 06:57 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -56,7 +55,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907063638";
+  var STAMP = "20260907065708";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
