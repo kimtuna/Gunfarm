@@ -118,15 +118,21 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <section><h2>마지막 커밋</h2><code>{e(last_commit) or '(없음)'}</code>
   <p class="sub" style="margin:.3rem 0 0">{e(last_commit_when)}</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
-<footer>갱신: {now} · <span id="live">자동 새로고침 켜짐</span></footer>
+<footer>갱신: {now} · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
 // 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
 // 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
+//
+// **push 시점에 서버가 밀어주는 방식(WebSocket/SSE)은 GitHub Pages 로는 불가능하다** —
+// 정적 호스팅이라 서버 쪽 통로가 없다. 게다가 push 후 Pages 재빌드에 수십 초가 걸려서
+// 알림을 받아도 그만큼은 기다려야 한다. 지연의 병목은 폴링 간격이 아니라 재빌드다.
+// 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
+// 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {{
   var STAMP = "{stamp}";
-  var EVERY = 45000;
+  var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {{
     fetch(location.pathname + "?_=" + Date.now(), {{ cache: "no-store" }})
@@ -138,7 +144,7 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
           // 바뀌었다 — 캐시를 타지 않는 새 URL 로 갈아탄다.
           location.replace(location.pathname + "?t=" + Date.now());
         }} else if (el) {{
-          el.textContent = "자동 새로고침 켜짐 · 확인 " +
+          el.textContent = "자동 새로고침 10초 · 확인 " +
             new Date().toLocaleTimeString("ko-KR", {{ hour12: false }});
         }}
       }})

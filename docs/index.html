@@ -38,23 +38,29 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><span class="num">#10</span> [BUILD] 플레이어를 월드에 실제로 배치한다 — 지금은 `SpawnMarker`(빈 위치 표식)만 있고 플레이어 엔티티가 없어서 월드에 들어가도 캐릭터가 안 보인다. 스폰 지점에 `AnimatedSprite2D`(#8/#9 스프라이트) 를 붙인 플레이어 노드를 만들고, WASD 이동 + 카메라 추적 + 바다 타일 충돌을 붙인다. **DESIGN.md 「서버 권위 / 클라이언트 신뢰」를 처음부터 지킬 것** — 위치가 아니라 입력만 다루는 구조로 만들고, 이동 계산은 노드가 아닌 순수 클래스에 둔다(나중에 서버가 같은 코드를 돌린다).</li>
 <li><span class="num">#11</span> [BUILD] 커스터마이징 화면의 색 사각형 미리보기(`appearance_preview.gd`)를 #8 스프라이트로 교체하고, 피부/머리/옷 색 선택이 **팔레트 교체**로 반영되게 한다(형태를 다시 그리지 않는다 — STYLE_GUIDE 2번). 머리모양 4종도 실제 스프라이트로 보이게 할 것.</li>
 <li><span class="num">#12</span> [DESIGN] 지형 타일 스프라이트 — 땅/바다 2종. 아트 16px × 3배 = 화면 48px(STYLE_GUIDE 1번). 지금은 `terrain_view.gd` 가 색 사각형 + 격자선으로 그리고 있다. 인접한 같은 지형끼리 이어져 보여야 하고, 땅↔바다 경계가 자연스러워야 한다. 캐릭터(#8)와 나란히 놓고 팔레트·픽셀 크기가 어울리는지 확인할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>450b689  harness: 바퀴 예산 상한 해제 (0 = 무제한), 누적 비용 표시 추가</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 20:54</p></section>
+<section><h2>마지막 커밋</h2><code>312da88  docs(dashboard): 누적 금액 라벨을 &quot;비용&quot; → &quot;사용량 (API 환산)&quot; 으로</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 20:58</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #8 (플레이어 캐릭터 스프라이트, 기준색 1벌 × 4방향 idle) 완료.
 
 ## 만든 것
 
 - `game/assets/sprites/player_idle.png` — 34px 칸, **행 = 방향**(down/left/right/up) ×
   **열 = 프레임**(지금은 idle 1장). 걷기(#9)는 열이 늘어난다.</pre></section>
-<footer>갱신: 2026-09-06 20:58 KST · <span id="live">자동 새로고침 켜짐</span></footer>
+<footer>갱신: 2026-09-06 21:01 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
 // 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
 // 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
+//
+// **push 시점에 서버가 밀어주는 방식(WebSocket/SSE)은 GitHub Pages 로는 불가능하다** —
+// 정적 호스팅이라 서버 쪽 통로가 없다. 게다가 push 후 Pages 재빌드에 수십 초가 걸려서
+// 알림을 받아도 그만큼은 기다려야 한다. 지연의 병목은 폴링 간격이 아니라 재빌드다.
+// 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
+// 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260906205813";
-  var EVERY = 45000;
+  var STAMP = "20260906210118";
+  var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
     fetch(location.pathname + "?_=" + Date.now(), { cache: "no-store" })
@@ -66,7 +72,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
           // 바뀌었다 — 캐시를 타지 않는 새 URL 로 갈아탄다.
           location.replace(location.pathname + "?t=" + Date.now());
         } else if (el) {
-          el.textContent = "자동 새로고침 켜짐 · 확인 " +
+          el.textContent = "자동 새로고침 10초 · 확인 " +
             new Date().toLocaleTimeString("ko-KR", { hour12: false });
         }
       })
