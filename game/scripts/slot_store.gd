@@ -13,6 +13,10 @@ const FORMAT_VERSION := 1
 ## 슬롯 안에서 탐험 기록이 앉는 자리 (docs/DESIGN.md 「맵 (M)」).
 const EXPLORED_KEY := "explored"
 
+## 슬롯 안에서 인벤토리가 앉는 자리 (docs/DESIGN.md 「인벤토리 / 장비」).
+## **캐릭터마다 따로다** — 탐험 기록과 같은 이유로 월드가 아니라 캐릭터에 붙는다.
+const INVENTORY_KEY := "inventory"
+
 ## 슬롯 화면에서 고른 슬롯 번호를 다음 화면(커스터마이징 / 월드)으로 넘기는 자리.
 ## 씬이 바뀌어도 스크립트 자체는 살아 있으므로 static 하나면 충분하다.
 static var selected_slot := -1
@@ -69,6 +73,28 @@ static func save_explored(index: int, encoded: String) -> bool:
 
 static func explored_of(slot: Dictionary) -> String:
 	return String(slot.get(EXPLORED_KEY, ""))
+
+
+## 슬롯 하나의 인벤토리(`inventory.gd` 의 `to_data()`)를 저장한다.
+## 탐험 기록과 같은 규칙이다 — 빈 슬롯에는 붙을 자리가 없다.
+static func save_inventory(index: int, data: Dictionary) -> bool:
+	if index < 0 or index >= SLOT_COUNT:
+		return false
+	var slots := load_slots()
+	var slot: Dictionary = slots[index]
+	if slot.is_empty():
+		return false
+	slot[INVENTORY_KEY] = data
+	slots[index] = slot
+	return save_slots(slots)
+
+
+## 저장된 인벤토리. **키 자체가 없으면 null** 이다 — "아직 한 번도 저장한 적 없는
+## 캐릭터"(= 처음 들어오는 캐릭터)와 "다 버려서 비어 있는 인벤토리"를 구별해야
+## 하기 때문이다(전자에만 기본 도구를 지급한다).
+static func inventory_of(slot: Dictionary) -> Variant:
+	var data: Variant = slot.get(INVENTORY_KEY, null)
+	return data if typeof(data) == TYPE_DICTIONARY else null
 
 
 static func load_slots() -> Array[Dictionary]:

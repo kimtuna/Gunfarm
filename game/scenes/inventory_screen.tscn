@@ -1,0 +1,106 @@
+[gd_scene load_steps=5 format=3 uid="uid://bgunfarminvscr"]
+
+[ext_resource type="Script" path="res://scripts/inventory_screen.gd" id="1_inv"]
+[ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="2_panel"]
+[ext_resource type="Theme" path="res://ui/menu_theme.tres" id="3_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_inv"]
+content_margin_left = 24.0
+content_margin_top = 18.0
+content_margin_right = 24.0
+content_margin_bottom = 18.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
+
+[node name="InventoryScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_inv")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.045098, 0.0352941, 0.72)
+
+[node name="Box" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -444.0
+offset_top = -206.0
+offset_right = 444.0
+offset_bottom = 206.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inv")
+
+[node name="BoxLayout" type="VBoxContainer" parent="Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="Title" type="Label" parent="Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 32
+text = "인벤토리"
+horizontal_alignment = 1
+
+[node name="Panel" type="Control" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(792, 208)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+script = ExtResource("2_panel")
+
+[node name="DescLabel" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.803922, 0.827451, 0.760784, 1)
+theme_override_font_sizes/font_size = 20
+text = " "
+horizontal_alignment = 1
+
+[node name="HeldLabel" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 20
+text = "손에 든 것"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 18
+text = "E 또는 Esc — 닫기   ·   1~9 — 손에 들기   ·   끌어서 옮기기 (창 밖에 놓으면 버립니다)"
+horizontal_alignment = 1
+
+[node name="DragLayer" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

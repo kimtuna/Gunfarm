@@ -103,6 +103,9 @@
   찍고 다음 문장을 실행하지 않음). 검증 함수 안에서 실패를 기록하는 코드가 그 뒤에 있으면
   기록이 안 남아 **에러가 났는데도 PASS로 보인다** — 종료 코드로 실패를 알리고(`quit(1)`),
   로그의 SCRIPT ERROR 유무도 같이 볼 것.
+- **타입이 없는 값(`Dictionary.get()`, `RefCounted` 변수의 멤버, 스크립트가 붙은 노드를
+  `Control` 로 받아 부른 메서드)을 `:=` 로 받으면 "Cannot infer the type" 파싱 에러가
+  난다.** 그런 자리에는 `var x: 타입 = ...` 로 타입을 직접 적을 것.
 - **GDScript는 배열 리터럴을 순회할 때 루프 변수의 타입을 추론하지 않는다.**
   `for step in [Vector2i(1,0), ...]` 안에서 `var nx := x + step.x` 처럼 `:=`로 파생
   변수를 만들면 "Cannot infer the type" 파싱 에러가 난다 — `for step: Vector2i in [...]`

@@ -9,10 +9,25 @@ extends Node2D
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 const ExploredMap := preload("res://scripts/explored_map.gd")
+const Inventory := preload("res://scripts/inventory.gd")
+const GroundItems := preload("res://scripts/ground_items.gd")
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const SETTINGS_SCENE := preload("res://scenes/settings.tscn")
 const MAP_SCENE := preload("res://scenes/map_screen.tscn")
+const INVENTORY_SCENE := preload("res://scenes/inventory_screen.tscn")
+
+## 처음 들어오는 캐릭터에게 넣어주는 것 (docs/DESIGN.md 「도구 등급」의 "게임 시작 시
+## 공짜로 지급하는 기본 도구" + 창을 돌려보기 위한 **테스트용 아이템**).
+## **아이템을 실제로 얻는 경로(채집/드롭/제작)는 아직 없다** — 그걸 만드는 바퀴가
+## 붙는다(INBOX #23 범위 밖). 그때까지 이 목록이 「테스트용 저장 상자 자동 보급」의
+## 자리를 대신한다(상자 자체가 아직 없다).
+const STARTER_ITEMS := [
+	["gun", 1], ["axe", 1], ["pickaxe", 1], ["sickle", 1], ["hoe", 1],
+	["watering_can", 1], ["fishing_rod", 1], ["wood", 64], ["stone", 48],
+	["iron_ore", 24], ["sulfur_ore", 12], ["plank", 30], ["iron", 8],
+	["charcoal", 16], ["gunpowder", 6], ["rice", 20], ["meat", 9], ["bag", 1],
+]
 
 ## 걸어다니면서 "가봤음"으로 적히는 반경(타일). 화면 세로 절반이 7.5칸이라 그보다 살짝
 ## 작게 잡았다 — 실제로 화면에서 본 만큼만 남는다 (docs/DESIGN.md 「맵 (M)」).
@@ -26,6 +41,13 @@ var world: RefCounted = null
 ## 이 캐릭터가 가본 곳(`explored_map.gd`). 슬롯에서 읽어 오고, 걸어다니면 여기 쌓인다.
 var explored: RefCounted = null
 
+## 이 캐릭터의 인벤토리(`inventory.gd` — 순수 클래스). 탐험 기록과 같이 슬롯에 저장된다.
+var inventory: RefCounted = null
+
+## 바닥에 놓인 아이템(`ground_items.gd`). 지금은 **버린 것이 쌓이기만 한다** —
+## 그림과 줍기는 바닥 드롭을 만드는 다음 바퀴가 붙인다 (docs/DESIGN.md 「바닥 드롭」).
+var ground_items: RefCounted = null
+
 ## 일시정지 메뉴에서 띄운 설정 화면. 씬을 바꾸지 않고 **월드 위에 겹쳐서** 띄운다 —
 ## 씬을 바꾸면 월드가 통째로 내려가므로 "월드는 멈추지 않는다"가 성립하지 않는다.
 var _settings_overlay: Control = null
@@ -33,8 +55,14 @@ var _settings_overlay: Control = null
 ## M 으로 연 전체 맵. 설정과 같은 자리(HUD)에 겹쳐 붙는다.
 var _map_overlay: Control = null
 
+## E 로 연 인벤토리 창. 지도와 같은 자리, 같은 규칙이다.
+var _inventory_overlay: Control = null
+
 var _slot_index := -1
 var _explored_dirty := false
+var _inventory_dirty := false
+## 마지막으로 슬롯에 적은 인벤토리 버전 — 바뀐 게 없으면 파일을 다시 쓰지 않는다.
+var _saved_inventory_version := -1
 var _explored_save_left := EXPLORED_SAVE_SECONDS
 ## 마지막으로 주변을 기록한 칸. 같은 칸에 서 있는 동안은 다시 훑지 않는다.
 var _marked_tile := Vector2i(-1, -1)
@@ -72,6 +100,18 @@ func _ready() -> void:
 	if index >= 0:
 		explored.load_base64(SlotStore.explored_of(SlotStore.load_slots()[index]))
 
+	# 인벤토리도 캐릭터에 붙는다(슬롯 저장). **저장된 적이 없는 캐릭터에게만** 기본
+	# 도구를 지급한다 — "다 버려서 비어 있는 인벤토리"와 구별해야 하기 때문이다.
+	inventory = Inventory.new()
+	ground_items = GroundItems.new()
+	var stored_inventory: Variant = null
+	if index >= 0:
+		stored_inventory = SlotStore.inventory_of(SlotStore.load_slots()[index])
+	if stored_inventory == null:
+		_give_starter_items()
+	else:
+		inventory.from_data(stored_inventory)
+
 	(%TerrainView as Node2D).set_world(world)
 	# 슬롯에 저장된 외형을 그대로 입힌다 — 커스터마이징 화면에서 고른 색·머리모양이
 	# 월드에서도 같아야 한다. 칠하는 일은 `character_sprite.gd`(팔레트 교체)가 한다.
@@ -86,6 +126,17 @@ func _ready() -> void:
 		seed_value, world.spawn_tile.x, world.spawn_tile.y,
 		WorldGen.MAP_TILES, WorldGen.MAP_TILES, roundi(world.sea_ratio() * 100.0),
 	]
+
+
+## 처음 들어오는 캐릭터에게 기본 도구 + 테스트용 아이템을 넣는다.
+## **넣기는 언제나 `add()` 를 지나간다** — 자리가 모자라면 남는 수량이 돌아오고,
+## 그것을 그냥 버리지 않고 경고로 남긴다 (docs/DESIGN.md 「인벤토리 안전」).
+func _give_starter_items() -> void:
+	for entry: Array in STARTER_ITEMS:
+		var left: int = inventory.add(String(entry[0]), int(entry[1]))
+		if left > 0:
+			push_warning("기본 지급 %s %d개가 인벤토리에 안 들어갔다" % [entry[0], left])
+	_inventory_dirty = true
 
 
 # --- 탐험 기록 (docs/DESIGN.md 「맵 (M)」) -------------------------------------
@@ -104,12 +155,14 @@ func _process(delta: float) -> void:
 	if _explored_save_left <= 0.0:
 		_explored_save_left = EXPLORED_SAVE_SECONDS
 		_save_explored()
+		_save_inventory()
 
 
 ## 씬이 내려갈 때(메인 메뉴로 나가기, 종료) 마지막으로 한 번 더 적는다 —
 ## 위 주기 저장만 있으면 마지막 몇 초가 날아간다.
 func _exit_tree() -> void:
 	_save_explored()
+	_save_inventory()
 
 
 func _save_explored() -> void:
@@ -117,6 +170,17 @@ func _save_explored() -> void:
 		return
 	if SlotStore.save_explored(_slot_index, explored.to_base64()):
 		_explored_dirty = false
+
+
+## 인벤토리도 같은 규칙으로 슬롯에 적는다(캐릭터마다 따로).
+func _save_inventory() -> void:
+	if _slot_index < 0 or inventory == null:
+		return
+	if not _inventory_dirty and inventory.version == _saved_inventory_version:
+		return
+	if SlotStore.save_inventory(_slot_index, inventory.to_data()):
+		_inventory_dirty = false
+		_saved_inventory_version = inventory.version
 
 
 # --- 일시정지 메뉴 (docs/DESIGN.md 「조작」의 Esc 항목) -------------------------
@@ -128,7 +192,8 @@ func _save_explored() -> void:
 # 메뉴를 열 때마다 캐릭터가 오른쪽으로 홱 돈다).
 
 func _menu_open() -> bool:
-	return _settings_overlay != null or _map_overlay != null or (%PauseMenu as Control).visible
+	return _settings_overlay != null or _map_overlay != null or _inventory_overlay != null \
+			or (%PauseMenu as Control).visible
 
 
 ## 월드 안의 Esc 는 나가는 키가 아니라 일시정지 메뉴다.
@@ -138,11 +203,28 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_toggle_map()
 		return
+	if event.is_action_pressed("toggle_inventory"):
+		get_viewport().set_input_as_handled()
+		_toggle_inventory()
+		return
+	# 숫자키 1~9 = 핫바에서 손에 들 칸 고르기 (docs/DESIGN.md 「조작」).
+	# **인벤토리 창이 열려 있어도 먹는다**(핫바는 그 창의 일부다). 반대로 일시정지/설정이
+	# 열려 있으면 안 먹는다 — 그때는 플레이어 조작 자체가 끊긴 상태다.
+	if _settings_overlay == null and not (%PauseMenu as Control).visible:
+		for index in Inventory.HOTBAR_SLOTS:
+			if not event.is_action_pressed("hotbar_%d" % (index + 1)):
+				continue
+			get_viewport().set_input_as_handled()
+			if inventory.select_hotbar(index):
+				_inventory_dirty = true
+			return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
 	if _settings_overlay != null:
 		_close_settings()
+	elif _inventory_overlay != null:
+		_close_inventory()
 	elif _map_overlay != null:
 		_close_map()
 	else:
@@ -172,7 +254,7 @@ func _toggle_map() -> void:
 		_close_map()
 		return
 	# 더 안쪽 창이 열려 있으면 M 은 아무 일도 하지 않는다 — 창을 겹겹이 쌓지 않는다.
-	if _settings_overlay != null or (%PauseMenu as Control).visible:
+	if _settings_overlay != null or _inventory_overlay != null or (%PauseMenu as Control).visible:
 		return
 	var overlay := MAP_SCENE.instantiate() as Control
 	overlay.setup(world, explored, %Player as Node2D)
@@ -187,6 +269,45 @@ func _close_map() -> void:
 	_map_overlay.queue_free()
 	_map_overlay = null
 	_sync_player_input()
+
+
+# --- 인벤토리 창 (docs/DESIGN.md 「인벤토리 / 장비」) ---------------------------
+#
+# 지도와 같은 자리(HUD)에 같은 규칙으로 붙는다 — 씬을 바꾸지 않고, 닫는 것은 이쪽이 하고,
+# 열려 있는 동안 월드는 계속 돌되 플레이어 입력만 끊긴다.
+
+func _toggle_inventory() -> void:
+	if _inventory_overlay != null:
+		_close_inventory()
+		return
+	# 더 안쪽 창이 열려 있으면 E 는 아무 일도 하지 않는다 — 창을 겹겹이 쌓지 않는다.
+	if _settings_overlay != null or _map_overlay != null or (%PauseMenu as Control).visible:
+		return
+	var overlay := INVENTORY_SCENE.instantiate() as Control
+	_inventory_overlay = overlay
+	($HUD as CanvasLayer).add_child(overlay)
+	overlay.setup(inventory)
+	overlay.drop_outside.connect(_on_drop_outside)
+	_sync_player_input()
+
+
+func _close_inventory() -> void:
+	if _inventory_overlay == null:
+		return
+	_inventory_overlay.queue_free()
+	_inventory_overlay = null
+	_sync_player_input()
+
+
+## 인벤토리 창 **바깥**에 끌어다 놓았다 = 버리기 (docs/DESIGN.md 「인벤토리 / 장비」).
+## 인벤토리에서 빠진 뭉치는 **그 자리에서 바닥으로 간다** — 중간에 아무 데도 안 들르므로
+## 「인벤토리 안전」대로 사라질 틈이 없다. 바닥 아이템의 그림/줍기는 다음 바퀴 몫이다.
+func _on_drop_outside(area: String, index: int) -> void:
+	var stack: RefCounted = inventory.take_out(area, index)
+	if stack == null:
+		return
+	ground_items.drop(stack, (%Player as Node2D).global_position)
+	_inventory_dirty = true
 
 
 func _on_resume_pressed() -> void:
