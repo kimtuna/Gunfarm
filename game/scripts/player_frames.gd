@@ -43,7 +43,7 @@ static func build(hairstyle: String = DEFAULT_HAIRSTYLE) -> SpriteFrames:
 	if texture == null:
 		push_error("플레이어 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % path)
 		return null
-	return _slice(texture, "idle", IDLE_FPS)
+	return slice_sheet(texture, "idle", IDLE_FPS)
 
 
 ## 스프라이트를 발밑 기준으로 올리기 위한 `AnimatedSprite2D.offset` (아트 픽셀 단위).
@@ -51,7 +51,10 @@ static func feet_offset() -> Vector2:
 	return Vector2(0.0, -(float(FEET_Y) - CELL * 0.5))
 
 
-static func _slice(texture: Texture2D, motion: String, fps: float) -> SpriteFrames:
+## 시트 한 장(행 = 방향, 열 = 프레임)을 `<모션>_<방향>` 애니메이션으로 자른다.
+## **색을 갈아끼운 텍스처를 그대로 넘겨도 된다** — 팔레트 교체는 알파를 건드리지
+## 않으므로 칸 배치가 그대로다 (`character_sprite.gd` 의 `idle_frames()`).
+static func slice_sheet(texture: Texture2D, motion: String, fps: float) -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	frames.remove_animation("default")
 	var columns := maxi(1, texture.get_width() / CELL)

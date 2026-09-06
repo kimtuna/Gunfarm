@@ -10,7 +10,9 @@ extends Node2D
 
 const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
+const CharacterSprite := preload("res://scripts/character_sprite.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
+const Appearance := preload("res://scripts/character_appearance.gd")
 
 ## 한 프레임에 몰아서 돌릴 수 있는 최대 틱 수. 창을 끌거나 잠깐 멈췄다 돌아왔을 때
 ## 밀린 시간을 한꺼번에 시뮬레이션하면 순간이동처럼 보인다 — 그냥 버린다.
@@ -22,16 +24,42 @@ var motion: RefCounted = null
 ## 이 노드가 로컬 플레이어의 입력을 받는가. 나중에 다른 플레이어를 그릴 때는 꺼진다.
 var input_enabled := true
 
+## 이 캐릭터의 외형(`character_appearance.gd` 의 id 들 — 슬롯에 저장된 그대로).
+## **빈 Dictionary 면 기본 외형**이다 — 슬롯을 안 거치고 월드 씬을 직접 띄워도
+## (자체 QA 가 그렇게 한다) 캐릭터가 멀쩡히 떠야 하기 때문이다.
+## 값을 넣으면 그 자리에서 시트를 다시 칠한다.
+var appearance: Dictionary = {}:
+	set(value):
+		var next := Appearance.normalize(value)
+		if next == appearance:
+			return
+		appearance = next
+		_apply_appearance()
+
 var _accumulated := 0.0
 
 @onready var _sprite: AnimatedSprite2D = $Sprite
 
 
 func _ready() -> void:
-	_sprite.sprite_frames = PlayerFrames.build()
 	_sprite.offset = PlayerFrames.feet_offset()
 	_sprite.scale = Vector2.ONE * PlayerFrames.SCALE
+	if _sprite.sprite_frames == null:
+		_apply_appearance()  # appearance 를 안 넣었으면 기본 외형으로 뜬다.
 	set_process(false)  # setup() 전에는 월드가 없어서 이동 계산을 할 수 없다.
+
+
+## 지금 외형으로 시트를 다시 칠해 갈아끼운다. 색은 팔레트 교체, 머리모양은 시트가
+## 따로다 (`character_sprite.gd`). 노드가 아직 준비되기 전에 외형을 넣었으면
+## `_ready()` 가 대신 부른다.
+func _apply_appearance() -> void:
+	if _sprite == null:
+		return
+	var frames := CharacterSprite.idle_frames(appearance)
+	if frames == null:
+		frames = PlayerFrames.build()  # 칠하기에 실패해도 기준색으로는 서 있게 한다.
+	_sprite.sprite_frames = frames
+	_update_animation()
 
 
 ## 월드에 들어올 때 한 번 부른다.

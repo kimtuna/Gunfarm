@@ -66,6 +66,17 @@ static func idle_texture(appearance: Dictionary) -> ImageTexture:
 	return ImageTexture.create_from_image(recolored(sheet.get_image(), a))
 
 
+## 고른 외형으로 칠한 idle `SpriteFrames` — **월드의 플레이어가 쓰는 것**이다.
+## 미리보기(`appearance_preview.gd`)는 시트를 직접 잘라 쓰지만, 실제 캐릭터는
+## `AnimatedSprite2D` 라 애니메이션으로 잘라둔 게 필요하다. 칸을 자르는 규칙은
+## 여전히 `player_frames.gd` 한 곳에만 있다.
+static func idle_frames(appearance: Dictionary) -> SpriteFrames:
+	var texture := idle_texture(appearance)
+	if texture == null:
+		return null
+	return PlayerFrames.slice_sheet(texture, "idle", PlayerFrames.IDLE_FPS)
+
+
 ## 기준색 이미지 한 장을 고른 색으로 칠한 새 이미지.
 ##
 ## 픽셀을 하나씩 `get_pixel()` 로 도는 대신 **바이트 배열을 통째로** 훑는다 —

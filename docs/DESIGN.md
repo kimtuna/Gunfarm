@@ -127,6 +127,14 @@
     5×6×6 조합이 아니라 5+6+6 줄이면 된다.
   - 기준색 램프 20색은 **서로 겹치면 안 된다** — 겹치면 "이 픽셀이 무슨 재질인가"가
     모호해져 바꿔치기가 엉뚱한 재질을 칠한다. `qa_character_sprite.gd` 가 검사한다.
+- (2026-09-06, INBOX #14) **월드 안의 플레이어도 같은 길로 외형을 입는다** — `world.gd`
+  가 슬롯의 `appearance` 를 `player.gd` 의 `appearance` 에 넣으면, 그 자리에서
+  `character_sprite.gd` 가 칠한 시트를 `SpriteFrames` 로 잘라 갈아끼운다
+  (`CharacterSprite.idle_frames()`). 커스터마이징 화면의 미리보기와 월드의 캐릭터가
+  **같은 함수의 결과**라 서로 어긋날 수가 없다.
+  - **빈 외형(`{}`)은 기본 외형이다.** 슬롯을 안 거치고 월드 씬을 직접 띄워도(자체 QA 와
+    개발 중 씬 단독 실행이 그 경로다) 캐릭터가 멀쩡히 떠야 하기 때문이다.
+  - 검증은 `game/qa/qa_player_appearance.gd`.
 - 검증은 `game/qa/qa_character_customize.gd`(화면)와 `game/qa/qa_character_sprite.gd`
   (팔레트 교체 — 램프 표 동기화 / 색 충돌 / 빠짐 없이 칠해지는지 + 극단 조합 캡처).
 

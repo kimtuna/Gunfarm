@@ -18,11 +18,16 @@ func _ready() -> void:
 	var index := SlotStore.selected_slot
 	var character_name := "이름 없는 캐릭터"
 	var seed_value := 0
+	# 슬롯을 안 거치고 이 씬을 직접 띄운 경우(자체 QA)에는 빈 외형 = 기본 외형이다.
+	var appearance: Dictionary = {}
 	if index >= 0:
 		var slots := SlotStore.load_slots()
 		var slot := slots[index]
 		character_name = String(slot.get("name", character_name))
 		seed_value = int(slot.get("world_seed", 0))
+		var stored: Variant = slot.get("appearance", {})
+		if typeof(stored) == TYPE_DICTIONARY:
+			appearance = stored
 		# 시드가 아직 없는(옛 형식으로 저장된) 캐릭터는 지금 한 번 정해서 슬롯에 박아둔다 —
 		# 다음에 다시 들어와도 같은 월드가 나와야 하기 때문이다.
 		if seed_value == 0:
@@ -35,6 +40,9 @@ func _ready() -> void:
 	world.build(seed_value)
 
 	(%TerrainView as Node2D).set_world(world)
+	# 슬롯에 저장된 외형을 그대로 입힌다 — 커스터마이징 화면에서 고른 색·머리모양이
+	# 월드에서도 같아야 한다. 칠하는 일은 `character_sprite.gd`(팔레트 교체)가 한다.
+	(%Player as Node2D).appearance = appearance
 	# 플레이어를 스폰 칸에 세운다. 카메라는 플레이어의 자식이라 따로 따라다니게 만들
 	# 코드가 없다 — 확대/축소도 하지 않는다(보이는 월드 범위는 모든 해상도에서 고정,
 	# docs/DESIGN.md "카메라 / 해상도" PvP 공정성 규칙).
