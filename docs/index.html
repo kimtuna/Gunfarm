@@ -27,33 +27,34 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </style></head><body><main>
 <h1>Gunfarm</h1>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
+<div class="warn"><strong>루프 멈춤</strong><pre>한 바퀴 예산($8.0)을 넘었습니다 (이번 바퀴 $12.034353000000003). env.sh 의 MAX_BUDGET_USD_PER_LAP 를 확인하세요.
 
+(2026-09-06 20:27:32)</pre></div>
 <div class="cards">
-  <div class="card"><b>7</b><span>완료</span></div>
-  <div class="card"><b>5</b><span>남음</span></div>
+  <div class="card"><b>8</b><span>완료</span></div>
+  <div class="card"><b>4</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#8</span> [DESIGN] 플레이어 캐릭터 스프라이트 — **기준색 1벌만** (피부 밝은/머리 검정/옷 풀색), 4방향 × idle. `docs/STYLE_GUIDE.md` 를 먼저 전부 읽을 것. 출발점 구현이 `game/tools/gen_character.py` 에 있으나 **그대로 쓰지 말고 기준을 만족할 때까지 개선한다**. 합격선은 &quot;누가 봐도 퀄리티가 좋다&quot;이고, 미달이면 커밋하지 말고 미완료로 두고 STATUS.md 에 부족한 점을 남긴다. 후보를 여러 개 뽑아 나란히 놓고 비교할 것. PNG 저장 후 반드시 `--import` 재임포트.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#8</span> [DESIGN] 플레이어 캐릭터 스프라이트 — **기준색 1벌만** (피부 밝은/머리 검정/옷 풀색), 4방향 × idle. `docs/STYLE_GUIDE.md` 를 먼저 전부 읽을 것. 출발점 구현이 `game/tools/gen_character.py` 에 있으나 **그대로 쓰지 말고 기준을 만족할 때까지 개선한다**. 합격선은 &quot;누가 봐도 퀄리티가 좋다&quot;이고, 미달이면 커밋하지 말고 미완료로 두고 STATUS.md 에 부족한 점을 남긴다. 후보를 여러 개 뽑아 나란히 놓고 비교할 것. PNG 저장 후 반드시 `--import` 재임포트.</li>
-<li><span class="num">#9</span> [DESIGN] #8 과 같은 방식으로 4방향 × walk(4~6프레임) 추가. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). 애니메이션 검증용 QA 스크립트를 `game/qa/` 에 남길 것.</li>
+<section><h2>다음 항목</h2><span class="num">#9</span> [DESIGN] #8 과 같은 방식으로 4방향 × walk(4~6프레임) 추가. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). 애니메이션 검증용 QA 스크립트를 `game/qa/` 에 남길 것.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#9</span> [DESIGN] #8 과 같은 방식으로 4방향 × walk(4~6프레임) 추가. 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). 애니메이션 검증용 QA 스크립트를 `game/qa/` 에 남길 것.</li>
 <li><span class="num">#10</span> [BUILD] 플레이어를 월드에 실제로 배치한다 — 지금은 `SpawnMarker`(빈 위치 표식)만 있고 플레이어 엔티티가 없어서 월드에 들어가도 캐릭터가 안 보인다. 스폰 지점에 `AnimatedSprite2D`(#8/#9 스프라이트) 를 붙인 플레이어 노드를 만들고, WASD 이동 + 카메라 추적 + 바다 타일 충돌을 붙인다. **DESIGN.md 「서버 권위 / 클라이언트 신뢰」를 처음부터 지킬 것** — 위치가 아니라 입력만 다루는 구조로 만들고, 이동 계산은 노드가 아닌 순수 클래스에 둔다(나중에 서버가 같은 코드를 돌린다).</li>
 <li><span class="num">#11</span> [BUILD] 커스터마이징 화면의 색 사각형 미리보기(`appearance_preview.gd`)를 #8 스프라이트로 교체하고, 피부/머리/옷 색 선택이 **팔레트 교체**로 반영되게 한다(형태를 다시 그리지 않는다 — STYLE_GUIDE 2번). 머리모양 4종도 실제 스프라이트로 보이게 할 것.</li>
 <li><span class="num">#12</span> [DESIGN] 지형 타일 스프라이트 — 땅/바다 2종. 아트 16px × 3배 = 화면 48px(STYLE_GUIDE 1번). 지금은 `terrain_view.gd` 가 색 사각형 + 격자선으로 그리고 있다. 인접한 같은 지형끼리 이어져 보여야 하고, 땅↔바다 경계가 자연스러워야 한다. 캐릭터(#8)와 나란히 놓고 팔레트·픽셀 크기가 어울리는지 확인할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>e86135c  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 19:51</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #7 (`*.png.import` 를 커밋할지 정하기) 완료.
+<section><h2>마지막 커밋</h2><code>4715af6  [INBOX #8] 플레이어 idle 스프라이트 4방향 — 절차 생성 파이프라인을 다시 세워서</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 20:27</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #8 (플레이어 캐릭터 스프라이트, 기준색 1벌 × 4방향 idle) 완료.
 
-## 정한 것: `*.import` 도 **커밋한다**
+## 만든 것
 
-`.gd.uid` 와 같은 결론이지만 **근거는 더 강하다.** 결정과 근거는 `CLAUDE.md` 「git」 절에
-적어뒀고(매 세션이 읽는 파일이라 거기가 제자리다), `.gitignore` 에도 &quot;여기 넣지 않는다&quot;고</pre></section>
-<footer>갱신: 2026-09-06 19:59 KST · <span id="live">자동 새로고침 켜짐</span></footer>
+- `game/assets/sprites/player_idle.png` — 34px 칸, **행 = 방향**(down/left/right/up) ×
+  **열 = 프레임**(지금은 idle 1장). 걷기(#9)는 열이 늘어난다.</pre></section>
+<footer>갱신: 2026-09-06 20:27 KST · <span id="live">자동 새로고침 켜짐</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
 // 게다가 GitHub Pages 는 HTML 에 cache-control: max-age=600 을 붙여서 그냥 새로고침하면
 // 최대 10분간 옛 페이지가 나온다 — 그래서 매번 다른 쿼리스트링을 붙여 CDN 캐시를 우회한다.
 (function () {
-  var STAMP = "20260906195942";
+  var STAMP = "20260906202732";
   var EVERY = 45000;
   var el = document.getElementById("live");
   function tick() {
