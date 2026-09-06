@@ -104,11 +104,15 @@ while true; do
     >"$OUT_JSON" 2>>"$LOG" &
   CLAUDE_PID=$!
 
-  # 타임아웃 감시
-  ( sleep "$LAP_TIMEOUT_SECONDS"; kill -TERM "$CLAUDE_PID" 2>/dev/null ) &
+  # 타임아웃 감시.
+  # 파이프/터미널을 붙들지 않게 출력은 버리고, 바퀴가 끝나면 감시 서브셸뿐 아니라
+  # 그 안의 `sleep` 자식까지 죽인다 — 안 죽이면 고아 sleep 이 stdout 을 계속 붙들어
+  # 루프가 끝나도 호출한 쪽(파이프)이 EOF 를 못 받는다.
+  ( sleep "$LAP_TIMEOUT_SECONDS"; kill -TERM "$CLAUDE_PID" 2>/dev/null ) >/dev/null 2>&1 &
   WATCHDOG=$!
   wait "$CLAUDE_PID"; RC=$?
-  kill "$WATCHDOG" 2>/dev/null
+  pkill -P "$WATCHDOG" >/dev/null 2>&1
+  kill "$WATCHDOG" >/dev/null 2>&1
   wait "$WATCHDOG" 2>/dev/null
 
   if (( RC == 143 || RC == 137 )); then

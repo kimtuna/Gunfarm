@@ -52,6 +52,10 @@ write_plist() {
 PLISTEOF
 }
 
+# 로그의 "루프 시작" 줄 개수 — 실제로 한 번이라도 떴는지 판정하는 기준.
+# 큐가 비었거나 즉시 멈추는 경우 루프는 1초 안에 끝나서 pgrep 으로는 못 잡는다.
+started_count() { grep -c '== 루프 시작' "$LOG" 2>/dev/null || true; }
+
 cmd_start() {
   if pid="$(running_pid)"; then
     echo "이미 돌고 있습니다 (pid $pid). 멈추려면 ./ctl.sh stop"
@@ -59,7 +63,10 @@ cmd_start() {
   fi
   rm -f "$HARNESS/STOP"
 
-  local uid; uid="$(id -u)"
+  local uid before i pid
+  uid="$(id -u)"
+  before="$(started_count)"; before="${before:-0}"
+
   write_plist
   launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1
   if launchctl bootstrap "gui/$uid" "$PLIST" >/dev/null 2>&1; then
@@ -67,12 +74,16 @@ cmd_start() {
   fi
 
   # launchd 의 kickstart 는 환경에 따라 조용히 실패한다 — 실제로 떴는지 몇 초 안에 확인한다.
-  local i
   for i in 1 2 3 4 5 6 7 8; do
     sleep 1
     if pid="$(running_pid)"; then
       echo "$pid" > "$PIDFILE"
       echo "시작됨 — launchd ($LABEL), pid $pid"
+      return 0
+    fi
+    # 떴다가 이미 끝났을 수도 있다 (큐가 비었거나 즉시 멈춤) — 그것도 성공이다.
+    if [[ "$(started_count)" != "$before" ]]; then
+      echo "시작됐다가 이미 끝났습니다 (큐가 비었거나 즉시 멈춤). ./ctl.sh status 로 확인하세요."
       return 0
     fi
   done
@@ -85,6 +96,8 @@ cmd_start() {
   if kill -0 "$fallback" 2>/dev/null; then
     echo "$fallback" > "$PIDFILE"
     echo "시작됨 — 직접 실행, pid $fallback"
+  elif [[ "$(started_count)" != "$before" ]]; then
+    echo "시작됐다가 이미 끝났습니다 (큐가 비었거나 즉시 멈춤). ./ctl.sh status 로 확인하세요."
   else
     echo "실패: 루프를 시작하지 못했습니다. $HARNESS/nohup.log 를 확인하세요." >&2
     return 1
