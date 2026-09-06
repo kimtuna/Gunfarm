@@ -330,8 +330,10 @@ func _check_feet_on_origin() -> void:
 	if absf(feet_local) > 3.0:
 		_fails.append("발밑이 원점에서 %.1f px 어긋났다 — 캐릭터가 뜨거나 파묻혀 보인다" % feet_local)
 	var screen_height: float = image.get_height() * sprite.scale.y
-	if not is_equal_approx(screen_height, 102.0):
-		_fails.append("화면에서 캐릭터 칸 높이가 %.0fpx — 102px(아트 34 × 3배)여야 한다" % screen_height)
+	var want_height := float(PlayerFrames.CELL * PlayerFrames.SCALE)
+	if not is_equal_approx(screen_height, want_height):
+		_fails.append("화면에서 캐릭터 칸 높이가 %.0fpx — %.0fpx(아트 %d × %d배)여야 한다"
+				% [screen_height, want_height, PlayerFrames.CELL, PlayerFrames.SCALE])
 	else:
 		print("[qa] 발밑이 원점 (%.1fpx 오차), 화면 높이 %.0fpx" % [feet_local, screen_height])
 

@@ -3,7 +3,7 @@ extends RefCounted
 ## 플레이어 스프라이트 시트 → `SpriteFrames` (docs/DESIGN.md 「캐릭터 애니메이션」).
 ##
 ## **시트의 배치 규칙을 아는 유일한 곳**이다 — 행 = 방향(down/left/right/up),
-## 열 = 프레임, 칸 34px. 걷기(INBOX #15)처럼 프레임이 늘어나는 시트가 생겨도
+## 열 = 프레임, 칸 17px. 걷기(INBOX #15)처럼 프레임이 늘어나는 시트가 생겨도
 ## 여기만 고치면 되고 플레이어 노드는 손대지 않는다.
 
 ## 시트는 **머리모양마다 한 장**이다 — 색은 팔레트 교체로 만들 수 있지만
@@ -14,14 +14,18 @@ const SHEET_DIR := "res://assets/sprites"
 ## 기본 머리모양 — `character_appearance.gd` 의 첫 번째 선택지와 같아야 한다.
 const DEFAULT_HAIRSTYLE := "short"
 
-## 아트 한 칸(px). 아트 34px × 씬 스케일 3 = 화면 102px
+## 아트 한 칸(px). 아트 17px × 씬 스케일 3 = 화면 51px
 ## (docs/DESIGN.md 「아이템/오브젝트 크기 표준」).
-const CELL := 34
+## **2026-09-07 (INBOX #19) 에 칸이 34 → 17 로 절반이 됐다. 스케일은 그대로 3이다** —
+## 스케일을 낮추면 캐릭터의 아트 픽셀만 타일(아트 16px × 3배)의 절반이 되어 도트
+## 크기 단위가 어긋난다.
+const CELL := 17
 const SCALE := 3
 
 ## 칸 안에서 발이 닿는 y(아트 픽셀, 아래 경계). 이 줄이 노드 원점에 오게 스프라이트를
 ## 올린다 — **원점 = 발밑**이라야 타일 점유와 앞뒤(Y) 정렬이 자연스럽다.
-const FEET_Y := 33
+## 그림은 y 15 줄까지 차고(외곽선 포함) 그 아래 한 줄이 걷기의 바운스 자리다.
+const FEET_Y := 16
 
 ## 시트의 행 순서. `player_motion.gd` 의 방향 enum 과 같은 순서여야 한다.
 const DIR_NAMES := ["down", "left", "right", "up"]

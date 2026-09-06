@@ -6,7 +6,7 @@ extends SceneTree
 ##   /Applications/Godot.app/Contents/MacOS/Godot --path game --script qa/qa_player_sprite.gd
 ##
 ## 확인하는 것:
-##   1) 시트 규격 — 34px 칸 × (행 = 방향 4개). 아트 34px × 씬 3배 = 화면 102px
+##   1) 시트 규격 — `PlayerFrames.CELL` 칸 × (행 = 방향 4개). 아트 × 씬 3배가 화면 크기
 ##      (docs/STYLE_GUIDE.md 1번: 배율이 정수여야 도트가 안 뭉개진다).
 ##   2) **방향 4개의 캐릭터 크기가 어긋나지 않는다** — 높이/폭/발밑 y 가 서로
 ##      가까워야 한다 (docs/DESIGN.md 「캐릭터 애니메이션」의 크기 규칙).
@@ -24,8 +24,10 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 ## 골라도 캐릭터 크기가 안 바뀐다.
 const STYLES := ["short", "bob", "long", "ponytail"]
 const SHOTS := "user://qa_shots"
-const CELL := 34
-const SCALE := 3
+## 규격은 **엔진이 쓰는 값 하나에서 가져온다** — 여기 숫자를 따로 적어두면
+## 캔버스 크기를 바꾼 바퀴가 한쪽만 고치고 지나간다(INBOX #19 가 그럴 뻔했다).
+const CELL := PlayerFrames.CELL
+const SCALE := PlayerFrames.SCALE
 const DIRS := ["down", "left", "right", "up"]
 
 ## 재질 5종 × 램프 4단계 + 잉크 + 눈 하이라이트 + 투명 = 23. 여유를 조금만 둔다.
@@ -100,9 +102,14 @@ func _check_frames() -> void:
 		if box.size == Vector2i.ZERO:
 			_fail("%s: 빈 칸이다" % DIRS[row])
 			continue
-		if box.position.x < 1 or box.position.y < 1 \
-				or box.end.x > CELL - 1 or box.end.y > CELL - 1:
-			_fail("%s: 칸 가장자리에 붙어 잘렸다 %s — 외곽선 자리가 없다" % [DIRS[row], box])
+		# **칸 가장자리에 닿는 것 자체는 잘린 게 아니다.** 17px 칸에 외곽선까지
+		# 16줄이 들어가므로(2026-09-07, INBOX #19) 위아래 중 한쪽은 반드시 닿는다.
+		# 정말 막아야 하는 것은 **외곽선이 아닌 픽셀이 가장자리에 나오는 것**이다 —
+		# 그건 실루엣의 한 줄이 칸 밖으로 잘려나갔다는 뜻이다.
+		var bare := _bare_edge(row)
+		if bare != "":
+			_fail("%s: 칸 %s 가장자리에 외곽선이 아닌 픽셀이 있다 — 실루엣이 잘렸다"
+					% [DIRS[row], bare])
 		if box.size.y < CELL * 0.7:
 			_fail("%s: 캐릭터가 칸에 비해 너무 작다 (높이 %d)" % [DIRS[row], box.size.y])
 		print("[qa] %-8s %-5s bbox=%s" % [_style, DIRS[row], box])
@@ -121,6 +128,24 @@ func _check_frames() -> void:
 	_spread("발밑 y", feet, 1)
 	# 옆모습은 어깨가 좁아지는 게 정상이라 폭은 더 넉넉하게 본다.
 	_spread("폭", widths, 4)
+
+
+## 칸의 네 가장자리 중 **외곽선(잉크)이 아닌 몸 픽셀이 놓인** 변의 이름.
+## 없으면 빈 문자열 — 그래야 그림이 칸을 꽉 채워도 "잘리지 않았다"가 성립한다.
+func _bare_edge(row: int) -> String:
+	var top := row * CELL
+	for x in CELL:
+		if _solid_not_ink(x, top) or _solid_not_ink(x, top + CELL - 1):
+			return "위/아래"
+	for y in CELL:
+		if _solid_not_ink(0, top + y) or _solid_not_ink(CELL - 1, top + y):
+			return "좌/우"
+	return ""
+
+
+func _solid_not_ink(x: int, y: int) -> bool:
+	var c := _image.get_pixel(x, y)
+	return c.a > 0.0 and not c.is_equal_approx(INK)
 
 
 func _spread(what: String, values: Array[int], allowed: int) -> void:

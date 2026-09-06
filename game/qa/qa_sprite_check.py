@@ -87,6 +87,14 @@ def _player_palette():
     return gen.palette(), gen.INK, gen.GLINT
 
 
+def _cloth_accents():
+    """생성기가 지금 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리)."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
+    import gen_character as gen
+    return gen.cloth_accents()
+
+
 def _terrain_palette():
     """지형 생성기에서 램프를 그대로 가져온다."""
     if TOOLS not in sys.path:
@@ -98,11 +106,14 @@ def _terrain_palette():
 def _player_spec(**over):
     return dict(dict(
         kind="character",
-        cell=34,
+        # 2026-09-07 (INBOX #19) 에 34 에서 절반이 됐다. **아래 숫자는 전부 이 칸
+        # 크기에 매인다** — 각짐/비율/눈은 그냥 반으로 나눈 값이 아니라 17px 로
+        # 실제로 그려본 결과에서 다시 잡았다.
+        cell=17,
         rows=["down", "left", "right", "up"],
         palette=_player_palette,
         # 실제로 맞닿는 재질쌍과 **경계에서 요구하는 최소 명도차**.
-        # 34px 에서 두 면이 "다른 재질"로 읽히려면 경험적으로 20 안팎이 필요하다.
+        # 두 면이 "다른 재질"로 읽히려면 경험적으로 20 안팎이 필요하다.
         # 바지↔신발만 낮은 건 둘이 같은 옷색 계열이고 신발 입구 하이라이트가
         # 경계를 대신 그어주기 때문이다.
         contrast=[
@@ -122,6 +133,7 @@ def _player_spec(**over):
         # 채도(max-min 채널)의 평균 하한. 코어키퍼풍은 탁하지 않다 —
         # 명도만 올리고 채도를 안 올리면 회색 캐릭터가 된다.
         # **이 값은 등록된 시트의 색(기준색 1벌 = 풀색 옷)에 맞춰 잡은 것이다.**
+        # 17px idle 실측은 37~44 다.
         # 일부러 무채색인 색(옷색 「잿빛」 등)으로 팔레트를 갈아끼운 시트를 새로
         # 등록할 때는 그 시트의 스펙에서 이 값을 따로 낮춰 잡을 것.
         chroma_mean=34.0,
@@ -129,25 +141,57 @@ def _player_spec(**over):
         # ── 아래는 「자연스러움」 갈래 (INBOX #13) ──────────────────────────
         # 램프 4단계를 실제로 몇 개나 쓰는지 볼 재질. 넓은 면만 본다 —
         # 신발처럼 몇 px 짜리 재질에 4단계를 요구하면 얼룩이 된다.
-        flat=("shirt", "pants", "skin", "hair"),
-        flat_steps=3,           # 최소 이만큼의 단계를 실제로 써야 한다
+        # **재질마다 요구 단계가 다르다**(2026-09-07, INBOX #19). 넓은 면(상의·바지·
+        # 머리)은 여전히 3단계를 요구한다. **얼굴만 2단계**인데, 17px 에서 보이는
+        # 피부는 이마가 앞머리에 덮인 뒤 남는 세 줄 × 다섯 칸뿐이라 거기에 4단계를
+        # 요구하면 얼굴이 얼룩진다(34px 때는 같은 자리가 8줄이었다).
+        flat=dict(shirt=3, pants=3, hair=3, skin=2),
         flat_share=0.70,        # 한 단계가 그 재질의 이 비율을 넘으면 단색이다
         # 상의/하의는 **색상(hue)**이 달라야 한다. 명도 계단은 위 「대비」가 따로 본다.
         hue_pairs=(("shirt", "pants", 25.0),),
-        # 실루엣 옆선/윗선의 곧은 구간 상한(px).
+        # 실루엣 옆선/윗선의 곧은 구간 상한(px). **숫자는 34px 때와 같은 5 지만
+        # 기준은 달라졌다** — 34px 에서는 캐릭터 높이 32 의 16% 였고 17px 에서는
+        # 16 의 31% 다. 같은 비율(3px)로 옮겨봤더니 **다리 두 줄 + 신발 두 줄만으로
+        # 이미 4px** 이라 어떤 그림도 통과할 수 없었다. 5 는 실측으로 정한
+        # 값이다: 짧은머리·긴머리·묶은머리는 4 에서 끝나고, **단발만 5** 다 —
+        # 단발은 관자놀이에서 턱을 지나 어깨까지 이어지는 옆선이 곧은 것이
+        # 그 머리모양의 생김새 자체다. 6 은 실제로 각져 보였다(흘러내린 머리단을
+        # 머리 옆선에서 한 칸 안으로 넣었을 때 그렇게 나왔다).
         straight_max=5,
-        # 비율 (STYLE_GUIDE 3번 표). 머리는 전체 높이에 대한 비, 나머지는 px.
-        head_frac=(0.42, 0.55),
-        # 몸통 하한이 표(6px)보다 낮은 건 **머리카락이 어깨를 덮으면 보이는 상의가
-        # 한두 줄 줄어들기 때문**이다 — 단발 뒷모습이 그렇다.
-        bands=dict(torso=(4, 8), legs=(4, 7), shoes=(3, 5)),
+        # 비율 (STYLE_GUIDE 3번 표 — 2026-09-07 에 17px 로 다시 잡았다).
+        # 머리는 전체 높이(14px)에 대한 비, 나머지는 px.
+        # 실측: 머리 6 / 몸통 3 / 다리 3 / 신발 2.
+        head_frac=(0.38, 0.48),
+        # 하한이 실측보다 한 칸 낮은 건 **머리카락이 어깨를 덮으면 보이는 상의가
+        # 한 줄 줄어들기 때문**이다 — 단발·긴머리 뒷모습이 그렇다.
+        bands=dict(torso=(2, 4), legs=(2, 4), shoes=(2, 3)),
+        # 옷 포인트(허리띠/옷깃/소맷부리) 개수 상한. **17px 에서는 하나까지다**
+        # (STYLE_GUIDE 「자연스러움」 — 상의가 세 줄뿐이라 둘을 넣으면 가운데
+        # 한 줄만 남는다). 그림에서 세지 않고 **생성기의 설정에서** 센다 —
+        # 팔레트를 생성기에서 그대로 불러오는 것과 같은 이유다.
+        accents_max=1,
         # 눈을 확인할 방향. 뒷모습(up)은 얼굴이 없으니 뺀다.
         eye_dirs=("down", "left", "right"),
-        eye_min=(3, 3),
+        # **눈 크기에 상한이 생겼다**(2026-09-07, INBOX #19 — 사람이 "눈이 너무
+        # 커서 줄여주고"). 옛 검사는 하한(3×3)만 봐서 큰 눈을 통과시켰다.
+        # 17px 의 얼굴은 폭 7 × 높이 3 이라, 지금 쓰는 눈은 **가로 2 × 세로 1**
+        # 이다. 세로 2 를 허용하면 눈이 얼굴 높이의 2/3 가 된다.
+        eye_size=dict(w=(1, 2), h=(1, 1)),
+        # 하이라이트(흰자)는 **2×2 일 때만** 넣는다 — 2×1 에 넣으면 두 칸 중 한
+        # 칸이 흰색이 되어 눈이 아니라 점 두 개로 읽힌다. 지금은 없어야 한다.
+        eye_glint=False,
         # 프레임이 한 장뿐인 시트(idle)는 「이어짐」을 돌 게 없다 — `motion` 을 준
         # 시트만 본다.
         motion=None,
     ), **over)
+
+
+# 걷기 시트는 **이번 바퀴(INBOX #19)에 34px 인 채로 남아 있다** — 캔버스를 줄이면서
+# idle 만 다시 구웠고, 걷기 진폭(`gen_character.py` 의 `stride` 등)이 아직 34px
+# 단위라 그대로 구우면 한 걸음이 몸 폭만큼 벌어지기 때문이다(INBOX #20 이 굽는다).
+# 그래서 걷기 스펙만 **옛 34px 숫자를 그대로** 들고 있다. #20 이 시트를 다시 구우면
+# 이 함수는 `_player_spec()` 기본값으로 돌아가고 `WALK_OLD_CELL` 도 없어진다.
+WALK_OLD_CELL = 34
 
 
 def _walk_spec(style):
@@ -165,6 +209,11 @@ def _walk_spec(style):
     나머지(팔레트·대비·비율·눈·단색·색상차)는 한 칸도 안 늦춘다.
     """
     return _player_spec(
+        cell=WALK_OLD_CELL,
+        head_frac=(0.42, 0.55),
+        flat=dict(shirt=3, pants=3, hair=3, skin=3),
+        eye_size=dict(w=(3, 4), h=(3, 4)),
+        eye_glint=True,
         bands=dict(torso=(4, 8), legs=(2, 7), shoes=(3, 7)),
         straight_max=6,
         motion=dict(
@@ -181,17 +230,21 @@ def _walk_spec(style):
             shift=2,
             # idle 시트의 첫 프레임과 이 시트의 첫 프레임이 벌어져도 되는 정도
             # (걷기 안에서의 가장 큰 변화의 몇 배까지).
-            idle="player_idle_%s.png" % style,
+            # **이번 바퀴에는 idle 과 견주지 않는다** — 칸 크기가 서로 달라서
+            # (idle 17px / 걷기 34px) 같은 자리를 잘라 비교할 수가 없다.
+            # INBOX #20 이 걷기를 17px 로 다시 구우면 여기에 시트 이름을 되돌린다.
+            idle=None,
             from_idle=1.5,
         ),
     )
 
 
 # 머리모양 4종은 **형태만 다르고 팔레트·비율·광원이 같다** — 그래서 스펙도 하나를
-# 돌려 쓴다. 다만 **머리카락이 길수록 그 시트는 실제로 더 어둡고 덜 쨍하다**
-# (기준색의 머리는 검정 = 무채색이다). 그래서 그 셋(평균명도/어두운비율/채도)만
-# 시트마다 늦춘다 — 기준을 봐주는 게 아니라 시트가 그리는 대상이 다른 것이다.
-# **나머지 검사(대비/명암폭/실루엣/팔레트/바운딩)는 한 칸도 안 늦춘다.**
+# 돌려 쓴다. 34px 시트는 **머리카락이 길수록 실제로 더 어둡고 덜 쨍해서**(기준색의
+# 머리는 검정 = 무채색이다) 그 셋(평균명도/어두운비율/채도)만 시트마다 늦춰야 했다.
+# **17px idle 은 그 완화가 필요 없어졌다**(2026-09-07, INBOX #19) — 캔버스가 줄면서
+# 머리카락이 차지하는 넓이가 작아져 네 시트가 평균명도 104~111 / 어두운비율 3~8% /
+# 채도 37~44 로 모였다. 그래서 아래 표는 **아직 34px 인 걷기 시트에만** 먹인다.
 
 # 지형 타일 시트. 캐릭터와 견주는 기준(`shirt_gap`)은 **기준색 1벌의 셔츠**다 —
 # 캐릭터가 풀밭에 서 있을 때 묻히지 않아야 한다(DESIGN.md 「그래픽 파이프라인」 1).
@@ -210,7 +263,7 @@ TERRAIN_SPEC = dict(
 # 머리모양별로 늦추는 세 값(평균명도/어두운비율/채도)은 **idle 과 걷기가 같다** —
 # 같은 머리를 같은 팔레트로 그린 같은 캐릭터라, 모션이 바뀐다고 머리가 더 밝아지지
 # 않는다. 그래서 한 곳에 적고 두 스펙에 같이 먹인다.
-_BY_STYLE = {
+_WALK_BY_STYLE = {
     "short": {},
     "ponytail": dict(luma_mean=(94.0, 170.0)),
     "bob": dict(luma_mean=(90.0, 170.0), dark_frac=0.26, chroma_mean=31.0),
@@ -218,8 +271,8 @@ _BY_STYLE = {
 }
 
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
-for _style, _over in _BY_STYLE.items():
-    SPECS["player_idle_%s.png" % _style] = _player_spec(**_over)
+for _style, _over in _WALK_BY_STYLE.items():
+    SPECS["player_idle_%s.png" % _style] = _player_spec()
     SPECS["player_walk_%s.png" % _style] = dict(_walk_spec(_style), **_over)
 
 
@@ -593,7 +646,7 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
     for c, i in step_of.items():
         stepmap[body & np.all(rgb == np.array(c), axis=-1)] = i
     bad, show = [], []
-    for mat in spec["flat"]:
+    for mat, need in spec["flat"].items():
         sel = (matmap == mat) & (stepmap >= 0)
         n = int(sel.sum())
         if n < 8:
@@ -602,13 +655,13 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
         cnt = np.bincount(stepmap[sel], minlength=len(pal[mat]))
         used, share = int((cnt > 0).sum()), float(cnt.max()) / n
         show.append("%s %d단%.0f%%" % (mat, used, share * 100))
-        if used < spec["flat_steps"]:
-            bad.append("%s 가 %d단계뿐" % (mat, used))
+        if used < need:
+            bad.append("%s 가 %d단계뿐(%d 이상)" % (mat, used, need))
         if share > spec["flat_share"]:
             bad.append("%s 의 한 단계가 %.0f%%" % (mat, share * 100))
     rep.add(not bad, "단색",
-            "%s — 색종이를 오려 붙인 것처럼 보인다 (%d단계 이상 / 한 단계 %.0f%% 이하)"
-            % (", ".join(bad), spec["flat_steps"], spec["flat_share"] * 100),
+            "%s — 색종이를 오려 붙인 것처럼 보인다 (한 단계 %.0f%% 이하)"
+            % (", ".join(bad), spec["flat_share"] * 100),
             " ".join(show))
 
     # 색상차 — 상하의가 명도만 다르면 몸이 한 덩어리로 뭉친다.
@@ -683,25 +736,42 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
             for i in range(int(lab.max())):
                 blob = lab == i + 1
                 around = _neighbors(blob) & sub & ~blob
-                if around.any() and float((around & skinish).sum()) / int(around.sum()) >= 0.7:
+                # 둘러싸인 비율의 하한을 0.7 → 0.6 으로 내렸다(2026-09-07, INBOX #19).
+                # 17px 의 얼굴은 세 줄뿐이라 **눈 바로 위가 늘 앞머리**다 —
+                # 0.7 을 요구하면 멀쩡한 눈이 눈이 아닌 것으로 빠진다.
+                if around.any() and float((around & skinish).sum()) / int(around.sum()) >= 0.6:
                     blobs.append(np.nonzero(blob))
             if not blobs:
                 eyes.append("%s 눈 없음" % tag)
                 continue
-            if not (inky & glintm).any():
-                eyes.append("%s 하이라이트 없음" % tag)
-            need_h, need_w = spec["eye_min"]
+            has_glint = bool((inky & glintm).any())
+            if has_glint != spec["eye_glint"]:
+                eyes.append("%s 하이라이트가 %s" % (tag, "있다" if has_glint else "없다"))
+            wlo, whi = spec["eye_size"]["w"]
+            hlo, hhi = spec["eye_size"]["h"]
             for ys2, xs2 in blobs:
                 bh, bw = ys2.max() - ys2.min() + 1, xs2.max() - xs2.min() + 1
-                if bh < need_h or bw < need_w:
+                if not (wlo <= bw <= whi and hlo <= bh <= hhi):
                     eyes.append("%s 눈 %dx%d" % (tag, bw, bh))
                     break
     rep.add(not angular, "각짐",
             "%s 곧은 구간 (상한 %dpx) — 어깨·머리 모서리를 굴릴 것"
             % (" ".join(angular[:4]), spec["straight_max"]), "최대 %dpx" % worst)
     rep.add(not prop, "비율", " ".join(prop[:4]), head_show)
-    rep.add(not eyes, "눈", " ".join(eyes[:4]) + " (최소 %dx%d + 흰 하이라이트)"
-            % (spec["eye_min"][1], spec["eye_min"][0]))
+    rep.add(not eyes, "눈", " ".join(eyes[:4]) + " (가로 %d~%d × 세로 %d~%d, 하이라이트 %s)"
+            % (spec["eye_size"]["w"] + spec["eye_size"]["h"]
+               + ("있음" if spec["eye_glint"] else "없음",)),
+            "%d~%dx%d~%d" % (spec["eye_size"]["w"] + spec["eye_size"]["h"]))
+
+    # 옷 포인트 — 허리띠/옷깃/소맷부리를 몇 개나 넣었는가. 그림에서 세지 않고
+    # **생성기의 설정에서** 센다(팔레트를 생성기에서 불러오는 것과 같은 이유 —
+    # 손으로 베껴두면 반드시 어긋난다). 17px 에서는 상의가 세 줄뿐이라 하나까지다.
+    if spec.get("accents_max") is not None:
+        got = _cloth_accents()
+        rep.add(len(got) <= spec["accents_max"], "옷포인트",
+                "%d개(%s) > %d개 — 상의가 포인트로 꽉 찬다"
+                % (len(got), "/".join(got), spec["accents_max"]),
+                "%d개(%s)" % (len(got), "/".join(got) or "없음"))
 
 
 # ── 지형 타일 검사 ────────────────────────────────────────────────────────

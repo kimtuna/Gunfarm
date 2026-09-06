@@ -17,8 +17,10 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 const BACKDROP := Color(0.164706, 0.192157, 0.14902)
 
 ## 아트 픽셀이 화면에서 균일하려면 **배율이 정수여야 한다**(STYLE_GUIDE 1번).
-const MAIN_SCALE := 6
-const SIDE_SCALE := 2
+## **2026-09-07 (INBOX #19) 에 캔버스가 34 → 17px 로 절반이 되면서 두 배가 됐다** —
+## 미리보기가 화면에서 차지하는 크기(204px / 68px)는 그대로 두고 배율만 올린다.
+const MAIN_SCALE := 12
+const SIDE_SCALE := 4
 const ROW_GAP := 10.0
 
 ## 아래 작은 줄에 늘어놓는 방향. 앞모습은 위에 크게 있으므로 뺀다.

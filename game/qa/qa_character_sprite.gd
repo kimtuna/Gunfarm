@@ -28,8 +28,9 @@ const CharacterSprite := preload("res://scripts/character_sprite.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 
 const SHOTS := "user://qa_shots"
-const CELL := 34
-const SCALE := 3
+## 규격은 `player_frames.gd` 한 곳에서 가져온다 (여기 숫자를 따로 적지 않는다).
+const CELL := PlayerFrames.CELL
+const SCALE := PlayerFrames.SCALE
 ## 배경은 실제 지형의 풀색 — 실제로 그 위에 서 있을 색이다. 색을 손으로 적지 않고
 ## 생성기가 내려보낸 램프에서 꺼낸다(`terrain_palettes.gd`).
 const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")

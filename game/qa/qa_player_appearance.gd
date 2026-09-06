@@ -245,7 +245,7 @@ func _shoot(shot_name: String) -> void:
 	print("[qa] shot %s" % path)
 
 
-## 화면 한가운데(= 플레이어)만 잘라 확대한다. 캐릭터는 화면에서 102px 이라
+## 화면 한가운데(= 플레이어)만 잘라 확대한다. 캐릭터는 화면에서 51px 이라
 ## 전체 화면 캡처로는 색·머리모양을 눈으로 판정하기 어렵다.
 func _crop_shot(shot_name: String) -> void:
 	var image := _screen()
