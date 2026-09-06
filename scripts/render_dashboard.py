@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 INBOX = ROOT / "docs" / "feedback" / "INBOX.md"
 STATUS = ROOT / "docs" / "STATUS.md"
+LATER = ROOT / "docs" / "feedback" / "LATER.md"
 WARN = ROOT / ".harness" / "WARNING"
 OUT = ROOT / "docs" / "index.html"
 
@@ -35,6 +36,30 @@ def read_inbox():
     return done, todo
 
 
+def read_later():
+    """LATER.md 의 "## 목록" 아래 최상위 항목들. **작업 큐가 아니다** — 루프는 이
+    파일을 읽지 않는다(loop.sh 의 next_item 은 INBOX.md 만 본다). 사람이 "나중에
+    할 것"을 적어두는 곳이고, 여기서는 보여주기만 한다.
+
+    항목 하나가 여러 줄에 걸쳐 있을 수 있어서(들여쓴 줄은 이어지는 설명이다),
+    `- ` 로 시작하는 줄에서 새 항목을 열고 들여쓴 줄은 거기에 이어 붙인다.
+    """
+    if not LATER.exists():
+        return []
+    items, seen_heading = [], False
+    for line in LATER.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            seen_heading = True
+            continue
+        if not seen_heading:
+            continue
+        if line.startswith("- "):
+            items.append(line[2:].strip())
+        elif line.strip() and line.startswith((" ", "\t")) and items:
+            items[-1] += " " + line.strip()
+    return items
+
+
 def git(*args):
     try:
         return subprocess.run(["git", "-C", str(ROOT), *args],
@@ -45,6 +70,7 @@ def git(*args):
 
 def main():
     done, todo = read_inbox()
+    later = read_later()
     nxt = todo[0] if todo else None
     warning = WARN.read_text(encoding="utf-8").strip() if WARN.exists() else ""
     # 예산 상한을 없앴으므로(env.sh) 누적 사용량은 항상 보이게 둔다.
@@ -77,6 +103,15 @@ def main():
     todo_rows = "\n".join(
         f'<li><span class="num">#{n}</span> {e(t)}</li>' for n, t in todo[:15]) or '<li class="idle">없음</li>'
 
+    # LATER.md 는 사람이 쓰는 마크다운이라 **강조**가 섞인다. 이스케이프를 **먼저**
+    # 하고(태그 주입 방지) 그 다음에 별표만 <strong> 으로 바꾼다 — 순서를 뒤집으면
+    # 항목 본문에 적힌 꺾쇠가 그대로 태그가 된다.
+    def later_html(t):
+        return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", e(t))
+
+    later_rows = "\n".join(
+        f'<li>{later_html(t)}</li>' for t in later[:20]) or '<li class="idle">없음</li>'
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
@@ -100,6 +135,7 @@ h2 {{ font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:va
 ul {{ margin:0; padding-left:1.1rem; }} li {{ margin:.15rem 0; }}
 .num {{ color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }}
 .idle {{ color:var(--dim); }}
+.later li {{ color:var(--dim); }} .later strong {{ color:var(--fg); font-weight:600; }}
 pre {{ margin:.4rem 0 0; white-space:pre-wrap; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
 code {{ font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
 .warn {{ background:#7a2618; color:#fff; border-radius:10px; padding:1rem 1.2rem; margin-bottom:1.2rem; }}
@@ -117,6 +153,10 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <section><h2>마지막 커밋</h2><code>{e(last_commit) or '(없음)'}</code>
   <p class="sub" style="margin:.3rem 0 0">{e(last_commit_when)}</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
+<section><h2>나중에 할 것</h2>
+  <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
+  만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/feedback/LATER.md</code>)</p>
+  <ul class="later">{later_rows}</ul></section>
 <footer>갱신: {now} · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
