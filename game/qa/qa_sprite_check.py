@@ -49,8 +49,8 @@ def _player_palette():
     return gen.palette(), gen.INK, gen.GLINT
 
 
-SPECS = {
-    "player_idle.png": dict(
+def _player_spec(**over):
+    return dict(dict(
         cell=34,
         rows=["down", "left", "right", "up"],
         palette=_player_palette,
@@ -78,7 +78,21 @@ SPECS = {
         # 일부러 무채색인 색(옷색 「잿빛」 등)으로 팔레트를 갈아끼운 시트를 새로
         # 등록할 때는 그 시트의 스펙에서 이 값을 따로 낮춰 잡을 것.
         chroma_mean=34.0,
-    ),
+    ), **over)
+
+
+# 머리모양 4종은 **형태만 다르고 팔레트·비율·광원이 같다** — 그래서 스펙도 하나를
+# 돌려 쓴다. 다만 **머리카락이 길수록 그 시트는 실제로 더 어둡고 덜 쨍하다**
+# (기준색의 머리는 검정 = 무채색이다). 그래서 그 셋(평균명도/어두운비율/채도)만
+# 시트마다 늦춘다 — 기준을 봐주는 게 아니라 시트가 그리는 대상이 다른 것이다.
+# **나머지 검사(대비/명암폭/실루엣/팔레트/바운딩)는 한 칸도 안 늦춘다.**
+SPECS = {
+    "player_idle_short.png": _player_spec(),
+    "player_idle_ponytail.png": _player_spec(luma_mean=(94.0, 170.0)),
+    "player_idle_bob.png": _player_spec(luma_mean=(90.0, 170.0), dark_frac=0.26,
+                                        chroma_mean=35.0),
+    "player_idle_long.png": _player_spec(luma_mean=(85.0, 170.0), dark_frac=0.30,
+                                         chroma_mean=31.0),
 }
 
 
@@ -220,21 +234,29 @@ def check_sheet(path, spec):
         matmap[body & np.all(rgb == np.array(c), axis=-1)] = m
     L = luma(rgb)
 
+    # 재질 — 검사 대상 재질이 그림에 실제로 있는지 먼저 본다. 아래 「대비」가
+    # "안 맞닿으면 건너뛴다"이므로, 이게 없으면 **재질이 통째로 사라진 그림**이
+    # 대비 검사를 조용히 통과해버린다.
+    want = sorted({m for pair in spec["contrast"] for m in pair[:2]})
+    missing = [m for m in want if int((matmap == m).sum()) < 4]
+    rep.add(not missing, "재질", "안 보이는 재질: %s" % ", ".join(missing))
+
     # 대비 — **경계에서** 갈리는지 본다. 재질 전체 평균으로 보면 넓은 면의 밝은
     # 부분이 평균을 끌어올려서 "맞닿은 자리는 붙어 보이는데 통과"가 된다.
+    # **안 맞닿는 쌍은 건너뛴다**(리포트에 `-` 로 남는다) — 예를 들어 긴 머리는
+    # 목을 덮어서 피부와 셔츠가 어디서도 닿지 않는다. 그건 불합격이 아니다.
     gaps = []
     for m1, m2, need in spec["contrast"]:
         a1, a2 = matmap == m1, matmap == m2
         t1, t2 = a1 & _neighbors(a2), a2 & _neighbors(a1)
         n = min(int(t1.sum()), int(t2.sum()))
-        if n < 4:
-            gaps.append((None, m1, m2, need, n))
-            continue
-        gaps.append((abs(float(L[t1].mean()) - float(L[t2].mean())), m1, m2, need, n))
-    bad = ["%s|%s %s<%.0f" % (m1, m2, "없음" if g is None else "%.0f" % g, need)
-           for g, m1, m2, need, n in gaps if g is None or g < need]
+        gaps.append((None if n < 4 else abs(float(L[t1].mean()) - float(L[t2].mean())),
+                     m1, m2, need, n))
+    bad = ["%s|%s %.0f<%.0f" % (m1, m2, g, need)
+           for g, m1, m2, need, n in gaps if g is not None and g < need]
     rep.add(not bad, "대비", " ".join(bad),
-            " ".join("%s|%s %.0f" % (m1, m2, g) for g, m1, m2, _, _ in gaps))
+            " ".join("%s|%s %s" % (m1, m2, "-" if g is None else "%.0f" % g)
+                     for g, m1, m2, _, _ in gaps))
 
     # 명도 분포 — 잉크(외곽선·눈)를 빼고 본다
     vals = L[body & (matmap != "")]

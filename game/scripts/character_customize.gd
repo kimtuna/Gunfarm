@@ -2,9 +2,9 @@ extends Control
 
 ## 캐릭터 커스터마이징 화면 (docs/DESIGN.md "캐릭터 커스터마이징 항목").
 ##
-## 이름 입력 + 피부색/머리색/옷색(고정 팔레트) + 머리모양 3~4종을 고르고 확정하면
-## 고른 슬롯에 저장되고 월드로 들어간다. 실제 캐릭터 그림은 아직 없어서 미리보기는
-## 색 사각형이다 (scripts/appearance_preview.gd).
+## 이름 입력 + 피부색/머리색/옷색(고정 팔레트) + 머리모양 4종을 고르고 확정하면
+## 고른 슬롯에 저장되고 월드로 들어간다. 미리보기는 **실제 게임 스프라이트**이고,
+## 고른 색은 팔레트 교체로 반영된다 (scripts/appearance_preview.gd).
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const Appearance := preload("res://scripts/character_appearance.gd")

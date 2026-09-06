@@ -29,10 +29,12 @@ OUT = os.environ.get("GEN_OUT") or os.path.dirname(os.path.abspath(__file__))
 INK = (38, 28, 44)          # 공통 잉크색 #261C2C — 순검정을 쓰지 않는다
 GLINT = (247, 240, 232)     # 눈 하이라이트
 
-# `character_appearance.gd` 의 기본 선택지 = 이번 기준색 1벌
-BASE_SKIN = "f0c8a0"        # 밝은
-BASE_HAIR = "211c1a"        # 검정
-BASE_CLOTH = "4e7a3a"       # 풀색
+# `character_appearance.gd` 의 기본 선택지 = 이번 기준색 1벌.
+# id 도 같이 들고 있는다 — 게임이 "이 PNG 는 어떤 색으로 구워졌나"를 알아야
+# 그 색을 출발점으로 다른 색으로 바꿔치기할 수 있다(`export_palettes()`).
+BASE_SKIN_ID, BASE_SKIN = "light", "f0c8a0"       # 밝은
+BASE_HAIR_ID, BASE_HAIR = "black", "211c1a"       # 검정
+BASE_CLOTH_ID, BASE_CLOTH = "grass", "4e7a3a"     # 풀색
 
 # 바지/신발은 옷색을 어둡게 쓴다 — 팔레트를 늘리지 않고 상하의를 구분한다
 # (DESIGN.md 「캐릭터 커스터마이징 항목」). 실제 어두워지는 정도는 아래 BANDS 의
@@ -108,8 +110,11 @@ FLOOR = INK_LUMA + 7.0      # 램프 맨 아래도 외곽선보다는 확실히 
 HAIR_FLOOR = INK_LUMA + 2.0  # 검은 머리만 여유를 줄인다 — 그래도 잉크 위다
 
 
+CEIL = 242.0                # 램프 맨 위 한계 — 이 위는 순백으로 뭉개진다
+
+
 def make_ramp(base, target, hi_to=WARM, hi_mix=0.24, sat=(0.92, 1.0, 1.14, 1.24),
-              ramp=RAMP, floor=FLOOR):
+              ramp=RAMP, floor=FLOOR, ceil=CEIL):
     """기준색 + **목표 명도** → 밝은면/기본/그늘/가장어두움 4단계.
 
     값을 치르고 알아낸 것(되돌리지 말 것):
@@ -121,10 +126,14 @@ def make_ramp(base, target, hi_to=WARM, hi_mix=0.24, sat=(0.92, 1.0, 1.14, 1.24)
         된다 — 코어키퍼풍의 "탁하지 않은" 느낌은 여기서 나온다.
       - **그늘은 자주(DUSK) 쪽으로, 밝은면은 햇빛(WARM) 쪽으로** 살짝 민다.
       - 맨 아래 단계도 `floor`(잉크 명도 + 여유) 아래로 못 내려간다.
+      - **맨 위 단계도 `ceil` 위로 못 올라간다**(2026-09-06, INBOX #11). 램프
+        배율은 검정 머리 기준이라 금발·은발에 곱하면 목표 명도가 255 를 넘고,
+        그러면 `set_luma()` 가 흰색을 섞어 채워서 밝은면이 **순백 덩어리**가
+        된다 — 색을 골랐는데 하이라이트만 보면 금발과 은발이 똑같아진다.
     """
     steps = []
     for i, mul in enumerate(ramp):
-        t = max(target * mul, floor if i else 0.0)
+        t = min(max(target * mul, floor if i else 0.0), ceil)
         c = _chroma(base, sat[i])
         if i == 0:
             c = _mix(c, hi_to, hi_mix)
@@ -508,12 +517,61 @@ def _body(b, d, cfg, pose):
     return limbs
 
 
+def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3):
+    """아래로 흘러내리는 머리단 — 아래로 갈수록 좁아지고 끝이 둥근 기둥.
+
+    `rbox` 로는 못 만든다(폭이 일정하다). 도트에서 머리단이 "붙인 판자"로 안
+    보이려면 **끝이 좁아지고 둥글어야** 한다. 높이는 x 방향으로 부푼 원기둥이라
+    가운데가 밝고 양옆이 그늘진다 — 머리 껍데기와 같은 입체감이 나온다.
+    """
+    t = np.clip((GY - y0) / max(y1 - y0, 1e-6), 0.0, 1.0)
+    half = np.maximum(hw - taper * t, 0.6)
+    dx = np.abs(GX - cx)
+    body = (GY >= y0) & (GY <= y1 - tip) & (dx <= half)
+    # 끝동 — 잘린 자리가 자로 그은 듯 반듯하면 가발처럼 보인다
+    ty = np.clip((GY - (y1 - tip)) / tip, 0.0, 1.0)
+    cap = (GY > y1 - tip) & (GY <= y1) & (dx <= half * np.sqrt(np.clip(1 - ty * ty, 0, 1)))
+    m = body | cap
+    h = np.sqrt(np.clip(1 - (dx / np.maximum(half, 1e-6)) ** 2, 0, 1)) * (ROUND * hw)
+    return m, h * m
+
+
+def _tail(b, part, cx, y0, y1, lift, w=2.2):
+    """묶은 꼬리 — 위아래가 뾰족한 타원. 폭이 일정한 막대기로 만들면 꼬리가
+    아니라 손잡이로 보인다. 머리 껍데기와 겹치게 시작해서 실루엣을 잇는다."""
+    return b.add(ellipsoid(cx, (y0 + y1) * 0.5, w, (y1 - y0) * 0.5),
+                 "hair", part=part, lift=lift)
+
+
+# ── 머리모양 4종 ──────────────────────────────────────────────────────────
+# id 는 `game/scripts/character_appearance.gd` 의 HAIRSTYLE 과 같아야 한다.
+# **형태만 다르고 팔레트·비율·광원은 전부 같다** — 그래야 네 개를 나란히 놓아도
+# 같은 캐릭터로 읽힌다(DESIGN.md 「그래픽 파이프라인」 1) 어울림).
+#
+#   sides   옆머리(구레나룻)가 내려오는 깊이 보정. 음수면 귀 위에서 끊긴다
+#   fall    옆머리 아래로 더 흘러내리는 머리단 길이 (앞/옆모습에서 보이는 것)
+#   fw      그 머리단의 반폭. **단발은 길이가 아니라 이 폭으로 구별된다** —
+#           짧게만 자르면 「짧은머리」와 붙어 보이고, 길게 늘이면 「긴머리」와 붙는다
+#   back    뒤통수 아래로 이어지는 머리단 길이 (뒷/옆모습에서 보이는 덩어리)
+#   strand  앞머리에 결 한 줄을 넣을지 (좌우대칭을 깨서 밋밋함을 없앤다)
+#   tail    묶은 꼬리 길이. 0 이면 없다
+HAIR_STYLES = {
+    "short":    dict(sides=0.0,  fall=0.0, fw=0.0,  back=0.0, strand=True,  tail=0.0),
+    "bob":      dict(sides=2.4,  fall=1.1, fw=2.45, back=2.4, strand=False, tail=0.0),
+    "long":     dict(sides=2.0,  fall=5.8, fw=1.65, back=6.8, strand=False, tail=0.0),
+    "ponytail": dict(sides=-1.2, fall=0.0, fw=0.0,  back=0.0, strand=False, tail=5.2),
+}
+
+
 def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     """머리카락. 앞머리는 얼굴보다 앞으로 lift 해서 경계가 살아나게 한다.
 
     **덧붙이는 갈래는 전부 머리 껍데기(shell) 안으로 잘라 넣는다** — 안 그러면
-    실루엣 밖으로 혹처럼 튀어나온다.
+    실루엣 밖으로 혹처럼 튀어나온다. 껍데기 **밖으로** 나가는 것(흘러내린 머리단,
+    묶은 꼬리)은 예외인데, 그때는 반드시 껍데기와 겹치게 시작해야 실루엣이 한
+    덩어리로 남는다(`qa_sprite_check.py` 「실루엣」).
     """
+    st = HAIR_STYLES.get(style, HAIR_STYLES["short"])
     grow = 0.15 if d == "up" else 0.6   # 뒷모습은 얼굴이 없어 껍데기가 곧 실루엣이다
     shell = ellipsoid(hx, hy, rx + grow, ry + 0.5)
     sm = shell[0]
@@ -539,12 +597,28 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         # 뒷모습에서 헤어라인을 물결지게 해봤더니 덤불처럼 보여서 이쪽을 골랐다.
         b.add(ellipsoid(hx - 1.7, hy - 2.2, 3.0, 2.7), "hair",
               mask=sm, part=cap, lift=LIFT + 0.05, blend="max")
+        # 뒤로 이어지는 머리단(단발/긴머리) — 껍데기와 겹치게 시작한다.
+        # 아래로 갈수록 좁아지는 사다리꼴이라야 어깨에 얹힌 것처럼 보인다.
+        nape = None
+        if st["back"] > 0.0:
+            nape = _fall_shape(hx, rx + grow - 0.7, hy, hy + ry + 0.5 + st["back"], taper=1.4)
+            b.add(nape, "hair", part=cap, lift=LIFT)
+        if st["tail"] > 0.0:
+            # 뒷모습 — 꼬리는 **머리보다 확실히 좁아야** 묶인 것으로 읽힌다.
+            # 넓게 잡았더니 머리와 이어진 한 덩어리가 되어 긴머리처럼 보였다.
+            ty0, ty1 = hy + 4.2, hy + ry + 0.5 + st["tail"]
+            tail = ellipsoid(hx, (ty0 + ty1) * 0.5, 2.15, (ty1 - ty0) * 0.5)
+            b.add(tail, "hair", part=cap, lift=LIFT)
+            b.add(tail, "hair", mask=GX > hx + 0.4, lift=LIFT)   # 결 한 줄
         # 머리결 — **부위 id 만 다른 같은 껍데기**를 세로로 몇 줄 얹으면 그 경계에
         # 내부선이 들어가 머리카락 가닥이 된다. 이게 없으면 뒷모습이 매끈한
         # 회색 달걀(=민머리/헬멧)로 보인다. 물결진 헤어라인은 여기서도 덤불이
         # 됐고, 세로 결이 훨씬 머리카락처럼 읽혔다.
         for off in (-3.6, 0.3, 3.8):
-            b.add(shell, "hair", mask=sm & (np.abs(GX - (hx + off)) < 0.9), lift=LIFT)
+            band = np.abs(GX - (hx + off)) < 0.9
+            b.add(shell, "hair", mask=sm & band, lift=LIFT)
+            if nape is not None:
+                b.add(nape, "hair", mask=band, lift=LIFT)
         return
 
     # 앞머리를 비스듬히 자른다 — 수평으로 자르면 바가지머리가 된다
@@ -553,7 +627,7 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     cap = b.add(shell, "hair", mask=below(edge), lift=LIFT)
 
     # 옆머리(구레나룻) — 얼굴 옆을 감싸 내려온다
-    down = cfg["side_hair"] + bob
+    down = cfg["side_hair"] + bob + st["sides"]
     for s in (-1, 1):
         if side and s == sx:
             continue                          # 옆모습에서 얼굴 쪽 옆머리는 없다
@@ -571,7 +645,37 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     ends = [-(rx - 0.6), rx - 0.6] if not side else [-sx * (rx - 0.6)]
     b.add(scallop(down - 0.9, ends, r=1.4), "hair", mask=sm, part=cap, lift=LIFT, blend="max")
 
-    if style == "short":
+    # 흘러내리는 머리단(단발/긴머리). 앞모습은 양옆으로, 옆모습은 뒤통수 뒤로
+    # 한 갈래만 — 옆에서 보면 반대쪽 머리단은 몸에 가린다.
+    if st["fall"] > 0.0:
+        hw = st["fw"]
+        xs = [hx - sx * (rx + grow - hw)] if side \
+            else [hx - (rx + grow - hw), hx + (rx + grow - hw)]
+        for i, fx in enumerate(xs):
+            fall = _fall_shape(fx, hw, hy + 1.0, down + st["fall"], taper=hw * 0.32)
+            b.add(fall, "hair", part=cap, lift=LIFT)
+            # 결 한 줄 — 넓은 면이 통짜로 남으면 판자처럼 보인다
+            b.add(fall, "hair", mask=GX > fx + 0.35, lift=LIFT)
+
+    # 뒤통수 아래로 이어지는 덩어리 — 옆모습에서 단발/긴머리의 부피를 만든다
+    if st["back"] > 0.0 and side:
+        nw = st["fw"] + 0.5
+        nape = _fall_shape(hx - sx * (rx + grow - nw), nw, hy + 1.0,
+                           hy + ry + 0.5 + st["back"], taper=nw * 0.45)
+        b.add(nape, "hair", part=cap, lift=LIFT)
+
+    if st["tail"] > 0.0:
+        # **묶은 꼬리는 머리 실루엣 밖으로 나와야 읽힌다.** 안쪽에 두면 앞머리와
+        # 한 덩어리가 되어 바가지머리로 보인다(실제로 한 번 그렇게 나왔다).
+        # 앞모습은 옆으로 흘러내린 곁꼬리, 옆모습은 뒤통수 뒤로 나온다.
+        if side:
+            _tail(b, cap, hx - sx * (rx + grow - 0.5), hy - 1.0,
+                  down + st["tail"] * 1.6, LIFT, w=2.1)
+        else:
+            _tail(b, cap, hx + (rx + grow - 1.0), hy - 1.4,
+                  down + st["tail"] * 1.2, LIFT, w=1.9)
+
+    if st["strand"]:
         # 앞머리 한 갈래 — 위와 같은 방법(부위 id 만 다른 같은 껍데기)으로 결 한 줄.
         # 좌우대칭이 깨져서 밋밋함이 사라진다.
         tip = 1.0 if not side else sx
@@ -718,10 +822,109 @@ def idle_sheet(pal=None, **over):
     return sheet(lambda d: [character(d, pal=pal, **over)])
 
 
+def idle_path(style):
+    """머리모양 하나당 시트 하나. `player_frames.gd` 의 `sheet_path()` 와 같은 규칙이다."""
+    return f"{SPRITES}/player_idle_{style}.png"
+
+
+# ── Godot 쪽 팔레트 표 ─────────────────────────────────────────────────────
+# 게임은 **기준색으로 구운 시트 한 장의 색을 바꿔치기해서** 나머지 색을 만든다
+# (STYLE_GUIDE 2번 — 형태를 다시 그리지 않는다). 그러려면 Godot 이 램프 색을
+# 알아야 하는데, 위 `make_ramp()` 를 GDScript 로 옮겨 적으면 반드시 어긋난다.
+# 그래서 **여기서 계산한 값을 GDScript 상수 파일로 뽑아준다**(손으로 고치지 말 것).
+PALETTE_GD = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "character_palettes.gd"))
+
+# `character_appearance.gd` 의 팔레트와 같아야 한다. 여기만 늘리면 화면에는 안
+# 뜨고, 저기만 늘리면 램프가 없어서 색이 안 바뀐다 — `qa_character_customize.gd`
+# 가 둘이 같은지 검사한다.
+SKIN_IDS = [("light", "f0c8a0"), ("warm", "d9a066"), ("tan", "b07a4a"),
+            ("brown", "7a4a2b"), ("deep", "4e2e1c")]
+HAIR_IDS = [("black", "211c1a"), ("brown", "6b4a2a"), ("blond", "d8b25c"),
+            ("auburn", "93402a"), ("silver", "b9bdb6"), ("indigo", "3e5c7a")]
+CLOTH_IDS = [("grass", "4e7a3a"), ("sky", "3e6e9e"), ("earth", "7a5230"),
+             ("plum", "7a3b5e"), ("ash", "5a5f58"), ("ember", "b4543a")]
+
+
+def _rgb_hex(c):
+    return "%02x%02x%02x" % tuple(int(v) for v in c)
+
+
+def export_palettes(path=PALETTE_GD):
+    """커스터마이징 선택지별 램프를 GDScript 상수로 뽑는다.
+
+    **밴드가 항목마다 독립이라 이렇게 쪼갤 수 있다** — 피부 램프는 피부색만,
+    머리 램프는 머리색만, 셔츠/바지/신발 램프는 옷색만 보고 정해진다
+    (`bands_for()`). 그래서 5×6×6 조합을 다 굽지 않고 5+6+6 줄이면 된다.
+    """
+    def ramps(mat, table, **kw):
+        rows = []
+        for cid, hexcolor in table:
+            pal = palette(**{kw["key"]: hexcolor})
+            mats = kw["mats"]
+            if len(mats) == 1:
+                body = "[%s]" % ", ".join('"%s"' % _rgb_hex(c) for c in pal[mats[0]])
+            else:
+                body = "{%s}" % ", ".join(
+                    '"%s": [%s]' % (m, ", ".join('"%s"' % _rgb_hex(c) for c in pal[m]))
+                    for m in mats)
+            rows.append('\t"%s": %s,' % (cid, body))
+        return "\n".join(rows)
+
+    text = '''extends RefCounted
+
+## **자동 생성 파일이다 — 손으로 고치지 말 것.**
+## `game/tools/gen_character.py` 의 `export_palettes()` 가 만든다
+## (`.venv/bin/python game/tools/gen_character.py`).
+##
+## 왜 이런 게 필요한가: 캐릭터 스프라이트는 **기준색 1벌로만 굽고**, 나머지 색은
+## 그 PNG 의 색을 바꿔치기해서 만든다(`docs/STYLE_GUIDE.md` 2번 — 형태를 다시
+## 그리지 않는다). 그러려면 게임이 재질별 4단계 램프의 실제 색을 알아야 하는데,
+## 램프를 만드는 계산(`make_ramp()`)을 GDScript 로 옮겨 적으면 생성기와 어긋난다.
+## 그래서 **생성기가 계산한 값을 그대로 여기에 적어 내려보낸다.**
+##
+## 항목마다 램프가 독립이라 5×6×6 조합을 다 적을 필요가 없다 — 피부색은 피부
+## 램프만, 머리색은 머리 램프만, 옷색은 셔츠/바지/신발 램프를 정한다.
+
+## 시트를 구울 때 쓴 기준색. 색 바꿔치기의 **출발점**이다.
+## 키는 `character_appearance.gd` 의 항목 이름과 같다.
+const BASE := {"skin": "%s", "hair_color": "%s", "clothes_color": "%s"}
+
+## 공통 잉크색(외곽선·눈)과 눈 하이라이트 — 커스터마이징과 무관하게 고정이다.
+const INK := "%s"
+const GLINT := "%s"
+
+const SKIN := {
+%s
+}
+
+const HAIR := {
+%s
+}
+
+## 옷색 하나가 셔츠/바지/신발 세 재질의 램프를 함께 정한다.
+const CLOTHES := {
+%s
+}
+''' % (BASE_SKIN_ID, BASE_HAIR_ID, BASE_CLOTH_ID, _rgb_hex(INK), _rgb_hex(GLINT),
+       ramps("skin", SKIN_IDS, key="skin", mats=["skin"]),
+       ramps("hair", HAIR_IDS, key="hair", mats=["hair"]),
+       ramps("cloth", CLOTH_IDS, key="cloth", mats=["shirt", "pants", "boot"]))
+    with open(path, "w") as f:
+        f.write(text)
+    return path
+
+
 if __name__ == "__main__":
-    path = f"{SPRITES}/player_idle.png"
-    idle_sheet().save(path)
-    print("saved", path)
+    for style in HAIR_STYLES:
+        p = idle_path(style)
+        idle_sheet(hair=style).save(p)
+        print("saved", p)
+    print("saved", export_palettes())
     if os.environ.get("GEN_OUT"):     # 후보 비교용 — 저장소를 더럽히지 않는다
         strip([to_img(character(d), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
         strip([to_img(character(d), 3) for d in DIRS]).save(f"{OUT}/idle_x3.png")
+        stack([strip([to_img(character(d, hair=s), 6) for d in DIRS])
+               for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x6.png")
+        stack([strip([to_img(character(d, hair=s), 3) for d in DIRS])
+               for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x3.png")

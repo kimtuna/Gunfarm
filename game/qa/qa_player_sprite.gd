@@ -1,6 +1,6 @@
 extends SceneTree
 
-## INBOX #8 자체 QA — 플레이어 idle 스프라이트 시트.
+## 플레이어 idle 스프라이트 시트 자체 QA (INBOX #8, 머리모양 4종으로 확장 #11).
 ##
 ## 실행 (캡처까지 하려면 `--headless` 를 빼야 한다 — docs/GOTCHAS.md):
 ##   /Applications/Godot.app/Contents/MacOS/Godot --path game --script qa/qa_player_sprite.gd
@@ -18,7 +18,11 @@ extends SceneTree
 ## 그림이 "보기 좋은가"는 코드가 판정할 수 없다. 이 스크립트는 **기계로 판정할 수
 ## 있는 것만** 보고, 눈으로 볼 몫은 `user://qa_shots/` 에 캡처를 남긴다.
 
-const SHEET_PATH := "res://assets/sprites/player_idle.png"
+const PlayerFrames := preload("res://scripts/player_frames.gd")
+
+## 머리모양마다 시트가 따로다 — **네 장 전부 같은 규격이어야** 커스터마이징에서
+## 골라도 캐릭터 크기가 안 바뀐다.
+const STYLES := ["short", "bob", "long", "ponytail"]
 const SHOTS := "user://qa_shots"
 const CELL := 34
 const SCALE := 3
@@ -32,31 +36,38 @@ const COLOR_LAND := Color(0.286275, 0.415686, 0.243137)
 
 var _fails: Array[String] = []
 var _image: Image = null
+var _style := ""
 var _frames := 0
 
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS)
-	var texture: Texture2D = load(SHEET_PATH)
-	if texture == null:
-		_fails.append("시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % SHEET_PATH)
-		_report()
-		return
-	_image = texture.get_image()
-
-	_check_sheet_size()
-	_check_frames()
-	_check_pixels()
+	for style in STYLES:
+		_style = style
+		var path := PlayerFrames.sheet_path("idle", style)
+		var texture: Texture2D = load(path)
+		if texture == null:
+			_fail("시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % path)
+			continue
+		_image = texture.get_image()
+		_check_sheet_size()
+		_check_frames()
+		_check_pixels()
 	_check_filter()
 	_build_board()
 	# 캡처는 `_process` 에서 몇 프레임 지난 뒤에 한다 — `_initialize()` 안에서
 	# await 하면 그 코루틴이 끝나기 전에 `quit()` 이 먼저 돌아 캡처가 통째로 빠진다.
 
 
+## 실패 메시지에 어느 머리모양인지 붙인다 — 안 붙이면 네 장 중 어느 것인지 모른다.
+func _fail(message: String) -> void:
+	_fails.append("[%s] %s" % [_style, message])
+
+
 func _check_sheet_size() -> void:
 	var want := Vector2i(CELL, CELL * DIRS.size())
 	if _image.get_size() != want:
-		_fails.append("시트 크기가 %s 인데 %s 여야 한다" % [_image.get_size(), want])
+		_fail("시트 크기가 %s 인데 %s 여야 한다" % [_image.get_size(), want])
 
 
 ## 칸 안에서 실제로 칠해진 부분의 사각형.
@@ -86,14 +97,14 @@ func _check_frames() -> void:
 		var box := _bounds(row)
 		boxes.append(box)
 		if box.size == Vector2i.ZERO:
-			_fails.append("%s: 빈 칸이다" % DIRS[row])
+			_fail("%s: 빈 칸이다" % DIRS[row])
 			continue
 		if box.position.x < 1 or box.position.y < 1 \
 				or box.end.x > CELL - 1 or box.end.y > CELL - 1:
-			_fails.append("%s: 칸 가장자리에 붙어 잘렸다 %s — 외곽선 자리가 없다" % [DIRS[row], box])
+			_fail("%s: 칸 가장자리에 붙어 잘렸다 %s — 외곽선 자리가 없다" % [DIRS[row], box])
 		if box.size.y < CELL * 0.7:
-			_fails.append("%s: 캐릭터가 칸에 비해 너무 작다 (높이 %d)" % [DIRS[row], box.size.y])
-		print("[qa] %-5s bbox=%s" % [DIRS[row], box])
+			_fail("%s: 캐릭터가 칸에 비해 너무 작다 (높이 %d)" % [DIRS[row], box.size.y])
+		print("[qa] %-8s %-5s bbox=%s" % [_style, DIRS[row], box])
 
 	# 방향마다 다른 호출로 그려지므로, 세트 안에서 크기가 어긋나지 않았는지 직접 잰다.
 	var heights: Array[int] = []
@@ -118,10 +129,10 @@ func _spread(what: String, values: Array[int], allowed: int) -> void:
 		lo = mini(lo, v)
 		hi = maxi(hi, v)
 	if hi - lo > allowed:
-		_fails.append("방향마다 %s가 %d~%d 로 어긋난다 (허용 %d) — 같은 캐릭터로 안 보인다"
+		_fail("방향마다 %s가 %d~%d 로 어긋난다 (허용 %d) — 같은 캐릭터로 안 보인다"
 				% [what, lo, hi, allowed])
 	else:
-		print("[qa] %s %d~%d (허용 폭 %d)" % [what, lo, hi, allowed])
+		print("[qa] %-8s %s %d~%d (허용 폭 %d)" % [_style, what, lo, hi, allowed])
 
 
 func _check_pixels() -> void:
@@ -139,22 +150,22 @@ func _check_pixels() -> void:
 			if c.r8 == 0 and c.g8 == 0 and c.b8 == 0:
 				black += 1
 	if semi > 0:
-		_fails.append("반투명 픽셀 %d개 — 도트는 알파가 0 아니면 255 여야 한다" % semi)
+		_fail("반투명 픽셀 %d개 — 도트는 알파가 0 아니면 255 여야 한다" % semi)
 	if black > 0:
-		_fails.append("순검정 픽셀 %d개 — 외곽선은 잉크색(%s)을 쓴다" % [black, INK.to_html(false)])
+		_fail("순검정 픽셀 %d개 — 외곽선은 잉크색(%s)을 쓴다" % [black, INK.to_html(false)])
 	if colors.size() > MAX_COLORS:
-		_fails.append("색이 %d종 — 제한 팔레트(%d종 이하)를 벗어났다" % [colors.size(), MAX_COLORS])
+		_fail("색이 %d종 — 제한 팔레트(%d종 이하)를 벗어났다" % [colors.size(), MAX_COLORS])
 	else:
-		print("[qa] 색 %d종 (상한 %d)" % [colors.size(), MAX_COLORS])
+		print("[qa] %-8s 색 %d종 (상한 %d)" % [_style, colors.size(), MAX_COLORS])
 	if not colors.has(INK.to_html(false)):
-		_fails.append("잉크색(%s)이 한 픽셀도 없다 — 외곽선이 빠졌다" % INK.to_html(false))
+		_fail("잉크색(%s)이 한 픽셀도 없다 — 외곽선이 빠졌다" % INK.to_html(false))
 
 
 func _check_filter() -> void:
 	var filter: int = ProjectSettings.get_setting(
 			"rendering/textures/canvas_textures/default_texture_filter", -1)
 	if filter != 0:
-		_fails.append("텍스처 필터가 %d — nearest(0) 가 아니면 도트가 흐려진다" % filter)
+		_fail("텍스처 필터가 %d — nearest(0) 가 아니면 도트가 흐려진다" % filter)
 
 
 func _process(_delta: float) -> bool:
@@ -167,23 +178,28 @@ func _process(_delta: float) -> bool:
 	return true
 
 
-## 눈으로 볼 몫. 실제 게임 배율(3배)로, 지형 색 위에 4방향을 나란히 그려 캡처한다.
+## 눈으로 볼 몫. 실제 게임 배율(3배)로, 지형 색 위에 **머리모양 4종 × 방향 4개**를
+## 격자로 그려 캡처한다 — 나란히 놓지 않으면 서로 어울리는지 판단할 수 없다.
 func _build_board() -> void:
-	var texture: Texture2D = load(SHEET_PATH)
+	var step := CELL * SCALE + 24
 	var board := ColorRect.new()
 	board.color = COLOR_LAND
-	board.size = Vector2(CELL * SCALE * DIRS.size() + 160, CELL * SCALE + 80)
+	board.size = Vector2(step * DIRS.size() + 40, step * STYLES.size() + 40)
 	root.add_child(board)
-	for row in DIRS.size():
-		var atlas := AtlasTexture.new()
-		atlas.atlas = texture
-		atlas.region = Rect2(0, row * CELL, CELL, CELL)
-		var view := TextureRect.new()
-		view.texture = atlas
-		view.position = Vector2(40 + row * (CELL * SCALE + 32), 40)
-		view.size = Vector2(CELL, CELL) * SCALE
-		view.stretch_mode = TextureRect.STRETCH_SCALE
-		board.add_child(view)
+	for s in STYLES.size():
+		var texture: Texture2D = load(PlayerFrames.sheet_path("idle", STYLES[s]))
+		if texture == null:
+			continue
+		for row in DIRS.size():
+			var atlas := AtlasTexture.new()
+			atlas.atlas = texture
+			atlas.region = Rect2(0, row * CELL, CELL, CELL)
+			var view := TextureRect.new()
+			view.texture = atlas
+			view.position = Vector2(20 + row * step, 20 + s * step)
+			view.size = Vector2(CELL, CELL) * SCALE
+			view.stretch_mode = TextureRect.STRETCH_SCALE
+			board.add_child(view)
 
 
 func _shoot() -> void:
@@ -192,7 +208,7 @@ func _shoot() -> void:
 		print("[qa] 캡처 건너뜀 — --headless 로 돌렸다(뷰포트 텍스처 없음)")
 		return
 	var shot := vp.get_image()
-	var path := "%s/80_player_idle.png" % SHOTS
+	var path := "%s/80_player_idle_hairstyles.png" % SHOTS
 	shot.save_png(path)
 	print("[qa] shot %s (%dx%d)" % [path, shot.get_width(), shot.get_height()])
 

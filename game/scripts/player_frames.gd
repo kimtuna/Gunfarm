@@ -6,7 +6,13 @@ extends RefCounted
 ## 열 = 프레임, 칸 34px. 걷기(INBOX #13)처럼 프레임이 늘어나는 시트가 생기면
 ## 여기만 고치면 되고 플레이어 노드는 손대지 않는다.
 
-const SHEET_IDLE := "res://assets/sprites/player_idle.png"
+## 시트는 **머리모양마다 한 장**이다 — 색은 팔레트 교체로 만들 수 있지만
+## (`character_sprite.gd`) 머리모양은 형태가 달라서 다시 그려야 하기 때문이다
+## (DESIGN.md 「캐릭터 커스터마이징 항목」의 "머리모양은 모양마다 …따로 필요하다").
+const SHEET_DIR := "res://assets/sprites"
+
+## 기본 머리모양 — `character_appearance.gd` 의 첫 번째 선택지와 같아야 한다.
+const DEFAULT_HAIRSTYLE := "short"
 
 ## 아트 한 칸(px). 아트 34px × 씬 스케일 3 = 화면 102px
 ## (docs/DESIGN.md 「아이템/오브젝트 크기 표준」).
@@ -24,11 +30,18 @@ const DIR_NAMES := ["down", "left", "right", "up"]
 const IDLE_FPS := 4.0
 
 
+## `<모션>` × `<머리모양>` 한 벌이 놓인 자리. 생성기(`gen_character.py` 의
+## `idle_path()`)와 같은 규칙이다 — 한쪽만 고치면 파일을 못 찾는다.
+static func sheet_path(motion: String, hairstyle: String) -> String:
+	return "%s/player_%s_%s.png" % [SHEET_DIR, motion, hairstyle]
+
+
 ## 이 시트로 만든 `SpriteFrames`. 애니메이션 이름은 `idle_down` 처럼 `<모션>_<방향>` 이다.
-static func build() -> SpriteFrames:
-	var texture: Texture2D = load(SHEET_IDLE)
+static func build(hairstyle: String = DEFAULT_HAIRSTYLE) -> SpriteFrames:
+	var path := sheet_path("idle", hairstyle)
+	var texture: Texture2D = load(path)
 	if texture == null:
-		push_error("플레이어 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % SHEET_IDLE)
+		push_error("플레이어 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % path)
 		return null
 	return _slice(texture, "idle", IDLE_FPS)
 
