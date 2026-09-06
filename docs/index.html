@@ -36,8 +36,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>다음 항목</h2><span class="num">#22</span> [BUILD] **맵을 마우스 휠로 줌인/줌아웃 한다.** `DESIGN.md` 「맵 (M)」 표와 그 아래 「맵 줌 (마우스 휠)」 항목이 이번에 추가됐으니 그대로 따를 것(2026-09-07 사람 결정). 지금은 `map_canvas.gd` 가 256×256 이미지를 정수 2배 고정으로 그린다.</section>
 <section><h2>대기 중인 항목</h2><ul><li><span class="num">#22</span> [BUILD] **맵을 마우스 휠로 줌인/줌아웃 한다.** `DESIGN.md` 「맵 (M)」 표와 그 아래 「맵 줌 (마우스 휠)」 항목이 이번에 추가됐으니 그대로 따를 것(2026-09-07 사람 결정). 지금은 `map_canvas.gd` 가 256×256 이미지를 정수 2배 고정으로 그린다.</li>
 <li><span class="num">#23</span> [BUILD] **인벤토리 + 핫바 — 데이터 구조와 UI 까지.** `DESIGN.md` 「인벤토리 / 장비」와 「인벤토리 안전」, 「아이템 카테고리」, 「아이템 소유권 상태」를 그대로 따를 것. **아이템을 실제로 얻는 경로(채집/드롭/제작)는 이번 범위가 아니다** — 그건 자원과 도구를 만드는 다음 항목들이 붙인다. 이번 바퀴는 **테스트용 아이템을 코드로 넣어서** 창이 제대로 도는지까지만 본다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>edc2bf1  docs: 맵 줌(INBOX #22) 큐잉 + 대시보드에 &quot;나중에 할 것&quot; 칸 추가</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 07:23</p></section>
+<section><h2>마지막 커밋</h2><code>38c0798  inbox: 인벤토리 + 핫바(#23) 큐잉</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 07:30</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #21 ([BUILD] `qa_player_world.gd` 의 프레임-수 대기를 시간 대기로)
 완료.
 
@@ -61,7 +61,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907073001";
+  var STAMP = "20260907073030";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
