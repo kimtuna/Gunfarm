@@ -30,28 +30,27 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>21</b><span>완료</span></div>
-  <div class="card"><b>3</b><span>남음</span></div>
+  <div class="card"><b>22</b><span>완료</span></div>
+  <div class="card"><b>2</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#22</span> [BUILD] **맵을 마우스 휠로 줌인/줌아웃 한다.** `DESIGN.md` 「맵 (M)」 표와 그 아래 「맵 줌 (마우스 휠)」 항목이 이번에 추가됐으니 그대로 따를 것(2026-09-07 사람 결정). 지금은 `map_canvas.gd` 가 256×256 이미지를 정수 2배 고정으로 그린다.</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#22</span> [BUILD] **맵을 마우스 휠로 줌인/줌아웃 한다.** `DESIGN.md` 「맵 (M)」 표와 그 아래 「맵 줌 (마우스 휠)」 항목이 이번에 추가됐으니 그대로 따를 것(2026-09-07 사람 결정). 지금은 `map_canvas.gd` 가 256×256 이미지를 정수 2배 고정으로 그린다.</li>
-<li><span class="num">#23</span> [BUILD] **인벤토리 + 핫바 — 데이터 구조와 UI 까지.** `DESIGN.md` 「인벤토리 / 장비」와 「인벤토리 안전」, 「아이템 카테고리」, 「아이템 소유권 상태」를 그대로 따를 것. **아이템을 실제로 얻는 경로(채집/드롭/제작)는 이번 범위가 아니다** — 그건 자원과 도구를 만드는 다음 항목들이 붙인다. 이번 바퀴는 **테스트용 아이템을 코드로 넣어서** 창이 제대로 도는지까지만 본다.</li>
+<section><h2>다음 항목</h2><span class="num">#23</span> [BUILD] **인벤토리 + 핫바 — 데이터 구조와 UI 까지.** `DESIGN.md` 「인벤토리 / 장비」와 「인벤토리 안전」, 「아이템 카테고리」, 「아이템 소유권 상태」를 그대로 따를 것. **아이템을 실제로 얻는 경로(채집/드롭/제작)는 이번 범위가 아니다** — 그건 자원과 도구를 만드는 다음 항목들이 붙인다. 이번 바퀴는 **테스트용 아이템을 코드로 넣어서** 창이 제대로 도는지까지만 본다.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#23</span> [BUILD] **인벤토리 + 핫바 — 데이터 구조와 UI 까지.** `DESIGN.md` 「인벤토리 / 장비」와 「인벤토리 안전」, 「아이템 카테고리」, 「아이템 소유권 상태」를 그대로 따를 것. **아이템을 실제로 얻는 경로(채집/드롭/제작)는 이번 범위가 아니다** — 그건 자원과 도구를 만드는 다음 항목들이 붙인다. 이번 바퀴는 **테스트용 아이템을 코드로 넣어서** 창이 제대로 도는지까지만 본다.</li>
 <li><span class="num">#24</span> [DESIGN] **도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례.** `DESIGN.md` 「새 도구를 추가하는 절차」가 이번에 새로 생겼으니 그 [DESIGN] 쪽 6단계를 그대로 따를 것. **도구는 앞으로 6종이 더 붙는다(총/곡괭이/낫/괭이/물뿌리개/낚싯대) — 이번 바퀴가 그 6번을 결정한다.** 잘 나온 방식이든 값을 치르고 알아낸 함정이든 `docs/STYLE_GUIDE.md` 에 남겨서, 다음 도구가 같은 삽질을 반복하지 않게 할 것.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>b20c348  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 07:30</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #21 ([BUILD] `qa_player_world.gd` 의 프레임-수 대기를 시간 대기로)
-완료.
+<section><h2>마지막 커밋</h2><code>c928471  [INBOX #22] 맵을 마우스 휠로 1/2/4/8배 줌인/줌아웃</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 07:49</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #22 ([BUILD] 맵 마우스 휠 줌 1/2/4/8배) 완료.
 
 ## 만든 것
 
-- **`qa_player_world.gd` 에서 프레임 수로 기다리는 코드를 전부 없앴다.** `_wait`</pre></section>
+- **`map_canvas.gd` 에 줌이 들어갔다.** 그림(256×256 이미지)은 그대로 두고 **붙이는
+  사각형(`map_rect()`)만** 바꾼다 — 배율이 바뀌어도 65,536칸을 다시 굽지 않는다.</pre></section>
 <section><h2>나중에 할 것</h2>
   <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
   만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/feedback/LATER.md</code>)</p>
   <ul class="later"><li><strong>맵에 마크(표식) 찍기</strong> — M 맵 위에 플레이어가 직접 표식을 남기고 지우는 기능. (2026-09-07 사람이 &quot;나중에 할 것&quot;으로 넣음.) 정해야 할 것: 표식 종류가 몇 개인지, 이름/메모를 붙일 수 있는지, 슬롯 저장에 어떻게 들어가는지(탐험 기록과 같은 자리), 그리고 <strong>멀티에서 표식을 팀원과 공유하는지</strong> — 공유한다면 `DESIGN.md` 「맵 (M)」의 &quot;맵에 다른 플레이어를 표시하지 않는다&quot;와 어디까지 어긋나는지 먼저 판단해야 한다.</li>
 <li><strong>도구 6종을 차례대로 추가</strong> — 총(사냥) / 곡괭이(채광) / 낫(채집·수확) / 괭이(밭 일구기) / 물뿌리개(물 주기) / 낚싯대(낚시). <strong>도끼(INBOX #24)가 파이프라인을 세운 뒤</strong> 같은 방식으로 하나씩 올린다 — 절차는 `DESIGN.md` 「새 도구를 추가하는 절차」에 고정돼 있고, 도구 하나에 [DESIGN] 한 바퀴 + [BUILD] 한 바퀴다.</li>
 <li><strong>밭 시스템(농사)</strong> — 괭이·물뿌리개가 실제로 쓸 밭 타일 상태(일궈짐 / 물 준 상태 / 마름)와 작물 성장. 규칙은 `DESIGN.md` 「생활 스킬 — 생산 계열」에 스타듀식으로 정해뒀고, 작물별 성장 일수·계절 제한은 아직 범위 밖이다.</li></ul></section>
-<footer>갱신: 2026-09-07 07:36 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-07 07:49 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -64,7 +63,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907073621";
+  var STAMP = "20260907074943";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
