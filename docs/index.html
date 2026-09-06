@@ -29,21 +29,20 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>13</b><span>완료</span></div>
-  <div class="card"><b>2</b><span>남음</span></div>
+  <div class="card"><b>14</b><span>완료</span></div>
+  <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#14</span> [BUILD] 월드 안의 플레이어에게 **슬롯에 저장된 외형을 입힌다.** #11 로 커스터마이징 화면은 고른 색·머리모양을 그대로 보여주는데, 정작 월드에 들어가면 기준색·짧은머리 고정이다(`player.gd` 가 `PlayerFrames.build()` 를 인자 없이 부른다). 재료는 다 있다 — `SlotStore` 에서 그 슬롯의 `appearance` 를 읽어 `character_sprite.gd` 로 시트를 칠하고, 머리모양에 맞는 시트를 고르면 된다. **슬롯을 거치지 않고 월드 씬을 직접 띄운 경우(자체 QA 가 그렇게 한다)에도 기본 외형으로 멀쩡히 떠야 한다.**</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#14</span> [BUILD] 월드 안의 플레이어에게 **슬롯에 저장된 외형을 입힌다.** #11 로 커스터마이징 화면은 고른 색·머리모양을 그대로 보여주는데, 정작 월드에 들어가면 기준색·짧은머리 고정이다(`player.gd` 가 `PlayerFrames.build()` 를 인자 없이 부른다). 재료는 다 있다 — `SlotStore` 에서 그 슬롯의 `appearance` 를 읽어 `character_sprite.gd` 로 시트를 칠하고, 머리모양에 맞는 시트를 고르면 된다. **슬롯을 거치지 않고 월드 씬을 직접 띄운 경우(자체 QA 가 그렇게 한다)에도 기본 외형으로 멀쩡히 떠야 한다.**</li>
-<li><span class="num">#15</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). **#13 에서 확정된 idle 모양을 그대로 쓴다.** 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지 검사를 `qa_sprite_check.py` 에 추가**해서 끊겨 보이는 애니메이션을 숫자로 잡을 것. Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>5bdea6a  [INBOX #13] QA 에 &#x27;자연스러움&#x27; 검사 5개를 넣고, 그 검사로 플레이어 idle 을 다시 만들었다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-06 23:25</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #13 ([DESIGN] 「자연스러움」 검사 추가 + 그 검사로 플레이어 idle
-재제작) 완료.
+<section><h2>다음 항목</h2><span class="num">#15</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). **#13 에서 확정된 idle 모양을 그대로 쓴다.** 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지 검사를 `qa_sprite_check.py` 에 추가**해서 끊겨 보이는 애니메이션을 숫자로 잡을 것. Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</section>
+<section><h2>대기 중인 항목</h2><ul><li><span class="num">#15</span> [DESIGN] 플레이어 4방향 × walk(4~6프레임). **#13 에서 확정된 idle 모양을 그대로 쓴다.** 프레임을 순서대로 넘겼을 때 다리/팔이 매끄럽게 이어져야 하고, idle 과 자세가 뚝 끊기면 안 된다(DESIGN.md 「캐릭터 애니메이션」). **연속 프레임 사이의 변화량이 너무 크지 않은지 검사를 `qa_sprite_check.py` 에 추가**해서 끊겨 보이는 애니메이션을 숫자로 잡을 것. Godot 쪽 검증 스크립트는 `game/qa/` 에 남긴다.</li></ul></section>
+<section><h2>마지막 커밋</h2><code>fbde5ac  [INBOX #14] 월드의 플레이어가 슬롯에 저장된 외형(색 + 머리모양)을 입는다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-06 23:32</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-06 — INBOX #14 ([BUILD] 월드 안의 플레이어에게 슬롯에 저장된 외형 입히기) 완료.
 
 ## 만든 것
 
-- **`qa_sprite_check.py` 에 「자연스러움」 갈래 5개**(`_check_natural()`). 지금까지는</pre></section>
-<footer>갱신: 2026-09-06 23:25 KST · <span id="live">자동 새로고침 10초</span></footer>
+- **`player.gd` 에 `appearance` 속성.** 값을 넣으면 그 자리에서 시트를 다시 칠해
+  `SpriteFrames` 를 갈아끼운다(`_apply_appearance()`). **빈 Dictionary 면 기본 외형**이라,</pre></section>
+<footer>갱신: 2026-09-06 23:32 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -56,7 +55,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260906232533";
+  var STAMP = "20260906233258";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
