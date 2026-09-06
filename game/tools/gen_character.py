@@ -35,9 +35,10 @@ BASE_HAIR = "211c1a"        # 검정
 BASE_CLOTH = "4e7a3a"       # 풀색
 
 # 바지/신발은 옷색을 어둡게 쓴다 — 팔레트를 늘리지 않고 상하의를 구분한다
-# (DESIGN.md 「캐릭터 커스터마이징 항목」). 상의와 값이 확실히 갈리도록 잡았다.
-PANTS_DARKEN = 0.46
-SHOES_DARKEN = 0.26
+# (DESIGN.md 「캐릭터 커스터마이징 항목」). 실제 어두워지는 정도는 아래 BANDS 의
+# 목표 명도가 정한다 — 여기 계수는 "무슨 색을 어둡게 쓸 것인가"(색상)만 정한다.
+PANTS_DARKEN = 0.62
+SHOES_DARKEN = 0.44
 
 MATS = ["skin", "hair", "shirt", "pants", "boot", "eye", "glint"]
 
@@ -54,50 +55,141 @@ def _hex(s):
     return tuple(int(s[i:i + 2], 16) for i in (0, 2, 4))
 
 
-WARM = (255, 244, 214)      # 밝은면이 향하는 색 (따뜻한 햇빛)
-COOL = (198, 204, 224)      # 검은 머리처럼 무채색에 가까운 재질의 밝은면
+WARM = (255, 240, 205)      # 밝은면이 향하는 색 (따뜻한 햇빛)
+COOL = (196, 206, 232)      # 검은 머리처럼 무채색에 가까운 재질의 밝은면
+DUSK = (74, 58, 104)        # 그늘이 향하는 색 (차가운 자주) — 그늘이 회색이 되지 않게
 
-def make_ramp(base, hi=0.28, hi_to=WARM, shade=(0.72, 0.66, 0.76),
-              dark=(0.46, 0.40, 0.55), min_v=0):
-    """기준색 하나 → 밝은면/기본/그늘/가장어두움 4단계.
 
-    **HLS 로 명도를 깎지 않고 곱셈으로 그늘을 만든다.** HLS 에서 명도만 낮추면
-    채도가 폭발해서(밝은 피부색이 형광 주황이 된다) 램프가 무너진다. 그늘 계수의
-    파랑을 빨강보다 크게 두면 어두워질수록 보라 쪽으로 도는 — 도트에서 흔한 —
-    따뜻한 빛/차가운 그늘 대비가 공짜로 나온다.
+def luma(rgb):
+    """지각 명도(Rec.601). **재질을 구분하는 건 색상이 아니라 이 값이다.**"""
+    r, g, b = (float(c) for c in rgb)
+    return 0.299 * r + 0.587 * g + 0.114 * b
 
-    `min_v` 는 **아주 어두운 기준색(검정 머리)** 을 위한 것이다. 기준색을 그대로
-    기본 단계로 쓰면 잉크 외곽선(38,28,44)보다 어두워져서 실루엣이 통째로 검은
-    구멍이 되고 단차도 안 보인다.
+
+def set_luma(rgb, target):
+    """색상은 유지한 채 명도만 목표값으로 맞춘다.
+
+    곱하기만 하면 밝은 목표에서 채널이 255 에 걸려 명도가 모자란다 — 걸리면
+    부족한 만큼 흰색 쪽으로 섞어서 채운다(그때만 채도가 빠진다).
     """
-    b = np.array(base, dtype=np.float32)
-    if min_v > 0 and b.max() < min_v:
-        b = b * (min_v / max(b.max(), 1.0))
-    steps = [
-        b + (np.array(hi_to, np.float32) - b) * hi,
-        b,
-        b * np.array(shade, np.float32),
-        b * np.array(dark, np.float32),
-    ]
-    return [tuple(int(round(v)) for v in np.clip(s, 0, 255)) for s in steps]
+    v = np.array(rgb, dtype=np.float32)
+    cur = luma(v)
+    if cur < 1e-3:
+        return np.full(3, target, np.float32)
+    v = np.clip(v * (target / cur), 0, 255)
+    for _ in range(4):                       # 클리핑으로 모자란 만큼만 흰색을 섞는다
+        gap = target - luma(v)
+        if gap <= 0.5:
+            break
+        head = 255.0 - luma(v)
+        if head <= 1e-3:
+            break
+        v = np.clip(v + (255.0 - v) * (gap / head), 0, 255)
+    return v
+
+
+def _chroma(rgb, k):
+    """명도는 그대로 두고 채도만 k 배. k>1 이면 쨍해진다."""
+    v = np.array(rgb, dtype=np.float32)
+    g = luma(v)
+    return np.clip(g + (v - g) * k, 0, 255)
+
+
+def _mix(rgb, other, t):
+    return np.array(rgb, np.float32) + (np.array(other, np.float32) - np.array(rgb, np.float32)) * t
+
+
+# 램프 4단계의 **목표 명도 배율**(기본 단계 = 1.0). 예전처럼 채널을 통째로
+# 곱하지 않는다 — 곱셈은 어두운 재질을 잉크(명도 33) 아래로 떨어뜨려서 신발이
+# 검은 구멍이 됐다. 명도로 잡으면 재질마다 폭이 같아진다.
+RAMP = (1.26, 1.0, 0.80, 0.63)
+INK_LUMA = luma(INK)        # 32.8
+FLOOR = INK_LUMA + 7.0      # 램프 맨 아래도 외곽선보다는 확실히 밝아야 한다
+HAIR_FLOOR = INK_LUMA + 2.0  # 검은 머리만 여유를 줄인다 — 그래도 잉크 위다
+
+
+def make_ramp(base, target, hi_to=WARM, hi_mix=0.24, sat=(0.92, 1.0, 1.14, 1.24),
+              ramp=RAMP, floor=FLOOR):
+    """기준색 + **목표 명도** → 밝은면/기본/그늘/가장어두움 4단계.
+
+    값을 치르고 알아낸 것(되돌리지 말 것):
+      - **재질 구분은 목표 명도(`target`)로 못박는다.** 옷색을 0.46 배로 곱해
+        바지를 만들었더니, 옷색이 무엇이냐에 따라 상의와 값이 겹치기도 하고
+        신발이 외곽선보다 어두워지기도 했다. 명도를 직접 지정하면 어떤
+        커스터마이징 색을 넣어도 재질 사이 명도 차가 유지된다.
+      - **어두워질수록 채도를 올린다**(`sat`). 명도만 낮추면 그늘이 진흙색이
+        된다 — 코어키퍼풍의 "탁하지 않은" 느낌은 여기서 나온다.
+      - **그늘은 자주(DUSK) 쪽으로, 밝은면은 햇빛(WARM) 쪽으로** 살짝 민다.
+      - 맨 아래 단계도 `floor`(잉크 명도 + 여유) 아래로 못 내려간다.
+    """
+    steps = []
+    for i, mul in enumerate(ramp):
+        t = max(target * mul, floor if i else 0.0)
+        c = _chroma(base, sat[i])
+        if i == 0:
+            c = _mix(c, hi_to, hi_mix)
+        elif i >= 2:
+            c = _mix(c, DUSK, 0.10 * (i - 1))
+        steps.append(set_luma(c, t))
+    return [tuple(int(round(v)) for v in s) for s in steps]
 
 
 def darken(rgb, f):
     return tuple(int(round(c * f)) for c in rgb)
 
 
-def palette(skin=BASE_SKIN, hair=BASE_HAIR, cloth=BASE_CLOTH):
+# ── 재질별 **기본 단계 목표 명도**(=밴드) ─────────────────────────────────
+# 이 값들이 "옷과 바지가 한눈에 구분되는가"를 혼자 결정한다. 두 부류를 다르게 다룬다:
+#
+#  * **옷 계열(shirt/pants/boot)은 옷색 하나에서 세 재질이 갈라져 나온다.** 그래서
+#    계단을 코드가 보장해야 한다 — 셔츠 명도를 정하고 바지/신발은 그 비율로 내린다.
+#    (#8 은 "옷색 × 0.46" 식이라 옷색에 따라 상의와 값이 겹치거나 신발이 잉크보다
+#    어두워졌다.)
+#  * **피부/머리는 플레이어가 고른 색의 명도가 곧 의미다** — 금발은 밝고 검정은
+#    어둡다. 여기에 고정 밴드를 못박으면 커스터마이징이 통째로 무의미해진다
+#    (실제로 한 번 그렇게 만들었더니 은발도 가장 짙은 피부도 전부 같은 값으로
+#    나왔다). 그래서 **하한만** 준다.
+SHIRT_GAIN = 1.45           # 옷색 명도 → 셔츠 명도
+SHIRT_RANGE = (138.0, 168.0)
+PANTS_RATIO = 0.70          # 셔츠 대비 — 이 비율이 상하의를 가르는 계단이다
+BOOT_RATIO = 0.45
+SKIN_MIN = 88.0             # 가장 짙은 피부도 이 아래로는 안 내려간다(형태가 안 읽힌다)
+HAIR_MIN = 50.0             # 검정 머리는 색이 아니라 광택 단차로 읽힌다 — 램프를
+                            # 띄울 자리가 필요하다
+
+
+def bands_for(skin_rgb, hair_rgb, cloth_rgb):
+    """커스터마이징 색 3개 → 재질별 목표 명도."""
+    shirt = min(max(luma(cloth_rgb) * SHIRT_GAIN, SHIRT_RANGE[0]), SHIRT_RANGE[1])
+    return {
+        "skin": max(luma(skin_rgb), SKIN_MIN),
+        "hair": max(luma(hair_rgb), HAIR_MIN),
+        "shirt": shirt,
+        "pants": shirt * PANTS_RATIO,
+        "boot": shirt * BOOT_RATIO,
+    }
+
+
+def palette(skin=BASE_SKIN, hair=BASE_HAIR, cloth=BASE_CLOTH, bands=None):
     """커스터마이징 색 3개 → 재질별 램프. 이 함수만 갈아끼우면 색 확장이 끝난다."""
     skin_rgb, hair_rgb, cloth_rgb = _hex(skin), _hex(hair), _hex(cloth)
+    band = dict(bands_for(skin_rgb, hair_rgb, cloth_rgb), **(bands or {}))
     return {
-        # 피부는 밝은면을 세게 주면 표백돼 보인다 — 낮게.
-        "skin": make_ramp(skin_rgb, hi=0.20),
-        # 머리는 차가운 밝은면 + min_v 로, 검정 머리도 단차가 보이게 한다.
-        "hair": make_ramp(hair_rgb, hi=0.17, hi_to=COOL, min_v=40),
-        "shirt": make_ramp(cloth_rgb, hi=0.30),
-        # 바지·신발은 옷색을 어둡게 쓴 것이라 밝은면까지 세면 상의와 값이 겹친다.
-        "pants": make_ramp(darken(cloth_rgb, PANTS_DARKEN), hi=0.15, min_v=34),
-        "boot": make_ramp(darken(cloth_rgb, SHOES_DARKEN), hi=0.13, min_v=26),
+        # 피부는 밝은면을 세게 주면 표백돼 보인다 — 밝은면 혼합을 낮게.
+        "skin": make_ramp(skin_rgb, band["skin"], hi_mix=0.14, sat=(0.88, 1.0, 1.20, 1.32),
+                          ramp=(1.16, 1.0, 0.82, 0.66)),
+        # 머리는 차가운 밝은면 + 넓은 램프. 검정 머리는 색이 아니라 **광택 단차**로
+        # 읽힌다 — 램프를 좁히면 통째로 검은 덩어리가 된다.
+        # **어떤 재질도 잉크보다 어두워지지 않는다** — 검은 머리라도 그 아래로
+        # 내려가면 외곽선에 먹혀서 머리가 통째로 구멍이 된다(#8 이 그랬다).
+        # 대신 램프를 넓게 잡아 **광택 단차**로 검은 머리의 형태를 만든다.
+        "hair": make_ramp(hair_rgb, band["hair"], hi_to=COOL, hi_mix=0.22,
+                          ramp=(1.52, 1.0, 0.78, 0.62), floor=HAIR_FLOOR),
+        "shirt": make_ramp(cloth_rgb, band["shirt"], hi_mix=0.26),
+        # 바지·신발은 같은 옷색을 쓰되 목표 명도로 밴드를 갈라놓는다.
+        "pants": make_ramp(darken(cloth_rgb, PANTS_DARKEN), band["pants"], hi_mix=0.14),
+        "boot": make_ramp(darken(cloth_rgb, SHOES_DARKEN), band["boot"], hi_mix=0.12,
+                          ramp=(1.30, 1.0, 0.88, 0.80)),
         "eye": [INK] * 4,
         "glint": [GLINT] * 4,
     }
@@ -313,48 +405,110 @@ CFG = dict(
     side_torso_w=8.4,
     arm_w=2.7,
     belt=True, limb_shade=0.18, contact=0.18, cuff=0.30,
-    torso_r=3.4, ears=True, shoe_lip=0.30,
-    fringe=6.9, fringe_tilt=1.5, side_hair=10.6,
-    eye_y=12, eye_dx=2, glint=True,
-    dither=0.0, key=0.72, amb=0.38, rim=0.12,
+    torso_r=2.3, ears=0, arm_in=0.95, shoe_lip=0.30,
+    fringe=9.2, fringe_tilt=1.5, side_hair=13.2,
+    eye_y=11, eye_dx=2, glint=True,
+    dither=0.0, key=0.84, amb=0.17, rim=0.10,
+    # ── 걷기(walk) ── 진폭은 전부 **네이티브 34px 단위**다. 1 = 화면에서 3px.
+    bob=1.0,            # 몸이 가라앉는 깊이. 착지에서 최대, 통과 자세에서 0
+    lift=1.6,           # 뒤에서 앞으로 넘어오는 발이 뜨는 높이
+    stride=1.7,         # 옆모습에서 다리가 앞뒤로 벌어지는 폭
+    stride_f=0.75,      # 앞/뒷모습 — 앞뒤 움직임이 안 보이므로 좌우로만 조금
+    arm_swing=1.5,      # 옆모습 팔 앞뒤 폭 (다리와 반대 위상)
+    arm_swing_f=0.9,    # 앞/뒷모습 팔 — 앞으로 나오면 짧아 보이므로 위아래로
 )
 
+WALK_FRAMES = 6         # DESIGN.md 「캐릭터 애니메이션」의 4~6 프레임 규칙
 
-def _body(b, d, cfg):
-    """다리/몸통/팔 — 방향에 따라 어깨 너비와 팔 배치만 달라진다."""
+
+def walk_pose(direction, phase, cfg):
+    """걷기 위상(0~1) → 부위별 오프셋. `phase=None` 이면 idle(전부 0).
+
+    한 바퀴를 이렇게 잡았다 — 이 위상 관계가 어긋나면 걷기로 안 보인다:
+      - `cos` 로 다리를 앞뒤로 흔든다. 착지(cos=±1)에서 가장 벌어지고,
+        통과 자세(cos=0)에서 두 다리가 겹친다.
+      - **몸은 통과 자세에서 가장 높고 착지에서 가라앉는다.** 위로 띄우지 않고
+        아래로 내리는 쪽을 골랐다 — idle 이 이미 칸 위쪽 1px 만 남기고 꽉 차서,
+        올리면 머리 외곽선이 칸 밖으로 잘린다.
+      - **발이 뜨는 건 뒤에서 앞으로 넘어오는 동안뿐이다**(sin 의 한쪽 반주기).
+        양발이 동시에 뜨면 뛰는 것처럼 보인다.
+      - 팔은 다리와 **반대 위상**이다.
+    """
+    if phase is None:
+        return dict(bob=0.0, leg_dx=(0.0, 0.0), leg_lift=(0.0, 0.0),
+                    arm_dx=(0.0, 0.0), arm_dy=(0.0, 0.0))
+    t = 2.0 * np.pi * float(phase)
+    sw = float(np.cos(t))                       # +1 = 왼다리가 앞
+    sn = float(np.sin(t))
+    lift = (max(0.0, -sn) * cfg["lift"], max(0.0, sn) * cfg["lift"])
+    bob = cfg["bob"] * (1.0 - abs(sn))
+    if direction in ("left", "right"):
+        sx = 1.0 if direction == "right" else -1.0
+        return dict(
+            bob=bob,
+            leg_dx=(sw * cfg["stride"] * sx, -sw * cfg["stride"] * sx),
+            leg_lift=lift,
+            arm_dx=(-sw * cfg["arm_swing"] * sx,) * 2,
+            arm_dy=(0.0, 0.0),
+        )
+    return dict(
+        bob=bob,
+        leg_dx=(sw * cfg["stride_f"], -sw * cfg["stride_f"]),
+        leg_lift=lift,
+        arm_dx=(0.0, 0.0),
+        # 앞/뒷모습에서 앞으로 나온 팔은 짧고 살짝 올라가 보인다
+        arm_dy=(sw * cfg["arm_swing_f"], -sw * cfg["arm_swing_f"]),
+    )
+
+
+def _body(b, d, cfg, pose):
+    """다리/몸통/팔 — 방향에 따라 어깨 너비와 팔 배치만 달라진다.
+
+    `pose` 는 `walk_pose()` 가 준 오프셋이다. **형태 정의는 프레임마다 다시
+    쓰지 않는다** — 같은 함수에 좌표만 흔들어 넣어야 프레임 사이 크기·자세가
+    어긋나지 않는다(DESIGN.md 「캐릭터 애니메이션」).
+    """
     side = d in ("left", "right")
     sx = 1.0 if d == "right" else -1.0
     cx = 17.0 + (0.5 * sx if side else 0.0)
     tw = cfg["side_torso_w"] if side else cfg["torso_w"]
-    top, bot = cfg["torso_top"], cfg["torso_bot"]
+    bob = pose["bob"]
+    top, bot = cfg["torso_top"] + bob, cfg["torso_bot"] + bob
 
-    # 다리 — 사이를 1.2px 비워 두면 외곽선이 그 틈에 들어가 두 다리로 읽힌다
+    # 다리 — 사이를 1.2px 비워 두면 외곽선이 그 틈에 들어가 두 다리로 읽힌다.
+    # 옆모습은 두 다리가 거의 겹치므로 간격을 좁히고 앞뒤(x)로만 벌린다.
     lw = 3.9 if not side else 3.7
-    for s in (-1, 1):
-        lx = cx + s * (lw / 2 + 0.6)
-        b.add(rbox(lx - lw / 2, 23.2, lx + lw / 2, 29.3, r=1.3), "pants")
-        b.add(rbox(lx - lw / 2 - 0.4, 28.8, lx + lw / 2 + 0.4, 31.5, r=1.0), "boot")
+    gap = 0.6 if not side else 0.0
+    for i, sgn in enumerate((-1, 1)):
+        lx = cx + sgn * (lw / 2 + gap) + pose["leg_dx"][i]
+        foot = 31.5 - pose["leg_lift"][i]
+        b.add(rbox(lx - lw / 2, 23.2 + bob, lx + lw / 2, foot - 2.2, r=1.3), "pants")
+        b.add(rbox(lx - lw / 2 - 0.4, foot - 2.7, lx + lw / 2 + 0.4, foot, r=1.0), "boot")
 
     # 목 (몸통보다 먼저 — 뒤로 간다)
-    b.add(rbox(cx - 1.6, 12.8, cx + 1.6, top + 1.2, r=1.1), "skin")
+    b.add(rbox(cx - 1.6, 12.8 + bob, cx + 1.6, top + 1.2, r=1.1), "skin")
 
     # 몸통
     b.add(rbox(cx - tw / 2, top, cx + tw / 2, bot, r=cfg["torso_r"]), "shirt")
 
-    # 팔 — 몸통과 다른 부위 id 라서 경계에 내부선이 들어간다
+    # 팔 — 몸통과 다른 부위 id 라서 경계에 내부선이 들어간다.
+    # 팔은 몸통에 **살짝 파묻어야** 한다. 어깨 모서리가 둥근 만큼 바깥에 두면
+    # 어깨 높이에서 몸통과 떨어져 팔만 붕 뜬 2px 조각이 된다.
     aw = cfg["arm_w"]
-    arm_top, arm_bot = top + 1.1, bot - 1.6
-    xs = [sx * 2.0] if side else [-(tw / 2 + aw / 2 - 0.5), (tw / 2 + aw / 2 - 0.5)]
+    off = tw / 2 + aw / 2 - cfg["arm_in"]
+    xs = [sx * 2.0] if side else [-off, off]
     limbs = []
-    for off in xs:
-        ax = cx + off
+    for i, offx in enumerate(xs):
+        ax = cx + offx + pose["arm_dx"][i]
+        ay = bob + pose["arm_dy"][i]
+        arm_top, arm_bot = cfg["torso_top"] + 1.1 + ay, cfg["torso_bot"] - 1.6 + ay
         limbs.append(b.add(rbox(ax - aw / 2, arm_top, ax + aw / 2, arm_bot, r=1.25), "shirt"))
         # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다
         limbs.append(b.add(ellipsoid(ax, arm_bot + 1.15, 1.55, 1.5), "skin"))
     return limbs
 
 
-def _hair(b, d, cfg, hx, hy, rx, ry, style):
+def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     """머리카락. 앞머리는 얼굴보다 앞으로 lift 해서 경계가 살아나게 한다.
 
     **덧붙이는 갈래는 전부 머리 껍데기(shell) 안으로 잘라 넣는다** — 안 그러면
@@ -385,15 +539,21 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style):
         # 뒷모습에서 헤어라인을 물결지게 해봤더니 덤불처럼 보여서 이쪽을 골랐다.
         b.add(ellipsoid(hx - 1.7, hy - 2.2, 3.0, 2.7), "hair",
               mask=sm, part=cap, lift=LIFT + 0.05, blend="max")
+        # 머리결 — **부위 id 만 다른 같은 껍데기**를 세로로 몇 줄 얹으면 그 경계에
+        # 내부선이 들어가 머리카락 가닥이 된다. 이게 없으면 뒷모습이 매끈한
+        # 회색 달걀(=민머리/헬멧)로 보인다. 물결진 헤어라인은 여기서도 덤불이
+        # 됐고, 세로 결이 훨씬 머리카락처럼 읽혔다.
+        for off in (-3.6, 0.3, 3.8):
+            b.add(shell, "hair", mask=sm & (np.abs(GX - (hx + off)) < 0.9), lift=LIFT)
         return
 
     # 앞머리를 비스듬히 자른다 — 수평으로 자르면 바가지머리가 된다
     tilt = cfg["fringe_tilt"] * (sx if side else 1.0)
-    edge = cfg["fringe"] + tilt * (GX - hx) / rx
+    edge = cfg["fringe"] + bob + tilt * (GX - hx) / rx
     cap = b.add(shell, "hair", mask=below(edge), lift=LIFT)
 
     # 옆머리(구레나룻) — 얼굴 옆을 감싸 내려온다
-    down = cfg["side_hair"]
+    down = cfg["side_hair"] + bob
     for s in (-1, 1):
         if side and s == sx:
             continue                          # 옆모습에서 얼굴 쪽 옆머리는 없다
@@ -419,19 +579,22 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style):
               & (np.abs(GX - (hx + tip * 2.3)) < 1.2), lift=LIFT)
 
 
-def character(direction="down", hair="short", pal=None, cfg=None, **over):
+def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **over):
+    """한 프레임을 그린다. `phase=None` 이면 idle, 0~1 이면 걷기 위상."""
     cfg = dict(CFG, **(cfg or {}))
     cfg.update(over)
     pal = pal or palette()
+    pose = walk_pose(direction, phase, cfg)
+    bob = pose["bob"]
     b = Build()
 
-    limbs = _body(b, direction, cfg)
+    limbs = _body(b, direction, cfg, pose)
     side = direction in ("left", "right")
     sx = 1.0 if direction == "right" else -1.0
     cx = 17.0 + (0.5 * sx if side else 0.0)
 
     hx = cx + (0.7 * sx if side else 0.0)
-    hy, rx, ry = cfg["head_cy"], cfg["head_rx"], cfg["head_ry"]
+    hy, rx, ry = cfg["head_cy"] + bob, cfg["head_rx"], cfg["head_ry"]
     if side:
         rx -= 0.4
     b.add(ellipsoid(hx, hy, rx, ry), "skin")
@@ -439,9 +602,12 @@ def character(direction="down", hair="short", pal=None, cfg=None, **over):
         # 코 — 실루엣 밖으로 살짝 나온 1px 돌기. 옆모습을 결정적으로 알아보게 한다
         b.add(ellipsoid(hx + sx * (rx - 0.45), hy + 2.0, 1.0, 0.9), "skin")
     elif cfg["ears"] and direction == "down":
+        # 귀는 **실루엣 밖으로 거의 나오지 않게** 붙인다. 조금만 내밀어도 34px
+        # 에서는 1px 돌기 + 그 바깥의 외곽선까지 2px 가 되어 요정 귀가 된다.
+        er = cfg["ears"]
         for es in (-1, 1):
-            b.add(ellipsoid(hx + es * (rx - 0.35), hy + 1.6, 1.15, 1.45), "skin")
-    _hair(b, direction, cfg, hx, hy, rx, ry, hair)
+            b.add(ellipsoid(hx + es * (rx - 0.75), hy + 2.1, er, er * 1.25), "skin")
+    _hair(b, direction, cfg, hx, hy, rx, ry, hair, bob)
 
     lum = light(b.hgt, b.mat, key=cfg["key"], amb=cfg["amb"], rim=cfg["rim"])
     m, l = downsample(b.mat, lum)
@@ -487,12 +653,12 @@ def character(direction="down", hair="short", pal=None, cfg=None, **over):
     # 허리띠 — 상의와 바지가 색 계열이 같아서 이게 없으면 몸이 초록 기둥 하나로 읽힌다.
     # 3D 덩어리로 넣으면 윗면이 빛을 받아 오히려 밝은 띠가 되므로 축소 뒤 한 줄로 찍는다.
     if cfg["belt"]:
-        row = int(cfg["torso_bot"]) - 1
+        row = int(round(cfg["torso_bot"] + bob)) - 1
         sel = m[row] == MATS.index("shirt")
         m[row][sel] = MATS.index("boot")
         l[row][sel] = 0.20
 
-    ex, ey = int(round(hx)), cfg["eye_y"]
+    ex, ey = int(round(hx)), cfg["eye_y"] + int(round(bob))
     if direction == "down":
         eye(ex - cfg["eye_dx"] - 1, ey)
         eye(ex + cfg["eye_dx"] - 1, ey)
