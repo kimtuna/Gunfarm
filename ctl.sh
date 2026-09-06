@@ -54,7 +54,11 @@ PLISTEOF
 
 # 로그의 "루프 시작" 줄 개수 — 실제로 한 번이라도 떴는지 판정하는 기준.
 # 큐가 비었거나 즉시 멈추는 경우 루프는 1초 안에 끝나서 pgrep 으로는 못 잡는다.
-started_count() { grep -c '== 루프 시작' "$LOG" 2>/dev/null || true; }
+started_count() {
+  local n
+  n="$(grep -c '== 루프 시작' "$LOG" 2>/dev/null)"
+  echo "${n:-0}"   # 로그 파일이 아직 없으면 grep 이 아무것도 안 찍는다 → 0 으로 정규화.
+}                  # (정규화를 한쪽에만 하면 "" != "0" 이 되어 시작했다고 오보한다)
 
 cmd_start() {
   if pid="$(running_pid)"; then
@@ -65,7 +69,7 @@ cmd_start() {
 
   local uid before i pid
   uid="$(id -u)"
-  before="$(started_count)"; before="${before:-0}"
+  before="$(started_count)"
 
   write_plist
   launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1
