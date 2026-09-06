@@ -9,6 +9,7 @@ extends Node2D
 ## 여기서 `position` 을 직접 계산하는 코드를 넣으면 안 된다.
 
 const PlayerMotion := preload("res://scripts/player_motion.gd")
+const PlayerInput := preload("res://scripts/player_input.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 const CharacterSprite := preload("res://scripts/character_sprite.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -21,7 +22,8 @@ const MAX_TICKS_PER_FRAME := 5
 ## 이동 계산 코어. 밖에서 위치를 볼 일이 있으면 이걸 통해서 본다.
 var motion: RefCounted = null
 
-## 이 노드가 로컬 플레이어의 입력을 받는가. 나중에 다른 플레이어를 그릴 때는 꺼진다.
+## 이 노드가 로컬 플레이어의 입력을 받는가. 나중에 다른 플레이어를 그릴 때는 꺼진다
+## (그때 조준 각도는 마우스가 아니라 서버가 보낸 값으로 들어온다).
 var input_enabled := true
 
 ## 이 캐릭터의 외형(`character_appearance.gd` 의 id 들 — 슬롯에 저장된 그대로).
@@ -83,25 +85,50 @@ func tile() -> Vector2i:
 	return WorldGen.world_to_tile(position)
 
 
-## 지금 눌려 있는 이동 키를 -1/0/1 두 축으로 모은다. **이게 서버로 보낼 입력이다.**
-func read_input() -> Vector2i:
+## 조준 각도를 재는 기준점(전역 좌표). **노드 원점은 발밑이라 발에서 재면 안 된다** —
+## 마우스를 캐릭터 가슴 높이에 두는 것만으로 "위쪽 조준"으로 읽혀서 방향이 뒤집힌다.
+## 그림 칸의 절반 높이 = 몸 한가운데에서 잰다.
+func aim_origin() -> Vector2:
+	return global_position - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+
+
+## 마우스 좌표(전역) → 조준 각도. **노드가 하는 일은 여기까지다** —
+## 이 각도로 무엇을 할지(어느 4방향 시트를 그릴지 등)는 코어가 정한다
+## (docs/DESIGN.md 「조작」: 화면 좌표는 클라이언트마다 다르지만 각도는 같다).
+func aim_angle_for(mouse_global: Vector2) -> float:
+	var offset := mouse_global - aim_origin()
+	if offset.is_zero_approx():
+		return _aim_angle()  # 정확히 겹치면 각도가 없다 — 보던 쪽을 그대로 둔다.
+	return offset.angle()
+
+
+## 지금 눌려 있는 이동 키와 마우스 조준을 한 벌로 모은다.
+## **이게 서버로 보낼 입력이다** (docs/DESIGN.md 「서버 권위 / 클라이언트 신뢰」).
+func read_input() -> RefCounted:
 	if not input_enabled:
-		return Vector2i.ZERO
-	return Vector2i(
-		int(Input.is_action_pressed("move_right")) - int(Input.is_action_pressed("move_left")),
-		int(Input.is_action_pressed("move_down")) - int(Input.is_action_pressed("move_up")),
+		return PlayerInput.new(Vector2i.ZERO, _aim_angle())
+	return PlayerInput.new(
+		Vector2i(
+			int(Input.is_action_pressed("move_right")) - int(Input.is_action_pressed("move_left")),
+			int(Input.is_action_pressed("move_down")) - int(Input.is_action_pressed("move_up")),
+		),
+		aim_angle_for(get_global_mouse_position()),
 	)
+
+
+func _aim_angle() -> float:
+	return PlayerInput.AIM_DOWN if motion == null else motion.aim_angle
 
 
 ## 프레임 시간을 고정 틱으로 쪼개서 코어를 돌린다 — 프레임 레이트가 달라도 같은
 ## 시간에 같은 거리를 간다 (docs/DESIGN.md 「시뮬레이션 구조」).
 func _process(delta: float) -> void:
-	var move := read_input()
+	var input := read_input()
 	_accumulated += delta
 	var ticks := 0
 	while _accumulated >= PlayerMotion.TICK_DELTA and ticks < MAX_TICKS_PER_FRAME:
 		_accumulated -= PlayerMotion.TICK_DELTA
-		motion.tick(move)
+		motion.tick(input)
 		ticks += 1
 	if _accumulated >= PlayerMotion.TICK_DELTA:
 		_accumulated = 0.0

@@ -4,9 +4,9 @@ extends RefCounted
 ## (docs/DESIGN.md 「시뮬레이션 구조」) — 씬 트리 없이 단독으로 돌아야 서버가 화면
 ## 없이 같은 계산을 할 수 있다.
 ##
-## **이 클래스는 위치를 받지 않는다. 입력(이동 방향)만 받는다**
+## **이 클래스는 위치를 받지 않는다. 입력(이동 방향 / 조준 각도)만 받는다**
 ## (docs/DESIGN.md 「서버 권위 / 클라이언트 신뢰」). 나중에 서버가 붙으면 클라이언트는
-## `tick()` 에 넣는 `move` 값만 보내고, 서버가 같은 코드로 `position` 을 계산한다 —
+## `tick()` 에 넣는 `PlayerInput` 만 보내고, 서버가 같은 코드로 `position` 을 계산한다 —
 ## "나 여기 있다"를 받는 순간 이동속도 핵을 구조적으로 막을 방법이 없어지기 때문이다.
 ##
 ## 한 번의 `tick()` = 고정 틱 하나(`TICK_DELTA` 초)다. 프레임 시간을 인자로 받지
@@ -14,6 +14,7 @@ extends RefCounted
 ## 시간이 허용하는 횟수"만 돌려주면 그게 그대로 속도 상한이 된다.
 
 const WorldGen := preload("res://scripts/world_gen.gd")
+const PlayerInput := preload("res://scripts/player_input.gd")
 
 ## 스프라이트 시트의 행 순서와 같다 (scripts/player_frames.gd 의 `DIR_NAMES`).
 enum { DOWN = 0, LEFT = 1, RIGHT = 2, UP = 3 }
@@ -37,9 +38,25 @@ const SKIN := 0.01
 ## 한 틱에 움직이는 거리. 타일(48)보다 훨씬 작아야 바다 한 칸을 통째로 건너뛰지 않는다.
 const MAX_STEP := SPEED * TICK_DELTA
 
+## 방향마다 그 시트가 대표하는 각도(라디안). 배열 순서는 위 enum 과 같다.
+const DIR_ANGLE := [PI * 0.5, PI, 0.0, -PI * 0.5]
+
+## 한 방향이 맡는 부채꼴의 반각. 네 방향이라 45도다.
+const FACING_HALF_SECTOR := PI * 0.25
+
+## 스냅 경계에서 붙잡고 있는 여유각(10도). 45도 경계에 마우스를 올려두면 손이
+## 조금만 떨려도 두 시트가 매 프레임 번갈아 나와 캐릭터가 덜덜 떤다 — 지금 방향은
+## 45+10도까지 유지하고, 그걸 넘겨야 다음 방향으로 넘어간다.
+const FACING_HYSTERESIS := PI / 18.0
+
 var position := Vector2.ZERO
 var facing := DOWN
 var is_moving := false
+
+## 지금 조준하고 있는 각도(라디안) — **스냅되지 않은 원본이다.**
+## `facing` 은 4방향 시트를 고르려고 여기서 스냅한 값이고, 총알 방향과 시야 콘은
+## 스냅된 `facing` 이 아니라 이 각도를 써야 한다 (docs/DESIGN.md 「조작」).
+var aim_angle := PlayerInput.AIM_DOWN
 
 var _world: RefCounted = null
 
@@ -48,19 +65,28 @@ func _init(world: RefCounted) -> void:
 	_world = world
 
 
-## 고정 틱 하나를 진행한다. `move` 의 각 성분은 -1 / 0 / 1 (WASD 두 축) — 이게 곧
-## 네트워크로 오갈 입력이다.
-func tick(move: Vector2i) -> void:
-	var dir := Vector2(signf(float(move.x)), signf(float(move.y)))
+## 고정 틱 하나를 진행한다. `input` 은 `player_input.gd` 한 벌(이동 두 축 + 조준
+## 각도) — 이게 곧 네트워크로 오갈 입력이다.
+func tick(input: RefCounted) -> void:
+	# **바라보는 방향은 이동이 아니라 조준이 정한다** (docs/DESIGN.md 「조작」) —
+	# 그래서 서 있을 때도 마우스를 돌리면 캐릭터가 같이 돈다.
+	aim_angle = input.aim_angle
+	facing = _facing_for_aim(aim_angle)
+	var dir := Vector2(signf(float(input.move.x)), signf(float(input.move.y)))
 	is_moving = dir != Vector2.ZERO
 	if not is_moving:
 		return
-	facing = _facing_for(dir)
 	# 대각선도 정규화해서 넘긴다 — 안 하면 대각으로 갈 때만 1.41배 빨라진다.
 	var step := dir.normalized() * MAX_STEP
 	# 축을 따로 밀어야 벽에 비스듬히 붙었을 때 멈추지 않고 미끄러진다.
 	_move_axis(Vector2(step.x, 0.0))
 	_move_axis(Vector2(0.0, step.y))
+
+
+## 조준 방향의 단위 벡터. 총알/시야 콘처럼 **정확한 방향이 필요한 쪽은 여기를**
+## 쓴다 (`facing` 은 그림을 고르느라 45도 단위로 뭉갠 값이다).
+func aim_direction() -> Vector2:
+	return Vector2.from_angle(aim_angle)
 
 
 ## 지금 서 있는 타일.
@@ -80,21 +106,19 @@ func place_at_tile(t: Vector2i) -> void:
 
 # --- 내부 -------------------------------------------------------------------
 
-## 대각선일 때는 지금 보던 방향을 유지하고, 그게 아니면 가로를 먼저 쓴다
-## (방향이 매 틱 깜빡이지 않게).
-func _facing_for(dir: Vector2) -> int:
-	var options: Array[int] = []
-	if dir.x > 0.0:
-		options.append(RIGHT)
-	elif dir.x < 0.0:
-		options.append(LEFT)
-	if dir.y > 0.0:
-		options.append(DOWN)
-	elif dir.y < 0.0:
-		options.append(UP)
-	if options.has(facing):
+## 조준 각도를 4방향 시트 중 하나로 스냅한다. 지금 방향을 계속 쓸 수 있으면
+## 그대로 두고(히스테리시스), 여유각까지 넘어갔을 때만 가장 가까운 방향으로 바꾼다.
+func _facing_for_aim(angle: float) -> int:
+	if absf(angle_difference(DIR_ANGLE[facing], angle)) <= FACING_HALF_SECTOR + FACING_HYSTERESIS:
 		return facing
-	return options[0]
+	var best := facing
+	var best_gap := INF
+	for d in DIR_ANGLE.size():
+		var gap := absf(angle_difference(DIR_ANGLE[d], angle))
+		if gap < best_gap:
+			best_gap = gap
+			best = d
+	return best
 
 
 func body_at(p: Vector2) -> Rect2:

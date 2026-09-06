@@ -12,17 +12,23 @@ extends SceneTree
 ##      3) 바다에 못 들어간다. 물가에 닿으면 **틈 없이 붙어서** 멈춘다.
 ##      4) 벽을 비스듬히 밀면 미끄러진다(막힌 축만 멈추고 나머지 축은 간다).
 ##      5) 한 틱 이동량이 타일보다 훨씬 작다 — 바다 한 칸을 통째로 건너뛸 수 없다.
+##      6) **바라보는 방향은 이동이 아니라 조준이 정한다**(INBOX #16) — 4방향 스냅,
+##         경계에서 마우스가 떨려도 안 흔들림(히스테리시스), 스냅해도 **원본 각도는
+##         각도 그대로** 남음(총알/시야 콘이 쓸 값이다).
 ##   B. 월드 화면 — 실제 씬에서:
-##      6) 스폰 칸에 플레이어가 서 있고 카메라가 그 위에 있다.
-##      7) 발밑이 노드 원점이다(스프라이트가 땅에 서 있지, 공중에 뜨거나 파묻히지 않는다).
-##      8) WASD 를 누르면 그 방향으로 움직이고 **카메라가 따라온다**.
-##      9) 방향에 맞는 애니메이션으로 바뀐다 (움직이면 `walk_<방향>`).
+##      7) 스폰 칸에 플레이어가 서 있고 카메라가 그 위에 있다.
+##      8) 발밑이 노드 원점이다(스프라이트가 땅에 서 있지, 공중에 뜨거나 파묻히지 않는다).
+##      9) WASD 를 누르면 그 방향으로 움직이고 **카메라가 따라온다**.
+##     10) **실제 마우스 좌표**(`Input.warp_mouse`)가 애니메이션 방향을 정한다 —
+##         이동과 조준을 일부러 어긋나게(왼쪽으로 걸으며 오른쪽 조준) 넣어서 확인한다.
+##     11) 서 있어도 마우스만 돌리면 캐릭터가 그쪽을 본다.
 ##
 ## 눈으로 볼 몫은 `user://qa_shots/` 에 캡처로 남긴다.
 
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
+const PlayerInput := preload("res://scripts/player_input.gd")
 const SlotStore := preload("res://scripts/slot_store.gd")
 
 const SHOTS := "user://qa_shots"
@@ -36,6 +42,13 @@ const HOLD_SECONDS := 0.35
 
 ## 물가에 얼마나 바짝 붙어야 하는가(월드 단위 = 화면 픽셀). 1px 이면 눈에 안 보인다.
 const MAX_SHORE_GAP := 1.0
+
+## 방향 이름 → 조준 각도(라디안). `player_motion.gd` 의 `DIR_ANGLE` 과 같은 값이지만
+## 일부러 여기에 따로 적는다 — 코어와 같은 상수를 쓰면 코어가 틀려도 같이 틀린다.
+const AIM := {"right": 0.0, "down": PI * 0.5, "left": PI, "up": -PI * 0.5}
+
+## 마우스를 화면 가운데(=플레이어)에서 얼마나 밀어놓는가. 창 짧은 변에 대한 비율이다.
+const AIM_REACH := 0.3
 
 var _fails: Array[String] = []
 var _steps: Array[Callable] = []
@@ -57,6 +70,7 @@ func _initialize() -> void:
 	_check_step_smaller_than_tile()
 	_check_sea_blocks()
 	_check_wall_slide()
+	_check_facing_follows_aim()
 
 	# 첫 씬은 여기서 올린다 (docs/GOTCHAS.md — _steps 에 넣으면 영영 실행되지 않는다).
 	var slots := SlotStore.empty_slots()
@@ -70,14 +84,20 @@ func _initialize() -> void:
 		_check_spawned,
 		_check_feet_on_origin,
 		func(): _shoot("50_player_spawn"),
-		func(): _press("move_right"),
+		# 이동 키와 조준을 **일부러 어긋나게** 넣는다 (INBOX #16). 첫 짝만 방향이
+		# 같고 나머지 셋은 다르다 — 이동 키가 방향을 정하던 옛 동작이 남아 있으면
+		# 여기서 애니메이션이 이동 쪽 이름으로 나와 걸린다.
+		func(): _press("move_right", "right"),
 		func(): _expect_moved("move_right", Vector2(1, 0), "right"),
-		func(): _press("move_up"),
-		func(): _expect_moved("move_up", Vector2(0, -1), "up"),
-		func(): _press("move_left"),
-		func(): _expect_moved("move_left", Vector2(-1, 0), "left"),
-		func(): _press("move_down"),
-		func(): _expect_moved("move_down", Vector2(0, 1), "down"),
+		func(): _press("move_up", "down"),
+		func(): _expect_moved("move_up", Vector2(0, -1), "down"),
+		func(): _press("move_left", "right"),
+		func(): _expect_moved("move_left", Vector2(-1, 0), "right"),
+		func(): _press("move_down", "left"),
+		func(): _expect_moved("move_down", Vector2(0, 1), "left"),
+		func(): _aim("up"),
+		_check_aim_turns_while_standing,
+		_check_aim_jitter_on_screen,
 		_walk_into_the_sea,
 		_check_stopped_on_land,
 	]
@@ -105,9 +125,10 @@ func _process(delta: float) -> bool:
 
 ## 서버가 같은 입력으로 같은 위치를 재현할 수 있어야 한다 (DESIGN.md 「서버 권위」).
 func _check_determinism() -> void:
-	var inputs: Array[Vector2i] = []
+	var inputs: Array[RefCounted] = []
 	for i in 400:
-		inputs.append(Vector2i((i % 7) - 3, (i % 5) - 2))
+		# 조준도 입력이라 같이 흔들어본다 — 각도가 재현에 끼어들면 여기서 걸린다.
+		inputs.append(PlayerInput.new(Vector2i((i % 7) - 3, (i % 5) - 2), float(i) * 0.37 - PI))
 	var a := _run(inputs)
 	var b := _run(inputs)
 	if not a.position.is_equal_approx(b.position) or a.facing != b.facing:
@@ -154,7 +175,7 @@ func _check_sea_blocks() -> void:
 		var last := motion.position
 		var stalled := 0
 		for i in 4000:
-			motion.tick(move)
+			motion.tick(PlayerInput.new(move))
 			if motion.position.is_equal_approx(last):
 				stalled += 1
 			else:
@@ -190,10 +211,10 @@ func _check_wall_slide() -> void:
 	motion.place_at_tile(found)
 	# 남쪽(바다)으로 붙인 뒤, 남동쪽으로 밀어본다 — 남쪽은 막히고 동쪽으로는 가야 한다.
 	for i in 40:
-		motion.tick(Vector2i(0, 1))
+		motion.tick(PlayerInput.new(Vector2i(0, 1)))
 	var before := motion.position
 	for i in 20:
-		motion.tick(Vector2i(1, 1))
+		motion.tick(PlayerInput.new(Vector2i(1, 1)))
 	var moved_x: float = motion.position.x - before.x
 	if motion.blocked_at(motion.position):
 		_fails.append("비스듬히 밀었더니 몸이 바다에 걸쳤다: %s" % motion.position)
@@ -202,6 +223,62 @@ func _check_wall_slide() -> void:
 				% moved_x)
 	else:
 		print("[qa] 물가에 붙은 채 대각 입력 → 막힌 축은 멈추고 동쪽으로 %.1f 미끄러졌다" % moved_x)
+
+
+## **바라보는 방향은 이동이 아니라 조준이 정한다** (docs/DESIGN.md 「조작」).
+## 스냅(4방향) / 경계에서의 떨림 / 원본 각도 보존 / 이동과 어긋난 조준을 함께 본다.
+func _check_facing_follows_aim() -> void:
+	# 1) 서 있어도(이동 0) 조준한 쪽을 본다. 네 방향 전부.
+	for dir_name: String in AIM:
+		var motion := PlayerMotion.new(_world)
+		motion.place_at_tile(_world.spawn_tile)
+		motion.tick(PlayerInput.new(Vector2i.ZERO, AIM[dir_name]))
+		var got: String = PlayerFrames.DIR_NAMES[motion.facing]
+		if got != dir_name:
+			_fails.append("%s 를 조준했는데 %s 를 본다 — 조준이 방향을 안 정한다"
+					% [dir_name, got])
+		if not is_equal_approx(motion.aim_angle, AIM[dir_name]):
+			_fails.append("조준 각도가 %.3f 로 바뀌었다 — 스냅된 값이 원본을 덮어썼다"
+					% motion.aim_angle)
+
+	# 2) **이동과 조준이 어긋난 경우** — 왼쪽으로 걸으면서 오른쪽을 겨눈다(게걸음).
+	var side := PlayerMotion.new(_world)
+	side.place_at_tile(_world.spawn_tile)
+	var start := side.position
+	for i in 20:
+		side.tick(PlayerInput.new(Vector2i(-1, 0), AIM["right"]))
+	if side.position.x >= start.x:
+		_fails.append("왼쪽 입력인데 x 가 %.1f → %.1f 로 안 줄었다" % [start.x, side.position.x])
+	elif PlayerFrames.DIR_NAMES[side.facing] != "right":
+		_fails.append("왼쪽으로 걸으며 오른쪽을 겨눴는데 %s 를 본다 — 이동이 방향을 뺏었다"
+				% PlayerFrames.DIR_NAMES[side.facing])
+	else:
+		print("[qa] 게걸음 ok — 왼쪽으로 %.0f 이동하면서 오른쪽을 본다"
+				% (start.x - side.position.x))
+
+	# 3) **스냅 경계에서 떨지 않는다.** 오른쪽을 보다가 45도 경계 위에서 마우스를
+	#    흔들면(±0.02rad) 시트가 매 프레임 오가서는 안 된다.
+	var jitter := PlayerMotion.new(_world)
+	jitter.place_at_tile(_world.spawn_tile)
+	jitter.tick(PlayerInput.new(Vector2i.ZERO, AIM["right"]))
+	var edge := PI * 0.25
+	var flips := 0
+	var last := jitter.facing
+	for i in 20:
+		jitter.tick(PlayerInput.new(Vector2i.ZERO, edge + (0.02 if i % 2 == 0 else -0.02)))
+		if jitter.facing != last:
+			flips += 1
+		last = jitter.facing
+	if flips > 0:
+		_fails.append("45도 경계에서 마우스를 조금 흔들었더니 방향이 %d번 뒤집혔다 — 캐릭터가 떤다"
+				% flips)
+	# 히스테리시스가 너무 세서 아예 안 넘어가면 그것대로 고장이다.
+	jitter.tick(PlayerInput.new(Vector2i.ZERO, edge + 0.4))
+	if PlayerFrames.DIR_NAMES[jitter.facing] != "down":
+		_fails.append("경계를 확실히 넘겼는데도 %s 에 붙어 있다 — 히스테리시스가 너무 세다"
+				% PlayerFrames.DIR_NAMES[jitter.facing])
+	elif _fails.is_empty():
+		print("[qa] 조준 스냅 ok — 경계에서 안 떨고(0번), 확실히 넘기면 down 으로 바뀐다")
 
 
 # --- B. 월드 화면 -------------------------------------------------------------
@@ -259,14 +336,34 @@ func _check_feet_on_origin() -> void:
 		print("[qa] 발밑이 원점 (%.1fpx 오차), 화면 높이 %.0fpx" % [feet_local, screen_height])
 
 
-func _press(action: String) -> void:
+## 실제 마우스를 조준 기준점에서 `angle` 쪽으로 밀어놓는다.
+## `Input.warp_mouse()` 라 노드의 "마우스 → 각도" 변환까지 그대로 지나간다 —
+## 각도를 코어에 직접 넣으면 정작 이번에 만든 그 변환을 안 지나간다.
+##
+## 카메라가 플레이어의 자식이라 **발밑이 화면 한가운데**고, 조준 기준점은 거기서
+## 몸 절반만큼 위다(`player.gd` 의 `aim_origin()`). 그 어긋남을 빼줘야 여기서
+## 넣은 각도가 실제 조준 각도와 같아진다 — 45도 경계를 재는 검사에 필요하다.
+## (논리 해상도와 창 크기가 같다는 전제다 — QA 는 기본 창으로 돈다.)
+func _aim_at(angle: float) -> void:
+	var size := Vector2(DisplayServer.window_get_size())
+	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	Input.warp_mouse(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH)
+
+
+func _aim(dir_name: String) -> void:
+	_aim_at(AIM[dir_name])
+
+
+func _press(action: String, aim_name: String) -> void:
 	_release_all()
+	_aim(aim_name)
 	_before = _player().position
 	Input.action_press(action)
 	_wait_time = HOLD_SECONDS
 
 
-func _expect_moved(action: String, want: Vector2, dir_name: String) -> void:
+## `want` 는 **이동 방향**, `aim_name` 은 **조준 방향**이다 — 둘이 달라도 된다.
+func _expect_moved(action: String, want: Vector2, aim_name: String) -> void:
 	var player := _player()
 	var delta := player.position - _before
 	Input.action_release(action)
@@ -281,19 +378,61 @@ func _expect_moved(action: String, want: Vector2, dir_name: String) -> void:
 		_fails.append("%s 로 움직였는데 카메라가 안 따라왔다 (%s vs %s)"
 				% [action, camera.global_position, player.global_position])
 	var sprite := player.get_node_or_null("Sprite") as AnimatedSprite2D
-	# 움직이는 동안은 **그 방향의 걷기**여야 한다 (INBOX #15 에서 걷기 시트가 생겼다).
-	# 방향과 시트의 행이 어긋나면 옆으로 걸으면서 앞모습이 나온다.
-	var want_anim := "walk_%s" % dir_name
+	# 움직이는 동안은 걷기 시트를 쓰되(INBOX #15), **행은 조준 방향**이다(INBOX #16).
+	var want_anim := "walk_%s" % aim_name
 	if sprite.animation != want_anim:
-		_fails.append("%s 로 움직이는데 애니메이션이 %s 다 — %s 여야 한다"
-				% [action, sprite.animation, want_anim])
+		_fails.append("%s 를 누른 채 %s 를 조준했는데 애니메이션이 %s 다 — %s 여야 한다"
+				% [action, aim_name, sprite.animation, want_anim])
 	else:
-		print("[qa] %s → %s 이동, 카메라 추적 ok, 애니메이션 %s" % [action, delta, want_anim])
-	# 방향마다 한 장씩 남긴다 — 네 방향이 실제로 다른 그림으로 보이는지는 눈으로 봐야 한다.
-	_shoot("51_walk_%s" % dir_name)
+		print("[qa] %s → %s 이동, %s 조준, 카메라 추적 ok, 애니메이션 %s"
+				% [action, delta, aim_name, want_anim])
+	# 이동/조준 짝마다 한 장씩 남긴다 — 어긋난 짝이 실제로 어떻게 보이는지는 눈으로 봐야 한다.
+	_shoot("51_%s_aim_%s" % [action, aim_name])
 
 
 ## 실제 키 입력으로 바다 쪽으로 계속 밀어본다 — 코어만이 아니라 씬에서도 막히는지.
+## 키를 하나도 안 눌러도 마우스만 돌리면 그쪽을 봐야 한다 — 서 있을 때 방향을
+## 못 바꾸면 조준이 이동에 묶여 있는 것이다.
+func _check_aim_turns_while_standing() -> void:
+	var sprite := _player().get_node_or_null("Sprite") as AnimatedSprite2D
+	if sprite == null:
+		return
+	if sprite.animation != "idle_up":
+		_fails.append("가만히 선 채 위를 조준했는데 애니메이션이 %s 다 — idle_up 이어야 한다"
+				% sprite.animation)
+	else:
+		print("[qa] 서 있는 채로 마우스만 위로 → idle_up")
+	_shoot("53_aim_up_standing")
+
+
+## **실제 마우스를 45도 경계에서 흔들어본다** — 코어의 히스테리시스가 화면까지
+## 이어지는지는 각도를 코어에 직접 넣는 검사만으로는 안 보인다. 여기서 방향이
+## 오가면 플레이하는 사람 눈에는 캐릭터가 덜덜 떠는 것으로 보인다.
+func _check_aim_jitter_on_screen() -> void:
+	var sprite := _player().get_node_or_null("Sprite") as AnimatedSprite2D
+	if sprite == null:
+		return
+	_release_all()
+	_aim_at(0.0)  # 오른쪽에서 시작해 경계로 올라간다.
+	_wait = 50
+	# 오른쪽으로 자리잡을 때까지 몇 프레임 준다 — 여기서 바로 재면 직전 방향(위)이
+	# 섞여 들어와 "떨었다"고 잘못 잡는다.
+	for i in 10:
+		await process_frame
+	var seen := {}
+	# 한 자리마다 몇 프레임 머문다 — 매 프레임 마우스를 옮기면 OS 가 그 이동을
+	# 다 반영하지 못해서, 실제로는 마우스가 안 움직인 채 "안 떨었다"가 나온다.
+	for i in 30:
+		_aim_at(PI * 0.25 + (0.02 if (i / 3) % 2 == 0 else -0.02))
+		await process_frame
+		seen[sprite.animation] = true
+	if seen.size() > 1:
+		_fails.append("45도 경계에서 마우스를 흔들었더니 화면 애니메이션이 %s 로 오갔다 — 캐릭터가 떤다"
+				% [seen.keys()])
+	else:
+		print("[qa] 마우스를 45도 경계에서 흔들어도 %s 하나로 고정 — 안 떤다" % seen.keys()[0])
+
+
 func _walk_into_the_sea() -> void:
 	var player := _player()
 	var shore := _find_shore(Vector2i(0, 1))
@@ -322,11 +461,11 @@ func _check_stopped_on_land() -> void:
 
 # --- 도구 ---------------------------------------------------------------------
 
-func _run(inputs: Array[Vector2i]) -> RefCounted:
+func _run(inputs: Array[RefCounted]) -> RefCounted:
 	var motion := PlayerMotion.new(_world)
 	motion.place_at_tile(_world.spawn_tile)
-	for move in inputs:
-		motion.tick(move)
+	for input in inputs:
+		motion.tick(input)
 	return motion
 
 
@@ -337,7 +476,7 @@ func _distance_per_tick(move: Vector2i, ticks: int) -> float:
 	var worst := 0.0
 	for i in ticks:
 		var before := motion.position
-		motion.tick(move)
+		motion.tick(PlayerInput.new(move))
 		worst = maxf(worst, motion.position.distance_to(before))
 	return worst
 
@@ -387,7 +526,7 @@ func _shoot(shot_name: String) -> void:
 func _report() -> bool:
 	_release_all()
 	if _fails.is_empty():
-		print("[qa] PASS — 이동 코어(재현성/속도상한/바다충돌/미끄러짐) + 월드의 플레이어(WASD/카메라추적)")
+		print("[qa] PASS — 이동 코어(재현성/속도상한/바다충돌/미끄러짐/마우스 조준) + 월드의 플레이어(WASD/카메라추적/조준 방향)")
 		return true
 	for f in _fails:
 		printerr("[qa] FAIL — %s" % f)

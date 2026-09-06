@@ -46,10 +46,13 @@
 - **`get_root().get_visible_rect().size`(논리 좌표)와 실제 캡처 픽셀 크기가 다를 수
   있다**(디스플레이 배율 등). 크롭 좌표는 항상 캡처한 `Image.get_size()` 기준으로
   계산할 것.
-- **`Input.warp_mouse()`가 헤드리스에 가까운 환경에서 실제 OS 커서를 못 옮길 수
-  있다.** 마우스 방향을 강제로 바꿔야 하는 검증(예: 4방향 스크린샷)은
-  `set_physics_process(false)`로 마우스 추종 로직을 멈추고 방향/텍스처 갱신 함수를
-  직접 호출하는 방식을 우선 시도할 것.
+- **`Input.warp_mouse()`는 창이 실제로 떠 있을 때만 먹는다**(`--headless` 면 커서가
+  없어 마우스 기반 검증이 전부 헛돈다). 대신 창이 있으면 `Viewport.get_mouse_position()`
+  이 바로 따라오므로, 마우스로 방향을 정하는 로직은 각도를 코드로 밀어넣지 말고
+  `warp_mouse()` 로 실제 경로를 지나가게 할 것.
+- **매 프레임 `Input.warp_mouse()` 를 다른 자리로 부르면 그 이동이 다 반영되지 않는다**
+  (OS 가 커서 이동을 합쳐버린다) — 마우스를 흔드는 검증이 "안 흔들렸다"로 통과해버린다.
+  한 자리마다 2~3프레임씩 머물게 할 것.
 - **`--script` 자체 QA에서 키 입력(Esc 등)은 `InputEventAction` + `Input.parse_input_event()`로
   흘려보낼 수 있다.** `event.action`에 액션 이름, `pressed = true`를 넣으면 씬의
   `_unhandled_input()`이 실제로 받는다 — 버튼처럼 `emit_signal`로 우회하지 않아도 된다.

@@ -93,6 +93,12 @@ while true; do
 
   log "-- 바퀴 시작: INBOX #$NUM (연속 ${COUNT}/${STUCK_REPEAT_LIMIT}회차) — $TEXT"
 
+  # 바퀴를 **시작할 때도** 대시보드를 그린다. 끝난 뒤에만 그리면, 사람이 INBOX 에
+  # 항목을 넣고 루프를 켠 직후부터 첫 바퀴가 끝날 때까지(최대 LAP_TIMEOUT_SECONDS,
+  # [DESIGN] 은 실제로 40분) 공개 대시보드가 "남은 0" 인 옛 상태 그대로 남는다 —
+  # 루프가 안 도는 것처럼 보인다(2026-09-07 사람이 실제로 그렇게 오해했다).
+  render_and_push_dashboard
+
   OUT_JSON="$HARNESS/lap_${NUM}_$(date +%s).json"
   # PROMPT.md 를 그대로 세션에 넘긴다. 세션이 커밋/push 까지 스스로 한다.
   claude -p "$(cat "$PROMPT")" \
