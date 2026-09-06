@@ -104,11 +104,23 @@ while true; do
     >"$OUT_JSON" 2>>"$LOG" &
   CLAUDE_PID=$!
 
-  # 타임아웃 감시.
-  # 파이프/터미널을 붙들지 않게 출력은 버리고, 바퀴가 끝나면 감시 서브셸뿐 아니라
-  # 그 안의 `sleep` 자식까지 죽인다 — 안 죽이면 고아 sleep 이 stdout 을 계속 붙들어
-  # 루프가 끝나도 호출한 쪽(파이프)이 EOF 를 못 받는다.
-  ( sleep "$LAP_TIMEOUT_SECONDS"; kill -TERM "$CLAUDE_PID" 2>/dev/null ) >/dev/null 2>&1 &
+  # 타임아웃 감시 — **벽시계 기준**이다.
+  # `sleep $LAP_TIMEOUT_SECONDS` 한 방으로 재면 맥이 잠든 동안 타이머까지 같이 멈춰서
+  # 제한이 영영 안 걸린다(실제로 4시간 넘게 물린 바퀴를 90분 제한이 못 잡았다).
+  # 30초씩 깨어나 `date +%s` 로 실제 경과를 비교하면 잠든 시간도 계산에 들어간다.
+  # 출력은 버린다 — 안 그러면 감시 서브셸이 파이프를 붙들어 루프 종료 후에도 EOF 가 안 온다.
+  LAP_START=$(date +%s)
+  (
+    while kill -0 "$CLAUDE_PID" 2>/dev/null; do
+      sleep 30
+      if (( $(date +%s) - LAP_START >= LAP_TIMEOUT_SECONDS )); then
+        kill -TERM "$CLAUDE_PID" 2>/dev/null
+        sleep 10
+        kill -KILL "$CLAUDE_PID" 2>/dev/null
+        break
+      fi
+    done
+  ) >/dev/null 2>&1 &
   WATCHDOG=$!
   wait "$CLAUDE_PID"; RC=$?
   pkill -P "$WATCHDOG" >/dev/null 2>&1
