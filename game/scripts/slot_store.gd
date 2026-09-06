@@ -28,13 +28,14 @@ static func is_empty(slot: Dictionary) -> bool:
 
 
 ## 새 캐릭터 한 명.
-## 외형(피부/머리/옷색, 머리모양)은 INBOX #4 가, 월드 시드는 #5 가 채운다 —
-## 저장 형식을 나중에 갈아엎지 않도록 자리만 미리 잡아둔다.
-static func make_character(character_name: String) -> Dictionary:
+## `appearance` 는 커스터마이징 화면이 고른 값이다(scripts/character_appearance.gd 의
+## id 들 — 색이 아니라 id 를 저장한다). 월드 시드는 INBOX #5 가 채운다 — 저장 형식을
+## 나중에 갈아엎지 않도록 자리만 미리 잡아둔다.
+static func make_character(character_name: String, appearance: Dictionary = {}) -> Dictionary:
 	return {
 		"name": character_name,
 		"created_unix": int(Time.get_unix_time_from_system()),
-		"appearance": {},
+		"appearance": appearance.duplicate(true),
 		"world_seed": 0,
 	}
 

@@ -45,6 +45,9 @@
 - **`--script` 자체 QA에서 키 입력(Esc 등)은 `InputEventAction` + `Input.parse_input_event()`로
   흘려보낼 수 있다.** `event.action`에 액션 이름, `pressed = true`를 넣으면 씬의
   `_unhandled_input()`이 실제로 받는다 — 버튼처럼 `emit_signal`로 우회하지 않아도 된다.
+- **`LineEdit.text` 에 값을 대입해도 `text_changed` 시그널은 안 나간다**(사용자 입력만
+  쏜다). 자체 QA 에서 입력을 흉내낼 때는 대입 후 `edit.text_changed.emit(text)` 로 직접
+  쏴야 화면 갱신 로직까지 같이 검증된다.
 - **`JSON.parse_string()`은 모든 숫자를 float로 준다.** 저장 파일의 `version` 같은 정수 필드를
   `==`로 바로 비교하면 `1 != 1.0`으로 어긋난다 — 읽을 때 `int(...)`로 감싸서 비교할 것.
 - **Area2D/RigidBody 충돌은 `add_child` 직후 바로 확인하면 false negative가 난다.**

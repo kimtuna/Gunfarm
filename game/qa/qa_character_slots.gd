@@ -6,7 +6,7 @@ extends SceneTree
 ##   /Applications/Godot.app/Contents/MacOS/Godot --path game --script qa/qa_character_slots.gd
 ##   (--headless 를 붙이면 캡처가 안 된다 — docs/GOTCHAS.md 참고)
 ##
-## 검증: 빈 슬롯 3개 → 빈 슬롯 고르기 → 캐릭터 생성 → 슬롯에 표시 → 저장 파일 확인 →
+## 검증: 빈 슬롯 3개 → 빈 슬롯 고르기 → 캐릭터 생성(월드 입장) → 슬롯에 표시 → 저장 파일 확인 →
 ##       (재시작 흉내) 다시 불러도 남아있음 → 캐릭터 슬롯 고르면 월드 입장 →
 ##       삭제 확인창 취소 → 삭제 확인창 삭제 → 다시 빈 슬롯 + 저장 파일도 비어있음.
 
@@ -33,7 +33,10 @@ func _initialize() -> void:
 		_check_all_empty,
 		func(): _press_slot(1),
 		_check_customize,
-		func(): _press("Layout/CreateButton"),
+		func(): _type_name("모험가 2"),
+		func(): _press("Layout/Buttons/ConfirmButton"),
+		_check_created_enters_world,
+		func(): _press("Layout/BackButton"),
 		_check_slot_filled,
 		func(): change_scene_to_file(SLOTS_SCENE),
 		_check_reloaded,
@@ -74,12 +77,18 @@ func _check_all_empty() -> void:
 
 ## 빈 슬롯을 고르면 커스터마이징 화면으로 가고, 고른 슬롯 번호가 같이 넘어간다.
 func _check_customize() -> void:
-	_expect_screen("캐릭터 만들기", "11_customize_stub")
+	_expect_screen("캐릭터 만들기", "11_customize")
 	_expect_text_on_screen("슬롯 2")
 	_expect(SlotStore.selected_slot == 1, "고른 슬롯이 안 넘어갔다: %d" % SlotStore.selected_slot)
 
 
-## 캐릭터를 만들면 슬롯 화면으로 돌아오고, 화면과 저장 파일 양쪽에 이름이 남는다.
+## 확정하면 곧바로 월드로 들어간다 (DESIGN.md "클라이언트 화면 흐름").
+func _check_created_enters_world() -> void:
+	_expect_screen("월드 입장", "11b_created_enters_world")
+	_expect_text_on_screen("모험가 2")
+
+
+## 월드에서 돌아오면 슬롯 화면에, 저장 파일에도 이름이 남아 있다.
 func _check_slot_filled() -> void:
 	_expect_screen("캐릭터 선택", "12_slot_filled")
 	_expect_slot_text(1, "모험가 2")
@@ -172,6 +181,17 @@ func _press(node_path: String) -> void:
 		_fails.append("버튼을 못 찾음: %s (현재 씬 %s)" % [node_path, current_scene.name])
 		return
 	button.emit_signal("pressed")
+
+
+## LineEdit 은 text 를 대입해도 text_changed 를 안 쏜다 — 화면 갱신까지 흉내내려면
+## 직접 쏴줘야 한다.
+func _type_name(text: String) -> void:
+	var edit := current_scene.get_node_or_null("Layout/Content/Fields/NameRow/NameEdit") as LineEdit
+	if edit == null:
+		_fails.append("이름 입력칸을 못 찾음 (현재 씬 %s)" % current_scene.name)
+		return
+	edit.text = text
+	edit.text_changed.emit(text)
 
 
 func _press_slot(index: int) -> void:
