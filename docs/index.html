@@ -29,20 +29,20 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>20</b><span>완료</span></div>
-  <div class="card"><b>1</b><span>남음</span></div>
+  <div class="card"><b>21</b><span>완료</span></div>
+  <div class="card"><b>0</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2><span class="num">#21</span> [BUILD] **`qa_player_world.gd` / `qa_player_walk.gd` 가 프레임 수로 기다려서 빠른 기계에서 통째로 거짓 실패한다.** (2026-09-07, INBOX #17 바퀴가 발견 — 이 두 검사는 #17 의 변경과 무관하게 **손대지 않은 `main` 에서도 똑같이 실패한다**. #17 커밋 전에 stash 로 확인했다.)</section>
-<section><h2>대기 중인 항목</h2><ul><li><span class="num">#21</span> [BUILD] **`qa_player_world.gd` / `qa_player_walk.gd` 가 프레임 수로 기다려서 빠른 기계에서 통째로 거짓 실패한다.** (2026-09-07, INBOX #17 바퀴가 발견 — 이 두 검사는 #17 의 변경과 무관하게 **손대지 않은 `main` 에서도 똑같이 실패한다**. #17 커밋 전에 stash 로 확인했다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>a0b02fb  [INBOX #20] 17px 걷기 — 6프레임 × 4방향 × 머리모양 4종을 새 캔버스에서 다시 구웠다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 06:56</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #20 ([DESIGN] 17px 캐릭터의 걷기 6프레임 × 4방향 × 머리모양 4종) 완료.
+<section><h2>다음 항목</h2><span class="idle">큐가 비었습니다 — 루프는 세션을 열지 않고 종료합니다.</span></section>
+<section><h2>대기 중인 항목</h2><ul><li class="idle">없음</li></ul></section>
+<section><h2>마지막 커밋</h2><code>625d456  [INBOX #21] qa_player_world 의 프레임-수 대기를 전부 시간 대기로 바꿨다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 07:04</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #21 ([BUILD] `qa_player_world.gd` 의 프레임-수 대기를 시간 대기로)
+완료.
 
 ## 만든 것
 
-- **걷기 시트 4장을 17px 캔버스로 다시 구웠다** (`player_walk_&lt;머리모양&gt;.png`).
-  `gen_character.py` 의 `MOTIONS_NOW` 에 `&quot;walk&quot;` 가 돌아왔고, `CFG` 의 걷기 진폭을</pre></section>
-<footer>갱신: 2026-09-07 06:57 KST · <span id="live">자동 새로고침 10초</span></footer>
+- **`qa_player_world.gd` 에서 프레임 수로 기다리는 코드를 전부 없앴다.** `_wait`</pre></section>
+<footer>갱신: 2026-09-07 07:04 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -55,7 +55,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907065708";
+  var STAMP = "20260907070431";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
