@@ -15,8 +15,6 @@ ROOT = Path(__file__).resolve().parent.parent
 INBOX = ROOT / "docs" / "feedback" / "INBOX.md"
 STATUS = ROOT / "docs" / "STATUS.md"
 LATER = ROOT / "docs" / "feedback" / "LATER.md"
-LIMIT_LOG = ROOT / ".harness" / "limit_log"
-TOTAL_COST = ROOT / ".harness" / "total_cost"
 WARN = ROOT / ".harness" / "WARNING"
 OUT = ROOT / "docs" / "index.html"
 
@@ -62,58 +60,6 @@ def read_later():
     return items
 
 
-def read_limit():
-    """한도 상태. loop.sh 가 한도에 걸릴 때마다 limit_log 에 한 줄 붙인다
-    (`걸린시각<TAB>리셋시각<TAB>그때까지의누적환산액<TAB>받은문구`).
-
-    **한도 잔량은 조회할 방법이 없다** — claude CLI 에 usage/quota 를 묻는 명령이 없고,
-    한도는 걸린 뒤에야 문구로 알려준다. 그래서 여기서 보여주는 것은 잔량이 아니라
-    **실측 눈금**이다: 지난 창들에서 각각 얼마를 굴린 뒤 걸렸는지, 그리고 이번 창에서
-    지금까지 얼마를 굴렸는지. 이걸 나란히 놓으면 "슬슬 걸릴 때가 됐다"가 보인다.
-    추정치라는 것을 화면에도 적는다 — 정확한 값인 척하면 안 된다.
-    """
-    if not LIMIT_LOG.exists():
-        return None
-    events = []
-    for line in LIMIT_LOG.read_text(encoding="utf-8").splitlines():
-        parts = line.split("\t")
-        if len(parts) < 3:
-            continue
-        try:
-            events.append({
-                "hit": int(parts[0]),
-                "reset": int(parts[1] or 0),
-                "cost": float(parts[2] or 0),
-                "msg": parts[3] if len(parts) > 3 else "",
-            })
-        except ValueError:
-            continue
-    if not events:
-        return None
-
-    # 창마다 "얼마를 굴린 뒤 걸렸는지" = 연속한 두 사건의 누적액 차이.
-    # **첫 사건은 계산하지 않는다(None).** 그 앞은 기록이 시작되기 전이라, 누적액 전체를
-    # 한 창의 양으로 쓰면 여러 날에 걸쳐 쌓인 값을 한 창인 척하게 된다.
-    prev = None
-    for e in events:
-        e["window"] = None if prev is None else max(0.0, e["cost"] - prev)
-        prev = e["cost"]
-
-    try:
-        now_total = float(TOTAL_COST.read_text().strip() or 0)
-    except Exception:
-        now_total = events[-1]["cost"]
-
-    last = events[-1]
-    windows = [e["window"] for e in events if e["window"] and e["window"] > 0]
-    return {
-        "last": last,
-        "since": max(0.0, now_total - last["cost"]),   # 이번 창에서 지금까지 굴린 양
-        "typical": (sum(windows) / len(windows)) if windows else 0.0,
-        "count": len(events),
-    }
-
-
 def git(*args):
     try:
         return subprocess.run(["git", "-C", str(ROOT), *args],
@@ -125,7 +71,6 @@ def git(*args):
 def main():
     done, todo = read_inbox()
     later = read_later()
-    limit = read_limit()
     nxt = todo[0] if todo else None
     warning = WARN.read_text(encoding="utf-8").strip() if WARN.exists() else ""
     # 예산 상한을 없앴으므로(env.sh) 누적 사용량은 항상 보이게 둔다.
@@ -167,30 +112,6 @@ def main():
     later_rows = "\n".join(
         f'<li>{later_html(t)}</li>' for t in later[:20]) or '<li class="idle">없음</li>'
 
-    # 한도 칸. 잔량을 모르므로 **아는 것만** 적는다 — 지금 대기 중인지, 언제 풀리는지,
-    # 이번 창에서 얼마를 굴렸는지, 지난 창들은 평균 얼마에서 걸렸는지.
-    if limit:
-        now_ts = int(now_dt.timestamp())
-        waiting = limit["last"]["reset"] > now_ts
-        if waiting:
-            left = limit["last"]["reset"] - now_ts
-            head = (f'<b class="lim-wait">한도 대기 중</b>'
-                    f'<span> · {datetime.fromtimestamp(limit["last"]["reset"], now_dt.tzinfo).strftime("%H:%M")} 리셋'
-                    f' (약 {left // 60}분 남음) · 자동으로 이어서 돕니다</span>')
-        else:
-            head = ('<b class="lim-ok">정상</b><span> · 마지막으로 한도에 걸린 것은 '
-                    + datetime.fromtimestamp(limit["last"]["hit"], now_dt.tzinfo).strftime("%m-%d %H:%M")
-                    + f' (그때까지 {limit["count"]}회)</span>')
-        typical = (f'평균 ${limit["typical"]:,.2f}' if limit["typical"] > 0
-                   else '<span class="idle">표본이 더 필요합니다</span>')
-        gauge = (f'<dl class="lim">'
-                 f'<div><dt>이번 창에서 굴린 양</dt><dd>${limit["since"]:,.2f}</dd></div>'
-                 f'<div><dt>지난 창들이 걸린 지점</dt><dd>{typical}</dd></div>'
-                 f'</dl>')
-    else:
-        head = '<b class="lim-ok">정상</b><span> · 한도에 걸린 적이 아직 없습니다</span>'
-        gauge = ''
-
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(f"""<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
@@ -214,15 +135,6 @@ h2 {{ font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:va
 ul {{ margin:0; padding-left:1.1rem; }} li {{ margin:.15rem 0; }}
 .num {{ color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }}
 .idle {{ color:var(--dim); }}
-.limhead {{ margin:0; font-size:14px; }}
-.limhead b {{ font-size:15px; }}
-.limhead span {{ color:var(--dim); }}
-.lim-ok {{ color:var(--accent); }}
-.lim-wait {{ color:#d9a441; }}
-dl.lim {{ display:flex; flex-wrap:wrap; gap:.5rem 2rem; margin:.7rem 0 0; }}
-dl.lim div {{ display:flex; flex-direction:column; gap:.1rem; }}
-dl.lim dt {{ color:var(--dim); font-size:.78rem; }}
-dl.lim dd {{ margin:0; font-size:1.15rem; font-variant-numeric:tabular-nums; }}
 .later li {{ color:var(--dim); }} .later strong {{ color:var(--fg); font-weight:600; }}
 pre {{ margin:.4rem 0 0; white-space:pre-wrap; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
 code {{ font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
@@ -240,12 +152,6 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <section><h2>대기 중인 항목</h2><ul>{todo_rows}</ul></section>
 <section><h2>마지막 커밋</h2><code>{e(last_commit) or '(없음)'}</code>
   <p class="sub" style="margin:.3rem 0 0">{e(last_commit_when)}</p></section>
-<section><h2>사용량 한도</h2>
-  <p class="limhead">{head}</p>
-  {gauge}
-  <p class="sub" style="margin:.6rem 0 0">한도 <b>잔량은 조회할 수 없습니다</b> — 걸린 뒤에야 문구로 알려주기 때문입니다.
-  위 금액은 청구액이 아니라 <b>“API 요금제였다면 얼마”</b> 하는 환산값이고, 창마다 어디쯤에서 걸렸는지를
-  재는 <b>실측 눈금</b>입니다. 정확한 한도값이 아닙니다.</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
 <section><h2>나중에 할 것</h2>
   <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
