@@ -29,6 +29,24 @@
 4. **커밋 + push**: `git add` → 커밋(아래 형식) → **`git push origin HEAD:main`까지
    이 세션이 직접 한다** (별도 스크립트가 대신 push하지 않는다).
 
+
+---
+
+## 캐릭터 그림을 건드릴 때
+
+**`docs/CHARACTER.md` 를 먼저 전부 읽는다.** 캐릭터는 2026-09-08 에 파이프라인이 통째로
+바뀌었다 — 절차 생성기(`gen_character.py`)로 도트를 찍던 방식을 버리고, **ComfyUI 그림
+한 장을 부품으로 잘라 관절 각도로 모든 모션을 조립한다**(`game/tools/rig.py`).
+그 문서에 값을 치르고 알아낸 것들이 「되돌리지 말 것」으로 적혀 있다 — 특히:
+
+- **모션 프레임을 AI 로 뽑지 않는다** (프레임마다 캐릭터가 변한다 — 실측 28%).
+- **자르고 → 돌리고 → 맨 마지막에 줄인다.** 96px 도트를 직접 돌리면 뭉갠다.
+- **딛는 발은 안 움직인다**, **발 맞추기는 밀기가 아니라 자르기다** (둘 다 머리가 흔들리는 원인이었다).
+- **걸음표는 여섯 값이 모두 달라야 한다** (사인으로 만들면 두 쌍이 같은 그림이 된다).
+
+`STYLE_GUIDE.md` 는 여전히 **그림체 기준**(팔레트·음영·자연스러움)의 원본이지만,
+**캐릭터의 크기·비율·모션 절차는 `CHARACTER.md` 가 이긴다** — 그쪽이 나중이고 실측이다.
+
 ---
 
 ## 어떤 QA 를 돌릴 것인가
@@ -39,7 +57,10 @@
 **A. 항상 돌린다 (둘 다 싸다)**
 - **`qa_uid_files`** — 새 스크립트나 자산을 만들었으면 `.uid`/`.import` 짝이 맞는지.
   헤드리스로 순식간이다.
-- **`qa_sprite_check.py`** — **PNG 를 하나라도 바꿨으면.** `.venv/bin/python` 으로 돈다.
+- **`qa_sprite_check.py`** — **지형·아이템·상자 PNG 를 바꿨으면.** `.venv/bin/python` 으로 돈다.
+  **캐릭터 시트는 이 검사가 못 본다** — 아래 것이 본다.
+- **`qa_character_sheets.py`** — **캐릭터 시트(`player_*_farmer.png`)를 바꿨으면.**
+  `.venv/bin/python game/qa/qa_character_sheets.py`. 기준은 `docs/CHARACTER.md` 「합격 기준」.
 
 **B. 바꾼 자리에 해당하는 묶음만 돌린다**
 
@@ -49,13 +70,14 @@
 | 슬롯 저장 데이터(`slot_store.gd`) | `qa_slot_store` + 그 데이터를 쓰는 것(인벤토리/지도/외형) |
 | 월드 생성 · 지형 | `qa_world_gen` `qa_terrain_view` `qa_world_entry` |
 | 플레이어 이동 · 충돌 · 카메라 | `qa_player_world` `qa_player_walk` |
-| 캐릭터 그림 · 팔레트 · 시트 | `qa_player_sprite` `qa_character_sprite` `qa_player_appearance` `qa_player_walk` |
+| 캐릭터 그림 · 시트 · 리그 | `qa_character_sheets.py` + `qa_player_world` (게임 안 발밑·애니메이션) |
+| 캐릭터 팔레트 교체 · 커마 | `qa_character_sprite` `qa_player_appearance` |
 | 인벤토리 · 핫바 · 바닥 아이템 | `qa_inventory` `qa_hotbar` `qa_ground_items` |
 | 총알 · 탄창 · 체력 · 죽음 | `qa_bullets` `qa_gun_ammo` `qa_health` `qa_death_box` |
 | 지도 | `qa_map` |
 
 **C. 전부 돌려야 하는 때 — 여러 화면이 공유하는 것을 건드렸을 때만**
-`player_frames.gd` 의 `CELL`/`SCALE`, `terrain_tiles.gd` 의 `TILE_ART`, `project.godot`
+`player_frames.gd` 의 `CELL`/`SCALE`, `rig.py` 의 `CELL`, `terrain_tiles.gd` 의 `TILE_ART`, `project.godot`
 의 논리 해상도, 팔레트(`character_palettes.gd`), 캔버스 크기 — 이런 **전역 상수**는
 어디에 영향을 줄지 미리 알 수 없다. 그때만 22벌을 다 돌린다. 사람이 요청할 때도 마찬가지.
 

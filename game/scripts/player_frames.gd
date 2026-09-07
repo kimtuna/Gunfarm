@@ -13,7 +13,7 @@ extends RefCounted
 const SHEET_DIR := "res://assets/sprites"
 
 ## 기본 머리모양 — `character_appearance.gd` 의 첫 번째 선택지와 같아야 한다.
-const DEFAULT_HAIRSTYLE := "short"
+const DEFAULT_HAIRSTYLE := "farmer"
 
 ## 아트 한 칸(px) — **이름값이고, 시트마다 다를 수 있다**(아래 `cell_of()`).
 ## 아트 32px × 씬 스케일 3 = 화면 96px = 지형 타일(아트 16px × 3배 = 48px) **두 칸**
@@ -82,21 +82,22 @@ static func has_use(tool: String) -> bool:
 
 ## 한 캐릭터가 가진 모션과 그 재생 속도. **여기 한 줄을 늘리면** 시트가 자동으로
 ## 같이 실려서 `<모션>_<방향>` 애니메이션이 생긴다(도구별 모션이 그렇게 붙는다).
-## **2026-09-08 — 캐릭터 시트를 전부 지우고 idle 한 장부터 다시 시작한다.**
+##
+## **2026-09-08 — 캐릭터 시트를 전부 지우고 idle 한 장부터 다시 시작했다.**
 ## 사람이 "지금까지 있던 거 싹 다 없애고 캐릭터를 싹 다 삭제해. ComfyUI 로 그린 걸
 ## 도안으로 해서 다시 그려서 하나만 만들어 게임에 적용해봐" 라고 정했다.
-## 걷기·도구 시트 88장은 지웠으므로 여기서 idle 만 돌려준다 — 그 시트들이 다시
-## 생기면 아래 주석 처리된 줄을 되살린다.
+## **같은 날 저녁에 리그로 다시 지었다** — `game/tools/rig.py` 가 ComfyUI 그림을
+## 부품으로 잘라 관절 각도로 모든 모션을 조립한다(`docs/CHARACTER.md`). 걷기도
+## 도구 모션도 거기서 나온다. **도구가 늘면 위 `TOOLS` 와 `rig.TOOLS` 에 한 줄씩만
+## 늘리면 시트가 같이 구워지고 여기서 자동으로 실린다.**
 static func motions() -> Dictionary:
-	return {"idle": IDLE_FPS}
-	# 되살릴 때:
-	# var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
-	# for tool in TOOLS:
-	# 	out["hold_%s" % tool] = IDLE_FPS
-	# 	if has_use(tool):
-	# 		out["use_%s" % tool] = USE_FPS
-	# 	out["walk_%s" % tool] = WALK_FPS
-	# return out
+	var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
+	for tool in TOOLS:
+		out["hold_%s" % tool] = IDLE_FPS
+		if has_use(tool):
+			out["use_%s" % tool] = USE_FPS
+		out["walk_%s" % tool] = WALK_FPS
+	return out
 
 
 ## `<모션>` × `<머리모양>` 한 벌이 놓인 자리. 생성기(`gen_character.py` 의
@@ -123,6 +124,13 @@ static func build(hairstyle: String = DEFAULT_HAIRSTYLE) -> SpriteFrames:
 ## 시트 한 장의 칸 크기(px). **행이 방향 4개로 고정**이라 높이만 보면 알 수 있다 —
 ## 그래서 17px 시트와 32px 시트가 한 `SpriteFrames` 에 섞여도 각자 제 칸으로 잘린다
 ## (2026-09-07, INBOX #46). 상수 하나로 자르면 안 맞는 시트가 조각나거나 빈 칸이 된다.
+## **칸 크기마다 씬 배율이 다르다** (2026-09-08). 캐릭터는 화면에서 늘 96px = 타일 두
+## 칸이어야 하므로 `배율 = 96 / 칸` 이다 — 32px→3배, 48px→2배, 96px→1배. 전부 정수라
+## 도트가 뭉개지지 않는다(`STYLE_GUIDE.md` 1번). 64px 은 1.5배라 쓸 수 없다.
+static func scale_of(cell: int) -> int:
+	return maxi(1, 96 / maxi(1, cell))
+
+
 static func cell_of(texture: Texture2D) -> int:
 	return maxi(1, texture.get_height() / DIR_NAMES.size())
 
@@ -141,8 +149,8 @@ const FULL_CELL := 32
 ## 17px 시트는 여전히 아랫줄 하나가 비어 있어 옛 규칙 그대로다.
 ## `qa_player_sprite.gd` 의 `_check_feet_line()` 이 시트마다 이 값을 그림과 견준다.
 static func feet_y(cell: int) -> int:
-	if cell == FULL_CELL:
-		return cell
+	if cell >= FULL_CELL:
+		return cell    # 32·48·96px 시트는 칸을 세로로 다 쓴다 — 아랫줄이 곧 발밑이다
 	return roundi(cell * DESIGN_FEET_Y / DESIGN_N)
 
 

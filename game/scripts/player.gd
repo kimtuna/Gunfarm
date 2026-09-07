@@ -83,7 +83,7 @@ func _ready() -> void:
 	# 이름값 칸의 보정으로 시작한다 — 실제 값은 애니메이션이 정해지는 대로
 	# `_update_animation()` 이 그 시트의 칸으로 다시 넣는다.
 	_sprite.offset = PlayerFrames.feet_offset()
-	_sprite.scale = Vector2.ONE * PlayerFrames.SCALE
+	_sprite.scale = Vector2.ONE * PlayerFrames.scale_of(PlayerFrames.CELL)
 	if _sprite.sprite_frames == null:
 		_apply_appearance()  # appearance 를 안 넣었으면 기본 외형으로 뜬다.
 	set_process(false)  # setup() 전에는 월드가 없어서 이동 계산을 할 수 없다.
@@ -153,7 +153,7 @@ func drop_position() -> Vector2:
 ## 마우스를 캐릭터 가슴 높이에 두는 것만으로 "위쪽 조준"으로 읽혀서 방향이 뒤집힌다.
 ## 그림 칸의 절반 높이 = 몸 한가운데에서 잰다.
 func aim_origin() -> Vector2:
-	return global_position - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	return global_position - Vector2(0.0, 96.0 * 0.5)   # 캐릭터는 늘 화면 96px 이다
 
 
 ## 마우스 좌표(전역) → 조준 각도. **노드가 하는 일은 여기까지다** —
@@ -300,5 +300,8 @@ func _update_animation() -> void:
 	# **발밑 보정은 애니메이션마다 다시 넣는다** — 시트마다 칸 크기가 다를 수 있어서다
 	# (2026-09-07, INBOX #46: idle 만 32px 이고 걷기·도구는 17px 이다). 한 번만 넣어
 	# 두면 칸이 다른 모션으로 넘어가는 순간 캐릭터가 땅에 묻히거나 공중에 뜬다.
-	_sprite.offset = PlayerFrames.feet_offset(
-		PlayerFrames.anim_cell(_sprite.sprite_frames, wanted))
+	# **배율도 애니메이션마다 다시 넣는다** (2026-09-08). 칸 크기가 48 이냐 96 이냐에
+	# 따라 씬 배율이 2배/1배로 달라야 화면에서 늘 96px(= 타일 두 칸)이 된다.
+	var cell := PlayerFrames.anim_cell(_sprite.sprite_frames, wanted)
+	_sprite.offset = PlayerFrames.feet_offset(cell)
+	_sprite.scale = Vector2.ONE * PlayerFrames.scale_of(cell)

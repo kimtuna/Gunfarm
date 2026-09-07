@@ -19,10 +19,17 @@ const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")
 
 const SHEET_PATH := "res://assets/sprites/terrain_tiles.png"
 
-## 아트 한 칸(px). × 씬 스케일 3 = 화면 48px = `WorldGen.TILE_SIZE`
+## 아트 한 칸(px). × 씬 스케일 1 = 화면 48px = `WorldGen.TILE_SIZE`
 ## (docs/STYLE_GUIDE.md 1번: 배율은 정수여야 도트가 안 뭉개진다).
-const TILE_ART := 16
-const SCALE := 3
+##
+## 이력: 16(배율 3) → 24(배율 2) → **48(배율 1), 2026-09-08 저녁.**
+## **도트 하나의 화면 크기가 캐릭터와 같아야 한다.** 캐릭터를 ComfyUI 그림에서
+## 만들기로 하면서 캐릭터 칸이 96px 이 됐고(48px 로 줄이면 눈이 1px 이 되어 얼굴이
+## 죽는다 — 실측), 96px 칸의 씬 배율은 1 이다(`player_frames.scale_of`). 그래서
+## 타일도 배율 1 로 맞춘다. **화면에서 보이는 크기는 하나도 안 바뀐다** —
+## 타일 48px, 캐릭터 96px(타일 두 칸) 그대로고, 그 안의 도트 수만 늘었다.
+const TILE_ART := 48
+const SCALE := 1
 
 ## 같은 지형의 무늬 변주 수. 좌표 해시로 고른다 — `x % 3` 같은 규칙으로 고르면
 ## 무늬가 일정 간격으로 되풀이돼서 벽지처럼 보인다(생성기 주석 참고).
