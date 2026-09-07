@@ -40,8 +40,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#39</span> [BUILD] **총알이 물에 막히지 않게 한다 — 「총알을 막는가」를 「걸을 수 있는가」에서 떼어낸다.** 사람이 정했다(2026-09-07): *&quot;당연히 물에도 총알이 쏴지지. 한 칸 물이 있다고 해서 거기에 막히면 안 되잖아.&quot;* 근거는 `DESIGN.md` 「전투」에 적혀 있다.</li>
 <li><span class="num">#41</span> [BUILD] **여는 좌클릭이 도구를 쓰는 좌클릭과 겹치는 것 — 대상이 늘어나면 규칙을 한 곳으로 모을 것.** (2026-09-07, INBOX #37 바퀴에서 나온 것이다. 지금은 고장이 아니다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>e179827  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 18:42</p></section>
+<section><h2>마지막 커밋</h2><code>46e3b33  design: 총알은 물을 통과한다 — 「총알을 막는가」를 「걸을 수 있는가」에서 분리</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 19:57</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #43 (자체 QA 두 벌이 마우스 커서 위치에 따라 통과/실패하던 것) 완료.
 
 ## 시작할 때 이미 있던 것
@@ -71,7 +71,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907195712";
+  var STAMP = "20260907195736";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
