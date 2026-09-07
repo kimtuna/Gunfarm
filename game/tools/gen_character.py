@@ -28,7 +28,13 @@ import os
 import numpy as np
 from PIL import Image
 
+DESIGN_N = 17   # **설계 공간의 한 변.** 이 파일의 모든 좌표·길이가 쓰는 단위다 —
+                # `CFG`/`HAIR_STYLES`/도구 kit 과 `_body()`/`_hair()` 안의 리터럴이
+                # 전부 "17칸짜리 캔버스 위의 좌표"로 적혀 있다. **캔버스를 키워도
+                # 이 값은 안 바뀐다** — 바뀌는 것은 그 17칸을 몇 픽셀로 찍느냐다.
 N = 17          # 네이티브 캔버스 (2026-09-07, INBOX #19 — 34px 에서 절반)
+UNIT = 1.0      # 설계 단위 하나가 몇 px 인가 (= N / DESIGN_N). 1.0 이면 설계 좌표가
+                # 곧 픽셀 좌표라 지금까지의 코드와 값이 완전히 같다.
 SS = 24         # 슈퍼샘플 배율. 캔버스를 반으로 줄이면서 두 배로 올렸다 —
                 # 슈퍼샘플 해상도(N × SS = 408)를 그대로 두어야 0.2px 단위로 잡은
                 # 형태가 축소 전에 뭉개지지 않는다.
@@ -287,24 +293,48 @@ GY = (_yy + 0.5) / SS
 
 
 @contextlib.contextmanager
-def canvas(n):
-    """캔버스 한 변을 잠시 `n` 으로 바꾼다(`N`/`H`/`GX`/`GY`).
+def canvas(n, unit=1.0):
+    """캔버스 한 변을 잠시 `n` px 으로 바꾼다(`N`/`H`/`UNIT`/`GX`/`GY`).
 
-    **슈퍼샘플 배율(`SS`)은 건드리지 않는다** — 도형은 전부 네이티브 px 단위로
-    적혀 있어서, 격자만 다시 깔면 같은 코드가 그대로 다른 칸에 그려진다.
+    **슈퍼샘플 배율(`SS`)은 건드리지 않는다** — 격자만 다시 깔면 같은 코드가
+    그대로 다른 칸에 그려진다.
 
-    쓰는 곳은 **바닥에 놓인 아이템**(`ground_icon()`, 12px)뿐이다. 캐릭터·아이콘은
-    17px 그대로다 — 왜 바닥만 칸이 작아야 하는지는 그 함수의 주석에 있다.
+    `unit` 은 **설계 단위 하나를 몇 px 로 찍을 것인가**다. 두 쓰임이 갈린다:
+
+      - `unit=1` (기본) — 설계 좌표가 곧 픽셀 좌표다. **더 작은 칸에 더 작은
+        그림**을 그린다. 쓰는 곳은 바닥에 놓인 아이템(`ground_icon()`, 12px)이고,
+        도구 설정은 `shrink()` 로 길이만 따로 줄여서 넣는다.
+      - `unit=n/DESIGN_N` — **같은 그림을 더 촘촘한 격자에 찍는다.** 캐릭터
+        캔버스를 키워보는 자리가 여기다(`canvas_scale()`).
     """
-    global N, H, GX, GY
-    keep = (N, H, GX, GY)
-    N, H = n, n * SS
+    global N, H, UNIT, GX, GY
+    keep = (N, H, UNIT, GX, GY)
+    N, H, UNIT = n, n * SS, float(unit)
     yy, xx = np.mgrid[0:H, 0:H].astype(np.float32)
-    GX, GY = (xx + 0.5) / SS, (yy + 0.5) / SS
+    GX, GY = (xx + 0.5) / (SS * UNIT), (yy + 0.5) / (SS * UNIT)
     try:
         yield
     finally:
-        N, H, GX, GY = keep
+        N, H, UNIT, GX, GY = keep
+
+
+def canvas_scale(n):
+    """캐릭터 캔버스를 `n` px 으로 바꾼다 — **설계 공간(17칸)은 그대로 둔 채**.
+
+    `canvas(n, n / DESIGN_N)` 과 같다. 이 안에서는 `character()` 가 **같은 형태를
+    더 촘촘한 격자에** 찍는다: 몸이 캔버스를 차지하는 비율도, 조명도, 램프도 그대로고
+    바뀌는 것은 도트 한 칸의 크기뿐이다.
+
+    **길이 값을 하나도 손대지 않아도 되는 이유**는 이 파일의 좌표가 전부 설계 단위로
+    적혀 있어서다. 손대야 하는 것은 **축소한 뒤 네이티브 격자에 직접 찍는 것들**
+    뿐이다(눈 · 볼 홍조 · 허리띠 한 줄 — `character()` 참고).
+    """
+    return canvas(n, n / float(DESIGN_N))
+
+
+def px(v):
+    """설계 단위 → 지금 캔버스의 픽셀 좌표."""
+    return v * UNIT
 
 
 ROUND = 0.55    # 덩어리를 얼마나 둥글게 볼 것인가 (높이 = ROUND × 반지름)
@@ -486,8 +516,13 @@ class Build:
 
 
 def light(hgt, mat, key=0.62, amb=0.42, rim=0.18):
-    """높이장의 기울기로 법선을 만들고 램버트 + 환경광으로 명도를 낸다."""
-    gy, gx = np.gradient(hgt.astype(np.float32), 1.0 / SS)
+    """높이장의 기울기로 법선을 만들고 램버트 + 환경광으로 명도를 낸다.
+
+    **기울기는 설계 단위로 잰다**(칸 간격 `1/(SS·UNIT)`). 픽셀 단위로 재면 캔버스를
+    키웠을 때 같은 덩어리의 법선이 완만해져서 **같은 형태인데 조명만 달라진다** —
+    캔버스를 바꿔보는 시험에서 그림이 아니라 빛이 변한 것이 되어 비교가 안 된다.
+    """
+    gy, gx = np.gradient(hgt.astype(np.float32), 1.0 / (SS * UNIT))
     nz = np.ones_like(hgt)
     nl = np.sqrt(gx * gx + gy * gy + nz * nz)
     nx, ny, nz = -gx / nl, -gy / nl, nz / nl
@@ -628,8 +663,12 @@ CFG = dict(
     belt=True, limb_shade=0.16, contact=0.18, cuff=0.0, collar=0.0,
     torso_r=0.7, ears=0, arm_in=0.55, shoe_lip=0.34,
     fringe=3.7, fringe_tilt=0.0, side_hair=5.6,
-    eye_y=4, eye_dx=1.6, eye_style="bar", glint=False, blush=True,
+    eye_y=4, eye_dx=1.6, eye_style="bar", glint=False, blush=True, blush_w=1,
+    brow=None,
     hair_shine=0.18,
+    buttons=0,          # 앞섶 단추 개수. **17px 에서는 0 이다** — 상의가 세 줄뿐이라
+                        # 허리띠 말고 들어갈 자리가 없다(「옷포인트」 상한 1개).
+
     leg_top=10.3, foot_y=15.0, boot_h=2.0,
     dither=0.0, key=0.84, amb=0.17, rim=0.10,
     # ── 걷기(walk) ── **2026-09-07 (INBOX #20) 에 17px 격자 위에서 다시 잡았다.**
@@ -646,6 +685,40 @@ CFG = dict(
     arm_swing_f=0.85,   # 앞/뒷모습 팔 — 앞으로 나오면 짧아 보이므로 위아래로
     stance_drag=0.55,   # 옆모습 — 딛은 발이 몸 아래에서 뒤로 끌리는 폭
 )
+
+# ── `CFG` 값이 캔버스 크기에 어떻게 걸려 있는가 (2026-09-07, INBOX #44) ──────
+# 캔버스를 17px 밖으로 옮겨보려면 **어느 값이 픽셀 절대값이고 어느 값이 아닌가**를
+# 먼저 갈라야 한다. 세 갈래이고, 실제로 손이 가는 것은 셋째뿐이다:
+#
+#   "design"  설계 단위(17칸 캔버스 기준)의 길이·좌표. `GX`/`GY` 격자에 그대로
+#             들어가므로 **`canvas_scale()` 이 격자를 다시 깔면 저절로 따라온다.**
+#             `HAIR_STYLES`·도구 kit 의 길이 값도 전부 여기다.
+#   "ratio"   무차원 — 조명 세기, 초타원 지수, 음영 델타, 테이퍼 비율, 불리언.
+#             **캔버스가 바뀌어도 그대로 둔다.** 줄이거나 늘리면 같은 형태가 아니라
+#             다른 그림이 된다.
+#   "grid"    **축소가 끝난 네이티브 격자에 칸을 세어 찍는 값.** 캔버스가 바뀌면
+#             여기만 다시 잡는다 — 눈 모양(`eye_style`)·눈썹(`brow`)·볼 홍조 폭
+#             (`blush_w`)·하이라이트(`glint`), 그리고 "한 칸이 몸의 몇 분의 일인가"가
+#             결정하는 `bob`·`head_puff`·`cuff`·`collar` 처럼 **꺼져 있는 것들**이다.
+#             (`cuff`/`collar` 자체는 명도 델타(ratio)지만, 켜고 끄는 판단이 칸 수에서
+#             나온다 — 상의가 세 줄뿐이라 껐다. 「옷포인트」 개수 상한도 같은 자리다.)
+CFG_KIND = {
+    **{k: "design" for k in (
+        "head_rx", "head_ry", "head_cy", "head_puff",
+        "torso_w", "torso_top", "torso_bot", "side_torso_w", "arm_w", "arm_in",
+        "toe", "heel", "foot_out", "side_arm", "torso_r", "ears",
+        "fringe", "side_hair", "eye_dx", "eye_y",
+        "leg_top", "foot_y", "boot_h",
+        "bob", "lift", "stride", "stride_f", "arm_swing", "arm_swing_f",
+        "stance_drag", "arm_slant")},
+    **{k: "ratio" for k in (
+        "head_p", "head_pb", "arm_taper", "leg_taper", "fringe_tilt",
+        "belt", "limb_shade", "contact", "cuff", "collar", "shoe_lip",
+        "hair_shine", "dither", "key", "amb", "rim")},
+    **{k: "grid" for k in ("eye_style", "glint", "blush", "blush_w", "brow",
+                           "buttons")},
+}
+assert set(CFG_KIND) == set(CFG), set(CFG_KIND) ^ set(CFG)
 
 # 옷에 넣는 포인트(허리띠 / 옷깃 / 소맷부리). **17px 에서는 하나까지다**
 # (2026-09-07, INBOX #19 — 34px 때는 1~2개였다). 상의가 세 줄뿐이라 옷깃과
@@ -761,7 +834,7 @@ def _body(b, d, cfg, pose):
     """
     side = d in ("left", "right")
     sx = 1.0 if d == "right" else -1.0
-    cx = 8.5 + (0.25 * sx if side else 0.0)
+    cx = DESIGN_N / 2.0 + (0.25 * sx if side else 0.0)
     tw = cfg["side_torso_w"] if side else cfg["torso_w"]
     bob = pose["bob"]
     top, bot = cfg["torso_top"] + bob, cfg["torso_bot"] + bob
@@ -1793,7 +1866,7 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
     limbs, hands = _body(b, direction, cfg, pose)
     side = direction in ("left", "right")
     sx = 1.0 if direction == "right" else -1.0
-    cx = 8.5 + (0.25 * sx if side else 0.0)
+    cx = DESIGN_N / 2.0 + (0.25 * sx if side else 0.0)
 
     hx = cx + (0.35 * sx if side else 0.0)
     hy, rx, ry = cfg["head_cy"] + bob, cfg["head_rx"], cfg["head_ry"]
@@ -1836,6 +1909,16 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         "dot": ("e", "e"),
         # 2×1 잉크. 얼굴이 세 줄뿐이라 세로로 두 줄을 쓰면 눈이 얼굴 높이의 2/3 가 된다
         "bar": ("ee",),
+        # ── 아래는 **17px 에서는 못 쓰는 것들**이다 (2026-09-07, INBOX #44 —
+        # 캔버스 26px 시험). 얼굴이 세 줄에서 네 줄이 되고 폭이 9 → 14px 이 되어야
+        # 흰자가 들어간다. `w` = 흰자(항상 흰색), `*` = 하이라이트(`glint` 일 때만).
+        "bar3": ("eee",),               # 그냥 비례해서 키운 것 — 흰자 없음
+        "sclera3": ("wee",),            # **한 줄 눈에도 흰자가 들어간다** — 3칸이면
+                                        # 바깥 한 칸을 흰자로 비울 수 있다(17px 은
+                                        # 두 칸뿐이라 절반이 흰색이 되어 못 한다)
+        "eye3": ("wee", "wee"),         # 흰자 한 줄이 **바깥쪽**(거울상이라 양쪽 다)
+        "eye3in": ("eew", "eew"),       # 흰자가 **안쪽** — 서로를 보는 눈
+        "bead3": ("*ee", "eee"),        # 3×2 잉크 + 하이라이트 1px
     }
 
     def eye(x, y, flip=False):
@@ -1848,8 +1931,23 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
                 if m[yy, xx] != MATS.index("skin"):
                     continue
                 # 하이라이트는 광원 쪽(왼쪽 위) — 다른 자산과 광원이 같아야 한다.
-                m[yy, xx] = MATS.index("glint" if ch == "*" and cfg["glint"] else "eye")
-                l[yy, xx] = 1.0 if ch == "*" else 0.0
+                # `w`(흰자)는 `glint` 설정과 무관하게 항상 흰색이다 — 하이라이트는
+                # "빛이 비친 자리"지만 흰자는 눈의 일부라 켜고 끌 값이 아니다.
+                white = ch == "w" or (ch == "*" and cfg["glint"])
+                m[yy, xx] = MATS.index("glint" if white else "eye")
+                l[yy, xx] = 1.0 if white else 0.0
+
+    def brow(x, y, w):
+        """눈썹 — 눈 위에 잉크 한 줄. **17px 에서는 못 넣는다**(`brow=None`).
+
+        앞머리를 빼고 남는 얼굴이 세 줄뿐이라, 눈(한 줄) 위에 한 줄을 더 쓰면
+        볼 홍조가 들어갈 줄이 사라진다(STYLE_GUIDE 「자연스러움」). 칸이 늘어난
+        캔버스에서만 켠다 — 얼굴이 다섯 줄이 되어야 눈썹·눈·볼이 다 들어간다.
+        """
+        for dx in range(w):
+            if 0 <= y < N and 0 <= x + dx < N and m[y, x + dx] == MATS.index("skin"):
+                m[y, x + dx] = MATS.index("eye")
+                l[y, x + dx] = 0.35     # 눈보다 옅게 — 같은 잉크면 눈매가 사나워진다
 
     def blush(x, y, w=1):
         """볼 홍조 — 눈 아래 바깥쪽으로 1px. 입은 그리지 않는다.
@@ -1901,7 +1999,7 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
     # 「비율」)가 몸통/다리를 여기서 가른다.
     beltm = np.zeros((N, N), dtype=bool)
     if cfg["belt"]:
-        row = int(round(cfg["torso_bot"] + bob)) - 1
+        row = int(round(px(cfg["torso_bot"] + bob))) - 1
         # **소매는 띠에 넣지 않는다**(2026-09-07, INBOX #20). 허리띠는 몸통을 두르는
         # 것이지 팔을 가로지르지 않는다. idle 은 팔이 이 줄 위에서 끝나서 티가 안
         # 났는데, 걷기에서 손이 내려오는 프레임이 생기자 소매 끝이 통째로 띠 색이
@@ -1911,19 +2009,37 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         l[row][sel] = 0.0
         beltm[row] = sel
 
+    # 앞섶 단추 — 상의 한가운데 세로줄에 한 칸씩 밝은 점을 찍는다.
+    # **17px 에서는 못 넣는다**(`buttons=0`). 상의가 세 줄뿐이라 허리띠와 같이
+    # 넣으면 가운데 한 줄이 통째로 점이 되어 옷이 아니라 자수가 된다 —
+    # 「옷포인트」 상한이 1개인 것과 같은 자리다(STYLE_GUIDE 「자연스러움」).
+    if cfg["buttons"] and direction != "up":     # 뒷모습에는 앞섶이 없다
+        col = int(round(px(cx))) - (0 if direction == "down" else int(round(px(0.9)) * sx))
+        top = int(round(px(cfg["torso_top"] + bob))) + 1
+        bot = int(round(px(cfg["torso_bot"] + bob))) - 2
+        for i in range(cfg["buttons"]):
+            r = top + int(round((bot - top) * i / max(cfg["buttons"] - 1, 1)))
+            if 0 <= r < N and 0 <= col < N and m[r, col] == SHIRT and not np.isin(pm[r, col], limbs):
+                l[r, col] += 0.40
+
     # 머리 하이라이트 띠 — 정수리 쪽 밝은면을 한 단계 더 올린다. 검은 머리는
     # 색이 아니라 이 광택으로 읽힌다(STYLE_GUIDE 「자연스러움」: 윗면에 밝은 띠).
     if cfg["hair_shine"]:
-        crown = (m == HAIR) & (np.arange(N)[:, None] <= int(round(hy - ry * 0.35)))
+        crown = (m == HAIR) & (np.arange(N)[:, None] <= int(round(px(hy - ry * 0.35))))
         top_row = crown & ~np.pad(crown, ((1, 0), (0, 0)))[:-1]
         l[np.pad(top_row, ((1, 0), (0, 0)))[:-1] & crown] += cfg["hair_shine"]
 
-    ey = cfg["eye_y"] + int(round(bob))
+    # **여기부터가 「진짜 픽셀 절대값」이다** — 위의 몸·머리·도구는 전부 설계 단위로
+    # 적혀 있어서 캔버스를 키우면 저절로 따라오는데, 눈/볼 홍조/허리띠는 축소가 끝난
+    # 네이티브 격자에 **칸을 세어서** 찍는다. 캔버스를 바꾸면 다시 잡아야 하는 값이
+    # 이 셋뿐이라는 것이 이 파일의 갈래다(`canvas_scale()` 참고).
+    ey = int(round(px(cfg["eye_y"] + bob)))
     ew = len(EYE_ART[cfg["eye_style"]][0])
+    eh = len(EYE_ART[cfg["eye_style"]])
 
     def eye_x(center):
-        """눈 덩어리의 왼쪽 칸. 중심 좌표를 칸 격자에 앉힌다."""
-        return int(np.floor(center - ew * 0.5 + 0.5))
+        """눈 덩어리의 왼쪽 칸. 설계 좌표를 픽셀 격자에 앉힌다."""
+        return int(np.floor(px(center) - ew * 0.5 + 0.5))
 
     if direction == "down":
         # **왼쪽 눈을 찍고 오른쪽은 그 거울상으로 잡는다.** 앞모습은 좌우대칭이라
@@ -1932,14 +2048,22 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         right = N - 1 - (left + ew - 1)
         eye(left, ey)
         eye(right, ey, flip=True)
+        if cfg["brow"]:
+            bdy, bw = cfg["brow"]
+            brow(left - (bw - ew) // 2, ey - bdy, bw)
+            brow(right - (bw - ew + 1) // 2, ey - bdy, bw)
         if cfg["blush"]:
-            blush(left - 1, ey + 1)
-            blush(right + ew, ey + 1)
+            blush(left - 1, ey + eh, w=cfg["blush_w"])
+            blush(right + ew - cfg["blush_w"] + 1, ey + eh, w=cfg["blush_w"])
     elif side:
         ax = eye_x(hx + sx * cfg["eye_dx"] * 0.55)
         eye(ax, ey, flip=sx < 0)
+        if cfg["brow"]:
+            bdy, bw = cfg["brow"]
+            brow(ax - ((bw - ew) if sx < 0 else 0), ey - bdy, bw)
         if cfg["blush"]:
-            blush(ax - 1 if sx < 0 else ax + ew, ey + 1)
+            blush(ax - cfg["blush_w"] if sx < 0 else ax + ew, ey + eh,
+                  w=cfg["blush_w"])
 
     return outline(inner_lines(quantize(m, l, pal, cfg["dither"]), m, pm, pal, skip=beltm), m)
 
