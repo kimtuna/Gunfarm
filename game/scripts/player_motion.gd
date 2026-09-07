@@ -16,6 +16,7 @@ extends RefCounted
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerInput := preload("res://scripts/player_input.gd")
 const GunAmmo := preload("res://scripts/gun_ammo.gd")
+const PlayerHealth := preload("res://scripts/player_health.gd")
 
 ## 스프라이트 시트의 행 순서와 같다 (scripts/player_frames.gd 의 `DIR_NAMES`).
 enum { DOWN = 0, LEFT = 1, RIGHT = 2, UP = 3 }
@@ -127,6 +128,24 @@ var reload_started := false
 ## **이 틱에 우클릭(탄종 전환)을 눌렀는가.** 위와 같은 규칙이다.
 var switch_started := false
 
+## 체력(`player_health.gd` — 최대 100). 탄창과 같은 자리에 있는 이유도 같다:
+## **화면 상태가 아니라 플레이어 상태**라 나중에 서버가 들고 판정한다
+## (docs/DESIGN.md 「체력 / 죽음 / 리스폰」, 「서버 권위」).
+var health: RefCounted = PlayerHealth.new()
+
+## **리스폰 지점(월드 좌표) — 값 하나다.** 지금은 월드를 처음 만들 때의 스폰 좌표이고
+## (`player.gd` 의 `setup()` 이 넣는다), 나중에 침대를 설치하면 **이 값 하나만** 그
+## 침대 자리로 덮어쓰면 된다 (docs/DESIGN.md 「체력 / 죽음 / 리스폰」과 「건축 / 방
+## 시스템」의 침대 — 침대는 건축과 같이 오므로 지금 범위가 아니다).
+##
+## 위치와 마찬가지로 **입력으로는 여기 못 들어온다** — 클라이언트가 "내 리스폰 지점은
+## 여기다"라고 주장하면 어디로든 순간이동할 수 있다 (「서버 권위」).
+var respawn_position := Vector2.ZERO
+
+## **이 틱에 죽어서 리스폰했는가** — `use_started` 와 같은, 그 틱 하나에만 참인 표시다.
+## #37 의 데스드롭 상자가 붙을 자리이기도 하다(이번 범위가 아니다).
+var respawned := false
+
 var _world: RefCounted = null
 ## 지난 틱에 눌려 있었는가 — 누르고 있는 동안 매 틱 다시 시작되지 않게 하는 것뿐이다.
 var _reload_held := false
@@ -140,6 +159,14 @@ func _init(world: RefCounted) -> void:
 ## 고정 틱 하나를 진행한다. `input` 은 `player_input.gd` 한 벌(이동 두 축 + 조준
 ## 각도) — 이게 곧 네트워크로 오갈 입력이다.
 func tick(input: RefCounted) -> void:
+	# **죽었으면 이 틱은 되살아나는 틱이다** (docs/DESIGN.md 「체력 / 죽음 / 리스폰」).
+	# 데미지를 주는 쪽(`take_damage()`)이 아니라 **틱 안에서** 되살리는 이유: 리스폰은
+	# 위치를 옮기는 시뮬레이션 한 단계라 서버가 도는 틱 위에 있어야 한다 — 밖에서
+	# 부르는 함수가 위치를 옮기면 그 틱의 이동 계산과 순서가 어긋난다.
+	respawned = false
+	if health.is_dead():
+		_respawn()
+		respawned = true
 	# **바라보는 방향은 이동이 아니라 조준이 정한다** (docs/DESIGN.md 「조작」) —
 	# 그래서 서 있을 때도 마우스를 돌리면 캐릭터가 같이 돈다.
 	aim_angle = input.aim_angle
@@ -210,6 +237,24 @@ func apply_recoil() -> void:
 	aim_focus = clampf(aim_focus - RECOIL_KICK, 0.0, 1.0)
 
 
+## 데미지를 받는다 — **실제로 깎인 양**을 돌려준다. 체력이 0 이 되면 **다음 틱에**
+## 리스폰 지점에서 되살아난다(위 `tick()`).
+##
+## **지금 이 함수를 부르는 것은 자체 QA 뿐이다** — 동물이 없고 이 서버는 PvE 라
+## 사람도 서로 안 맞는다(docs/DESIGN.md 「전투」). 실제로 죽는 일은 동물이 생긴
+## 뒤부터이고, 그때 이 함수를 부르는 것은 **서버**다(「서버 권위」의 "명중 판정 /
+## 자원 획득은 전부 서버가 계산한다") — `bullets.gd` 의 `hit_test` 자리가 그 입구다.
+func take_damage(amount: int) -> int:
+	return health.take_damage(amount)
+
+
+## 리스폰 지점을 정한다. **부르는 곳은 월드에 들어올 때 한 곳뿐**이고(스폰 좌표),
+## 나중에 침대를 설치하면 같은 함수를 그 침대 자리로 부르면 그만이다 — 리스폰 지점을
+## 값 하나로 둔 이유가 이것이다 (docs/DESIGN.md 「체력 / 죽음 / 리스폰」).
+func set_respawn(world_position: Vector2) -> void:
+	respawn_position = world_position
+
+
 ## 지금 서 있는 타일.
 func tile() -> Vector2i:
 	return WorldGen.world_to_tile(position)
@@ -226,6 +271,18 @@ func place_at_tile(t: Vector2i) -> void:
 
 
 # --- 내부 -------------------------------------------------------------------
+
+## 리스폰 지점에서 되살아난다 — 체력을 가득 채우고 그 자리로 옮긴다.
+##
+## **인벤토리는 건드리지 않는다** — 죽을 때 아이템이 어떻게 되는지(데스드롭 상자)는
+## 별도 항목이고(INBOX #37), 애초에 이 코어는 인벤토리를 모른다.
+func _respawn() -> void:
+	position = respawn_position
+	health.refill()
+	# 휘두르던 도중에 죽었으면 그 모션은 여기서 끊는다 — 안 그러면 스폰 지점에
+	# 나타나자마자 죽기 전의 도끼질을 마저 한다.
+	use_ticks_left = 0
+
 
 ## 조준 각도를 4방향 시트 중 하나로 스냅한다. 지금 방향을 계속 쓸 수 있으면
 ## 그대로 두고(히스테리시스), 여유각까지 넘어갔을 때만 가장 가까운 방향으로 바꾼다.

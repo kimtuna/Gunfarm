@@ -99,6 +99,11 @@ func _apply_appearance() -> void:
 func setup(world: RefCounted, spawn_tile: Vector2i) -> void:
 	motion = PlayerMotion.new(world)
 	motion.place_at_tile(spawn_tile)
+	# **리스폰 지점은 월드를 처음 만들 때의 스폰 좌표다** (docs/DESIGN.md 「체력 /
+	# 죽음 / 리스폰」). 값 하나라, 나중에 침대를 설치하면 그쪽이 이 한 줄과 같은
+	# 함수를 그 침대 자리로 부르면 된다. **`place_at()`(텔레포트)로는 안 바뀐다** —
+	# 옮겨졌다고 리스폰 지점까지 따라가면 침대의 의미가 없어진다.
+	motion.set_respawn(motion.position)
 	position = motion.position
 	_update_animation()
 	set_process(true)
