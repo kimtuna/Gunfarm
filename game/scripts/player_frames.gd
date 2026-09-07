@@ -82,14 +82,21 @@ static func has_use(tool: String) -> bool:
 
 ## 한 캐릭터가 가진 모션과 그 재생 속도. **여기 한 줄을 늘리면** 시트가 자동으로
 ## 같이 실려서 `<모션>_<방향>` 애니메이션이 생긴다(도구별 모션이 그렇게 붙는다).
+## **2026-09-08 — 캐릭터 시트를 전부 지우고 idle 한 장부터 다시 시작한다.**
+## 사람이 "지금까지 있던 거 싹 다 없애고 캐릭터를 싹 다 삭제해. ComfyUI 로 그린 걸
+## 도안으로 해서 다시 그려서 하나만 만들어 게임에 적용해봐" 라고 정했다.
+## 걷기·도구 시트 88장은 지웠으므로 여기서 idle 만 돌려준다 — 그 시트들이 다시
+## 생기면 아래 주석 처리된 줄을 되살린다.
 static func motions() -> Dictionary:
-	var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
-	for tool in TOOLS:
-		out["hold_%s" % tool] = IDLE_FPS
-		if has_use(tool):
-			out["use_%s" % tool] = USE_FPS
-		out["walk_%s" % tool] = WALK_FPS
-	return out
+	return {"idle": IDLE_FPS}
+	# 되살릴 때:
+	# var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
+	# for tool in TOOLS:
+	# 	out["hold_%s" % tool] = IDLE_FPS
+	# 	if has_use(tool):
+	# 		out["use_%s" % tool] = USE_FPS
+	# 	out["walk_%s" % tool] = WALK_FPS
+	# return out
 
 
 ## `<모션>` × `<머리모양>` 한 벌이 놓인 자리. 생성기(`gen_character.py` 의

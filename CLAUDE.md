@@ -35,14 +35,15 @@ PATH 에 `godot` 이 없다. 항상 전체 경로로 부른다:
 | `numpy` 2.5 | 배열로 픽셀 다루기. 팔레트 교체/색상 변형(옷색만 바꾸기)에 쓴다 |
 | `opensimplex` 0.4.5 | 심리스 노이즈 — **절차적 맵 생성** |
 | `hitherdither` | Floyd-Steinberg / Bayer 디더링 — 제한 팔레트에서 그라데이션 |
-| `pyxelate` | 이미지 → 픽셀아트 변환(다운샘플 + 팔레트 양자화) |
+| `pyxelate` | **이미지 → 픽셀아트 변환** — 참고 그림을 도트로 바꿀 때 이걸 쓴다. 그냥 축소하면 픽셀마다 색이 달라져 도트가 아니라 「축소한 사진」이 된다(2026-09-08 실측: 축소는 평평한 면 1%, pyxelate 는 75%). **주의: PyPI 의 `pyxelate` 0.0.1 은 아무 기능이 없는 빈 껍데기다** — `pip install git+https://github.com/sedthh/pyxelate.git` 로 받아야 한다 |
 | `skimage` 0.26 | 외곽선 추출, 형태 연산 |
 
 venv 는 `.gitignore` 되어 있다(커밋하지 않는다). 없어졌으면 다시 만든다:
 
 ```
 /opt/homebrew/bin/python3.13 -m venv .venv \
-  && .venv/bin/pip install Pillow numpy opensimplex hitherdither pyxelate scikit-image
+  && .venv/bin/pip install Pillow numpy opensimplex hitherdither scikit-image \
+  && .venv/bin/pip install "git+https://github.com/sedthh/pyxelate.git"
 ```
 
 대시보드 렌더러(`scripts/render_dashboard.py`)만은 이것들이 필요 없어서 시스템
