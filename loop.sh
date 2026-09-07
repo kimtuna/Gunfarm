@@ -54,7 +54,11 @@ next_item() {
 }
 
 # 크레딧/사용량 한도 문구 감지 (claude 자체의 한도 — 예산과는 별개)
-CREDIT_RE='usage limit|rate limit|Credit balance is too low|insufficient credit|quota exceeded|Claude usage limit reached|Please run /login'
+# 2026-09-07: `session limit` 이 빠져 있어서 실제 한도 응답
+# ("You've hit your session limit · resets 9:50am")을 못 잡았다. 그 결과 한도 사건 하나가
+# 평범한 실패 3회로 세어져서, 남은 재시도를 9초 만에 태우고 엉뚱한 사유로 멈췄다.
+# 문구는 바뀔 수 있으므로 `hit your ... limit` 같은 느슨한 형태도 같이 본다.
+CREDIT_RE='usage limit|session limit|rate limit|limit reached|hit your [a-z ]*limit|Credit balance is too low|insufficient credit|quota exceeded|Please run /login'
 
 # --- 시작 전 확인 ---
 [[ -f "$PROMPT" ]] || { echo "PROMPT.md 없음"; exit 1; }
@@ -141,7 +145,12 @@ while true; do
 
   # 크레딧/사용량 한도 — LLM 판단이 아니라 스크립트가 기계적으로 감지한다
   if grep -qiE "$CREDIT_RE" "$OUT_JSON" 2>/dev/null || tail -50 "$LOG" | grep -qiE "$CREDIT_RE"; then
-    halt "크레딧/사용량 한도에 걸린 것으로 보입니다. 한도가 풀린 뒤 ./ctl.sh start 로 다시 시작하세요."
+    # 감지된 문구를 그대로 보여준다 — 대개 "resets 9:50am" 처럼 **언제 풀리는지**가 들어 있어서,
+    # 그게 없으면 사람이 언제 다시 켜야 할지 알 수 없다.
+    HIT="$(grep -oiE "[^\"]*($CREDIT_RE)[^\"]*" "$OUT_JSON" 2>/dev/null | head -1)"
+    halt "크레딧/사용량 한도에 걸린 것으로 보입니다. 한도가 풀린 뒤 ./ctl.sh start 로 다시 시작하세요.${HIT:+
+
+  받은 문구: $HIT}"
   fi
 
   # 이번 바퀴 비용
