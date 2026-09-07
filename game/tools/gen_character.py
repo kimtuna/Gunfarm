@@ -664,8 +664,12 @@ CFG = dict(
     torso_r=0.7, ears=0, arm_in=0.55, shoe_lip=0.34,
     fringe=3.7, fringe_tilt=0.0, side_hair=5.6,
     eye_y=4, eye_dx=1.6, eye_style="bar", glint=False, blush=True, blush_w=1,
-    brow=None,
+    brow=None, eye_side=None,
+    nose_y=1.9, nose_r=(0.62, 0.58), nose_in=0.0,   # 옆모습 코 — 눈과 함께 잡는다(#45)
     hair_shine=0.18,
+    button_lum=0.40,    # 단추 한 칸의 명도 델타. **음수면 어두운 단추**다 — 광원이
+                        # 왼쪽 위라 가슴 한가운데는 이미 가장 밝은 단계라서, 밝은 점을
+                        # 찍으면 그 밝은 면에 먹혀 안 보인다(2026-09-07, INBOX #45).
     buttons=0,          # 앞섶 단추 개수. **17px 에서는 0 이다** — 상의가 세 줄뿐이라
                         # 허리띠 말고 들어갈 자리가 없다(「옷포인트」 상한 1개).
 
@@ -708,6 +712,7 @@ CFG_KIND = {
         "torso_w", "torso_top", "torso_bot", "side_torso_w", "arm_w", "arm_in",
         "toe", "heel", "foot_out", "side_arm", "torso_r", "ears",
         "fringe", "side_hair", "eye_dx", "eye_y",
+        "nose_y", "nose_r", "nose_in",
         "leg_top", "foot_y", "boot_h",
         "bob", "lift", "stride", "stride_f", "arm_swing", "arm_swing_f",
         "stance_drag", "arm_slant")},
@@ -715,8 +720,8 @@ CFG_KIND = {
         "head_p", "head_pb", "arm_taper", "leg_taper", "fringe_tilt",
         "belt", "limb_shade", "contact", "cuff", "collar", "shoe_lip",
         "hair_shine", "dither", "key", "amb", "rim")},
-    **{k: "grid" for k in ("eye_style", "glint", "blush", "blush_w", "brow",
-                           "buttons")},
+    **{k: "grid" for k in ("eye_style", "eye_side", "glint", "blush", "blush_w",
+                           "brow", "buttons", "button_lum")},
 }
 assert set(CFG_KIND) == set(CFG), set(CFG_KIND) ^ set(CFG)
 
@@ -1874,8 +1879,16 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         rx -= 0.2
     b.add(head_shape(hx, hy, rx, ry, p_top=cfg["head_p"], p_bot=cfg["head_pb"]), "skin")
     if side:
-        # 코 — 실루엣 밖으로 살짝 나온 1px 돌기. 옆모습을 결정적으로 알아보게 한다
-        b.add(ellipsoid(hx + sx * (rx - 0.15), hy + 1.9, 0.62, 0.58), "skin")
+        # 코 — 실루엣 밖으로 살짝 나온 1px 돌기. 옆모습을 결정적으로 알아보게 한다.
+        # **자리와 크기는 눈과 함께 잡는 값이다**(2026-09-07, INBOX #45): 눈보다
+        # 아래(광대 높이)여야 하는데 눈이 몇 줄인지가 캔버스마다 달라서, 눈을 다시
+        # 잡는 캔버스에서는 코도 같이 밀어야 한다. 17px 기본값은 예전 그대로다.
+        # `nose_in` — **코는 머리 반지름이 아니라 「그 줄의 머리 폭」에 걸려야 붙는다.**
+        # 초타원이라 아래로 갈수록 좁아지는데 코 자리는 `rx` 로 잡혀 있어서, 코를
+        # 내리면 그만큼 실루엣 밖으로 떠서 **얼굴에서 떨어진 살점 하나**가 된다.
+        # 17px 은 코가 눈 바로 아래(1.9)라 그 어긋남이 축소 격자에서 메워졌다.
+        b.add(ellipsoid(hx + sx * (rx - 0.15 - cfg["nose_in"]),
+                        hy + cfg["nose_y"], *cfg["nose_r"]), "skin")
     elif cfg["ears"] and direction == "down":
         # 귀는 **실루엣 밖으로 거의 나오지 않게** 붙인다. 조금만 내밀어도 34px
         # 에서는 1px 돌기 + 그 바깥의 외곽선까지 2px 가 되어 요정 귀가 된다.
@@ -1921,8 +1934,8 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         "bead3": ("*ee", "eee"),        # 3×2 잉크 + 하이라이트 1px
     }
 
-    def eye(x, y, flip=False):
-        art = EYE_ART[cfg["eye_style"]]
+    def eye(x, y, flip=False, style=None):
+        art = EYE_ART[style or cfg["eye_style"]]
         for dy, line in enumerate(art):
             for dx, ch in enumerate(line[::-1] if flip else line):
                 yy, xx = y + dy, x + dx
@@ -1937,17 +1950,21 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
                 m[yy, xx] = MATS.index("glint" if white else "eye")
                 l[yy, xx] = 1.0 if white else 0.0
 
-    def brow(x, y, w):
+    def brow(x, y, w, lum=0.30):
         """눈썹 — 눈 위에 잉크 한 줄. **17px 에서는 못 넣는다**(`brow=None`).
 
         앞머리를 빼고 남는 얼굴이 세 줄뿐이라, 눈(한 줄) 위에 한 줄을 더 쓰면
         볼 홍조가 들어갈 줄이 사라진다(STYLE_GUIDE 「자연스러움」). 칸이 늘어난
         캔버스에서만 켠다 — 얼굴이 다섯 줄이 되어야 눈썹·눈·볼이 다 들어간다.
         """
+        # **눈썹은 잉크가 아니라 머리카락 재질로 찍는다**(2026-09-07, INBOX #45).
+        # `eye` 램프는 네 단계가 전부 잉크라 명도를 낮춰도 눈과 **똑같은 검정**이
+        # 나온다 — 눈과 눈썹이 같은 색이면 눈이 위아래로 두 배가 되어 째려본다.
+        # 머리색이면 저절로 눈보다 옅고, 머리모양이 바뀌어도 눈썹이 따라간다.
         for dx in range(w):
             if 0 <= y < N and 0 <= x + dx < N and m[y, x + dx] == MATS.index("skin"):
-                m[y, x + dx] = MATS.index("eye")
-                l[y, x + dx] = 0.35     # 눈보다 옅게 — 같은 잉크면 눈매가 사나워진다
+                m[y, x + dx] = MATS.index("hair")
+                l[y, x + dx] = lum
 
     def blush(x, y, w=1):
         """볼 홍조 — 눈 아래 바깥쪽으로 1px. 입은 그리지 않는다.
@@ -2020,7 +2037,7 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         for i in range(cfg["buttons"]):
             r = top + int(round((bot - top) * i / max(cfg["buttons"] - 1, 1)))
             if 0 <= r < N and 0 <= col < N and m[r, col] == SHIRT and not np.isin(pm[r, col], limbs):
-                l[r, col] += 0.40
+                l[r, col] += cfg["button_lum"]
 
     # 머리 하이라이트 띠 — 정수리 쪽 밝은면을 한 단계 더 올린다. 검은 머리는
     # 색이 아니라 이 광택으로 읽힌다(STYLE_GUIDE 「자연스러움」: 윗면에 밝은 띠).
@@ -2034,8 +2051,13 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
     # 네이티브 격자에 **칸을 세어서** 찍는다. 캔버스를 바꾸면 다시 잡아야 하는 값이
     # 이 셋뿐이라는 것이 이 파일의 갈래다(`canvas_scale()` 참고).
     ey = int(round(px(cfg["eye_y"] + bob)))
-    ew = len(EYE_ART[cfg["eye_style"]][0])
-    eh = len(EYE_ART[cfg["eye_style"]])
+    # **옆모습 눈은 앞모습과 다른 글리프를 쓸 수 있다**(`eye_side`, 2026-09-07 INBOX #45).
+    # 앞모습에서 비율이 맞는 눈이 옆모습에서는 통째로 잉크가 된다 — 앞모습은 흰자
+    # 양쪽에 얼굴이 남지만 옆모습은 눈 앞이 곧 얼굴 앞선이라 검은 사각형이 된다.
+    # 17px 은 `None` 이라 예전 그대로 `eye_style` 하나를 두 자세에 같이 쓴다.
+    estyle = (cfg["eye_side"] or cfg["eye_style"]) if side else cfg["eye_style"]
+    ew = len(EYE_ART[estyle][0])
+    eh = len(EYE_ART[estyle])
 
     def eye_x(center):
         """눈 덩어리의 왼쪽 칸. 설계 좌표를 픽셀 격자에 앉힌다."""
@@ -2049,18 +2071,21 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         eye(left, ey)
         eye(right, ey, flip=True)
         if cfg["brow"]:
-            bdy, bw = cfg["brow"]
-            brow(left - (bw - ew) // 2, ey - bdy, bw)
-            brow(right - (bw - ew + 1) // 2, ey - bdy, bw)
+            bdy, bw, blum = (tuple(cfg["brow"]) + (0.30,))[:3]
+            brow(left - (bw - ew) // 2, ey - bdy, bw, blum)
+            brow(right - (bw - ew + 1) // 2, ey - bdy, bw, blum)
         if cfg["blush"]:
             blush(left - 1, ey + eh, w=cfg["blush_w"])
             blush(right + ew - cfg["blush_w"] + 1, ey + eh, w=cfg["blush_w"])
     elif side:
         ax = eye_x(hx + sx * cfg["eye_dx"] * 0.55)
-        eye(ax, ey, flip=sx < 0)
+        eye(ax, ey, flip=sx < 0, style=estyle)
         if cfg["brow"]:
-            bdy, bw = cfg["brow"]
-            brow(ax - ((bw - ew) if sx < 0 else 0), ey - bdy, bw)
+            bdy, bw, blum = (tuple(cfg["brow"]) + (0.30,))[:3]
+            # **옆모습 눈썹은 눈보다 앞으로 나가면 안 된다** — 얼굴 앞선 밖으로
+            # 삐져나가 이마가 아니라 챙처럼 보인다(2026-09-07, INBOX #45).
+            # 눈보다 긴 몫은 전부 뒤(뒤통수) 쪽으로 보낸다.
+            brow(ax - ((bw - ew) if sx > 0 else 0), ey - bdy, bw, blum)
         if cfg["blush"]:
             blush(ax - cfg["blush_w"] if sx < 0 else ax + ew, ey + eh,
                   w=cfg["blush_w"])
