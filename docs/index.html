@@ -41,7 +41,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#39</span> [BUILD] **총알이 바닷물에 막힌다 — 이게 맞는지 사람이 정해줄 것.** (2026-09-07, INBOX #34 바퀴에서 나온 것이다. 고장이 아니라 **지시대로 만든 결과**다.)</li>
 <li><span class="num">#41</span> [BUILD] **여는 좌클릭이 도구를 쓰는 좌클릭과 겹치는 것 — 대상이 늘어나면 규칙을 한 곳으로 모을 것.** (2026-09-07, INBOX #37 바퀴에서 나온 것이다. 지금은 고장이 아니다.)</li>
 <li><span class="num">#42</span> [BUILD] **버린 아이템이 발밑에 놓여 캐릭터에 완전히 가려진다.** (2026-09-07, INBOX #38 바퀴에서 발견 — 고장이 아니라 **지금 코드가 그렇게 놓는 것**이다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>a1cca19  [INBOX #40] 데스드롭 상자를 코드 자리표시에서 구워진 도트 스프라이트로</code>
+<section><h2>마지막 커밋</h2><code>42f6f4a  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-07 18:18</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #40 ([DESIGN] 데스드롭 상자 스프라이트) 완료.
 
@@ -72,7 +72,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907181833";
+  var STAMP = "20260907181855";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
