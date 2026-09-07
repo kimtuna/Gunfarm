@@ -120,9 +120,22 @@ static func cell_of(texture: Texture2D) -> int:
 	return maxi(1, texture.get_height() / DIR_NAMES.size())
 
 
+## **칸을 세로로 다 쓰는 시트** — 발밑 줄이 칸의 아래 모서리다 (아래 `feet_y()`).
+## 지금은 32px idle 하나뿐이다. 32px 로 이사한 시트가 늘면 여기가 아니라
+## `feet_y()` 의 규칙 자체를 손볼 자리가 된다.
+const FULL_CELL := 32
+
 ## 그 칸 크기에서 발이 닿는 줄(아트 픽셀). 정수로 떨어뜨린다 — 반 픽셀이 남으면
 ## 스프라이트가 도트 격자에서 밀려 아트 픽셀 크기가 균일하지 않게 보인다.
+##
+## **32px 시트만 다르다**(2026-09-08, INBOX #47). 그 칸의 idle 은 스타듀 농부처럼
+## **세로 32칸을 외곽선까지 다 쓰도록** 다시 그려서(1 : 2 비율) 그림의 맨 아랫줄이
+## 31 이다 — 설계 공간의 15.6번째 줄(= 29)을 그대로 쓰면 캐릭터가 땅에 2px 묻힌다.
+## 17px 시트는 여전히 아랫줄 하나가 비어 있어 옛 규칙 그대로다.
+## `qa_player_sprite.gd` 의 `_check_feet_line()` 이 시트마다 이 값을 그림과 견준다.
 static func feet_y(cell: int) -> int:
+	if cell == FULL_CELL:
+		return cell
 	return roundi(cell * DESIGN_FEET_Y / DESIGN_N)
 
 

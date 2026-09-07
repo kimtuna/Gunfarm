@@ -103,12 +103,17 @@ def _gen_box():
     return gen_box
 
 
-def _cloth_accents():
-    """생성기가 지금 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리)."""
+def _cloth_accents(over=None):
+    """생성기가 그 시트에 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리).
+
+    **모션마다 설정이 다를 수 있다**(2026-09-08, INBOX #47). 전에는 전역 `CFG` 만
+    읽어서, 32px idle 이 옷깃을 켰는데도 검사는 `1개(belt)` 라고 셌다 — 시트마다
+    그 시트를 구운 설정(`MOTION_OVER`)을 얹어서 센다.
+    """
     if TOOLS not in sys.path:
         sys.path.insert(0, TOOLS)
     import gen_character as gen
-    return gen.cloth_accents()
+    return gen.cloth_accents(dict(gen.CFG, **(over or {})))
 
 
 def _terrain_palette():
@@ -206,7 +211,59 @@ def _player_spec(**over):
         # 벌어졌는지만 본다(도구를 들었다고 다른 캐릭터가 되면 안 된다).
         motion=None,
         link=None,
+        # 칸 안에서 캐릭터의 세로 : 가로 비. **17px 시트는 아직 안 잰다**(`None`) —
+        # 걷기·도구 시트가 32px 로 이사할 때 이 자리에 같은 밴드가 들어간다.
+        aspect=None,
+        # 「머리 폭 > 어깨 폭」을 요구할 것인가 (위 `_check_natural` 참고).
+        head_wider=True,
+        # 「옷포인트」를 셀 때 전역 `CFG` 위에 얹을 그 시트의 설정.
+        accents_over=None,
     ), **over)
+
+
+def _idle_spec(**over):
+    """**32px idle 시트**(2026-09-08, INBOX #47 — 사람이 스타듀 농부를 보여주며
+    "이거 똑같이 만들어봐").
+
+    `_player_spec()`(17px)에서 **캔버스가 커진 몫만큼** 다시 잡은 값들이다. 그냥
+    비례해서 곱한 게 아니라 32px 격자에 실제로 그려서 나온 실측이다 — 17px 때
+    34px 값을 반으로 나누지 않은 것과 같다.
+
+    | | 17px | 32px idle |
+    |---|---|---|
+    | 캐릭터(외곽선 포함) | 11 × 16 | **16 × 32 — 1 : 2** |
+    | 머리 | 43% | **40%** |
+    | 몸통 / 다리 / 신발 | 3 / 3 / 2 | **6 / 8 / 4** |
+    | 눈 | 가로 2 × 세로 1, 흰자 없음 | **2 × 2, 바깥 칸이 흰자** |
+    | 옷 포인트 | 1개(허리띠) | **2개(허리띠 + 옷깃)** |
+
+    **비율 밴드는 스타듀 농부를 실측해서 잡았다**(`docs/design_reference/
+    ref_stardew_farmer.png` — 아트 32줄에 머리 42% / 상의 22% / 바지 26% / 신발 10%).
+    INBOX #47 은 「머리 37% / 상의 13% / 바지+신발 51%」로 적었지만 그 값은 참고
+    이미지에서 재현되지 않았다 — 자세한 것은 `docs/STYLE_GUIDE.md` 3번.
+    """
+    _gen()
+    import gen_character as gen
+    return _player_spec(
+        cell=gen.IDLE_N,
+        # **캔버스가 두 배가 되면 곧은 구간도 두 배로 잡힌다.** 다리 한 짝이
+        # 7줄이라 17px 의 5px 로는 어떤 그림도 통과할 수 없다(17px 에서 다리가
+        # 세 줄이던 것과 같은 자리다). 실측: 짧은머리 8 / 단발 9.
+        straight_max=9,
+        head_frac=(0.36, 0.44),
+        bands=dict(torso=(5, 8), legs=(7, 10), shoes=(3, 5)),
+        # **1 : 2** — 스타듀 농부와 같은 비다. 아래로는 "정사각에 가깝다",
+        # 위로는 "막대기"가 벽이다.
+        aspect=(1.85, 2.25),
+        # **놓았다** — 스타듀 농부는 머리가 어깨보다 넓지 않다(INBOX #47).
+        head_wider=False,
+        # 눈 2×2. 바깥 칸이 흰자라 하이라이트(흰색)가 **있어야** 한다.
+        eye_size=dict(w=(2, 2), h=(2, 2)),
+        eye_glint=True,
+        # 상의가 여섯 줄이라 허리띠와 옷깃이 둘 다 들어간다.
+        accents_max=2,
+        accents_over=gen.IDLE_OVER,
+        **over)
 
 
 def _walk_spec(style):
@@ -390,7 +447,7 @@ for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
     SPECS["ground_%s.png" % _tool] = _ground_spec()
 for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STYLES
-    SPECS["player_idle_%s.png" % _style] = _player_spec()
+    SPECS["player_idle_%s.png" % _style] = _idle_spec()
     SPECS["player_walk_%s.png" % _style] = _walk_spec(_style)
     # 도구별 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 4 — 안 넓히면 새 모션은
     # 아무도 검사하지 않는다). 도구가 늘면 이 줄의 목록만 늘린다.
@@ -464,7 +521,7 @@ def _longest_run(profile):
     return best
 
 
-def _load_ref(folder, name, spec, color2mat):
+def _load_ref(folder, name, spec, color2mat, ref_cell=None, ref_rows=1):
     """견줄 시트 한 장 → (rgb, 몸 마스크, **도구를 뺀 몸 마스크**).
 
     「이음」은 이 시트와 지금 시트의 바운딩박스를 견주는데, **양쪽을 같은 방식으로
@@ -473,6 +530,12 @@ def _load_ref(folder, name, spec, color2mat):
     """
     img = np.array(Image.open(os.path.join(folder, name)).convert("RGBA"))
     rgb, body = img[..., :3].astype(np.int32), img[..., 3] == 255
+    if ref_cell is not None and img.shape[0] // ref_rows != ref_cell:
+        # **칸이 다른 시트끼리는 견줄 수 없다**(2026-09-08, INBOX #47). 지금은
+        # idle 만 32px 이고 걷기·도구는 17px 이라(INBOX #46 의 의도된 어긋남),
+        # 두 시트를 같은 칸으로 잘라 겹치면 "몸이 통째로 바뀌었다"만 나온다 —
+        # 그림이 잘못된 게 아니라 잴 수가 없는 것이다. 이사가 끝나면 저절로 다시 돈다.
+        return None
     mm = np.full(body.shape, "", dtype=object)
     for c, m in color2mat.items():
         mm[body & np.all(rgb == np.array(c), axis=-1)] = m
@@ -660,6 +723,25 @@ def check_sheet(path, spec):
                                      min(box[(d, 0)][3] - box[(d, 0)][2] + 1 for d in rows),
                                      max(box[(d, 0)][3] - box[(d, 0)][2] + 1 for d in rows)))
 
+    # 세로비 — **칸 안에서 캐릭터가 얼마나 세로로 긴가**(2026-09-08, INBOX #47).
+    # 여기가 비어 있어서 **가로 18 × 세로 28 = 1 : 1.56** 이 그냥 통과했다:
+    # 「규격」은 칸 크기만 보고 「바운딩」은 방향끼리 어긋나는지만 봐서, 캔버스를
+    # 키웠는데 그림이 정사각에 가깝게 퍼진 것을 아무도 안 봤다. 스타듀 농부는
+    # **1 : 2**(아트 16 × 32)이고 그게 "사람으로 보이는가"를 가르는 첫 번째 값이다.
+    if spec.get("aspect"):
+        lo, hi = spec["aspect"]
+        bad, got = [], []
+        for d in rows:
+            top, bot, x0, x1 = box[(d, 0)]
+            a = (bot - top + 1) / float(x1 - x0 + 1)
+            got.append("%s 1:%.2f" % (d, a))
+            if not lo <= a <= hi:
+                bad.append("%s 1:%.2f (%dx%d)" % (d, a, x1 - x0 + 1, bot - top + 1))
+        rep.add(not bad, "세로비",
+                "%s — 세로비가 1:%.2f~1:%.2f 밖이다. 캔버스가 정사각이라고 캐릭터까지"
+                " 정사각으로 그리면 사람으로 안 보인다" % (" ".join(bad[:4]), lo, hi),
+                " ".join(got))
+
     # 재질 지도 (정확 일치 — quantize 가 램프 색을 그대로 찍으므로)
     matmap = np.full(alpha.shape, "", dtype=object)
     for c, m in color2mat.items():
@@ -829,7 +911,11 @@ def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols, bodym, spec, col
 
     if not mo.get("idle"):
         return
-    pr, pa, pm = _load_ref(folder, mo["idle"], spec, color2mat)
+    ref = _load_ref(folder, mo["idle"], spec, color2mat, cell, len(rows))
+    if ref is None:
+        rep.add(True, "이음", "", "칸이 달라 못 견줌(%s 는 %dpx 가 아니다)" % (mo["idle"], cell))
+        return
+    pr, pa, pm = ref
     worst = max(max(_delta(*_frame(rgb, body, cell, r, c),
                            *_frame(rgb, body, cell, r, (c + 1) % cols))[0]
                     for c in range(cols)) for r in range(len(rows)))
@@ -855,7 +941,11 @@ def _check_link(rep, link, folder, rgb, body, cell, rows, bodym, spec, color2mat
     "도구를 들었더니 다른 캐릭터가 됐다"가 나타나는 자리**다. 맨손 idle 과 나란히
     놓고 바뀐 몸 픽셀 비율을 잰다.
     """
-    pr, pa, pm = _load_ref(folder, link["to"], spec, color2mat)
+    ref = _load_ref(folder, link["to"], spec, color2mat, cell, len(rows))
+    if ref is None:
+        rep.add(True, "이음", "", "칸이 달라 못 견줌(%s 는 %dpx 가 아니다)" % (link["to"], cell))
+        return
+    pr, pa, pm = ref
     bad, show = [], 0.0
     for r, d in enumerate(rows):
         # 바뀐 비율은 **도구까지 넣어서**(도구가 더해진 몫이 곧 이 검사의 내용이다),
@@ -964,8 +1054,12 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
                 if not blo <= band[k] <= bhi:
                     prop.append("%s %s %dpx" % (tag, k, band[k]))
             # **머리가 어깨+팔보다 넓어야 치비다** (STYLE_GUIDE 3번).
+            # **2026-09-08 (INBOX #47) 부터 시트마다 켜고 끈다** — 사람이 목표를
+            # 스타듀 농부 쪽으로 옮기면서 이 규칙을 놓았다(농부는 머리가 어깨보다
+            # 넓지 않다). 17px 시트는 여전히 켜 둔다: 거기서는 얼굴을 담을 칸이
+            # 없어 머리를 키운 것이 치비 비율의 근거였다.
             hw, sw = _width(fill, top, shirt - 1), _width(fill, shirt, pants - 1)
-            if hw <= sw:
+            if spec.get("head_wider", True) and hw <= sw:
                 prop.append("%s 머리폭 %d ≤ 어깨폭 %d" % (tag, hw, sw))
             if not head_show:
                 head_show = "머리 %.0f%% %dpx / 어깨 %dpx / 몸통%d 다리%d 신발%d" % (
@@ -1014,7 +1108,7 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
     # **생성기의 설정에서** 센다(팔레트를 생성기에서 불러오는 것과 같은 이유 —
     # 손으로 베껴두면 반드시 어긋난다). 17px 에서는 상의가 세 줄뿐이라 하나까지다.
     if spec.get("accents_max") is not None:
-        got = _cloth_accents()
+        got = _cloth_accents(spec.get("accents_over"))
         rep.add(len(got) <= spec["accents_max"], "옷포인트",
                 "%d개(%s) > %d개 — 상의가 포인트로 꽉 찬다"
                 % (len(got), "/".join(got), spec["accents_max"]),

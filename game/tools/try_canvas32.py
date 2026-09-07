@@ -18,6 +18,11 @@
 
 고른 값은 `gen_character.IDLE_OVER` 다 — **2026-09-07 (INBOX #46) 부터 게임의 idle
 시트가 실제로 그 값으로 구워진다.** 이 파일은 그 값을 지금 17px 과 나란히 보여준다.
+
+**2026-09-08 (INBOX #47) 에 그 값이 통째로 다시 잡혔다** — 캔버스만 키운 것이 아니라
+비율까지 스타듀 농부 쪽으로 옮겼다(1 : 1.56 → 1 : 2). 이 파일은 값을 들고 있지 않고
+`IDLE_OVER` 를 그대로 그리므로 저절로 따라온다. 새 그림을 참고 이미지와 나란히 놓은
+것은 `docs/design_reference/idle32_vs_stardew.png` 다.
 """
 import os
 import sys
@@ -39,12 +44,11 @@ K = N32 / float(G.DESIGN_N)     # 1.882 — 설계 단위 하나가 32px 칸에�
 ZOOM = 3                        # 씬 스케일. **32px 에서는 이게 안 바뀐다**
 
 # ── 32px 에서 다시 잡은 값들 ────────────────────────────────────────────────
-# `gen_character.CFG_KIND` 의 "grid" 갈래 + 눈을 옮기느라 같이 밀린 코(`nose_*`).
-# 설계 길이와 무차원 비율은 **한 줄도 손대지 않았다** — 그래서 머리가 전체에서
-# 차지하는 비율이 17px 과 같고, 늘어난 칸은 전부 디테일로 갔다(지시 (4)).
-# **이 바퀴에 고른 값은 이제 생성기가 들고 있다** — 2026-09-07 (INBOX #46) 에 사람이
-# 32px idle 을 실제로 게임에 넣기로 정하면서 `gen_character.IDLE_OVER` 로 옮겼다.
-# 여기에 사본을 두면 비교 이미지와 게임에 들어간 그림이 조용히 갈라진다.
+# **값은 생성기가 들고 있다** — 2026-09-07 (INBOX #46) 에 사람이 32px idle 을 실제로
+# 게임에 넣기로 정하면서 `gen_character.IDLE_OVER` 로 옮겼다. 여기에 사본을 두면
+# 비교 이미지와 게임에 들어간 그림이 조용히 갈라진다.
+# (#45 때는 "grid" 갈래만 잡았지만 **2026-09-08, INBOX #47 부터는 설계 길이도**
+# 거기 들어 있다 — 비율을 스타듀 농부 쪽으로 옮겼다.)
 TUNED32 = G.IDLE_OVER
 
 DIRS = G.DIRS
@@ -104,8 +108,11 @@ def on_tiles(n, over, tool=None):
         d.line([(0, i * TILE), (bg.width, i * TILE)], fill=(255, 255, 255, 40))
     for i in range(1, cols):
         d.line([(i * TILE, 0), (i * TILE, bg.height)], fill=(255, 255, 255, 40))
-    # 캔버스 맨 아랫줄은 걷기에서 몸이 가라앉는 여유라 비어 있다 — 발바닥은 그 위다
-    foot = int(round(n * 15.6 / G.DESIGN_N)) * ZOOM
+    # 발이 닿는 줄. **`player_frames.gd` 의 `feet_y()` 와 같은 규칙이어야** 여기
+    # 그린 것이 게임 화면과 같은 자리에 선다: 17px 은 아랫줄 하나가 비어 있어
+    # 설계 15.6번째 줄이고, **32px idle 은 칸을 세로로 다 써서 칸의 아래 모서리**다
+    # (2026-09-08, INBOX #47).
+    foot = (n if n == N32 else int(round(n * 15.6 / G.DESIGN_N))) * ZOOM
     for i, im in enumerate(ims):
         x = (1 + STEP * i) * TILE - im.width // 2
         bg.alpha_composite(im, (x, GROUND * TILE - foot))
@@ -141,16 +148,16 @@ def main():
              [("지금 17px", frames(G.DESIGN_N, 6, {}, "axe")),
               ("32px — 픽셀만 늘리고 같은 그림", frames(N32, 6, {}, "axe")),
               ("32px — 늘어난 칸을 쓴 것", frames(N32, 6, TUNED32, "axe"))]),
-        band("3) 늘어난 칸으로 무엇이 되고 무엇은 32px 에서도 안 되나 (얼굴 12배)",
+        band("3) 얼굴에서 무엇을 골랐나 (얼굴 12배) — 2026-09-08, INBOX #47",
              [("", [head(G.DESIGN_N, 22, {}),
                     head(N32, 12, {}),
-                    head(N32, 12, dict(TUNED32, brow=None, collar=0.0, buttons=0)),
-                    head(N32, 12, dict(TUNED32, collar=0.0, buttons=0)),
                     head(N32, 12, TUNED32),
-                    head(N32, 12, dict(TUNED32, brow=(2, 4, 0.30)))])],
-             caps=["17px 지금", "32px 픽셀만 늘림", "3×2 눈 + 하이라이트",
-                   "+ 눈썹(머리색, 옅게)", "+ 옷깃 · 앞섶 단추",
-                   "눈썹을 눈만큼 진하게 — 째려본다"]),
+                    head(N32, 12, dict(TUNED32, eye_style="bead3", eye_side="bead")),
+                    head(N32, 12, dict(TUNED32, brow=(1, 3, 0.85)))])],
+             caps=["17px", "32px — 칸만 키운 것(= #46 의 얼굴)",
+                   "**채택** — 눈 2×2, 바깥 칸이 흰자",
+                   "옛 눈(3×2 통짜 잉크) — 좁아진 얼굴에서 검은 안경이 된다",
+                   "눈썹을 넣으면 — 얼굴이 다섯 줄이라 눈에 붙어 째려본다"]),
         band("4) 32px 에서도 안 되는 것 — 손가락 (왼손만 확대)",
              [("", [hand(G.DESIGN_N, 50), hand(N32, 28)])],
              caps=["17px — 손 2×1px",

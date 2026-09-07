@@ -660,6 +660,10 @@ CFG = dict(
     arm_w=1.5,
     arm_slant=0.32, arm_taper=0.22, leg_taper=0.28, toe=0.65, heel=0.6,
     foot_out=0.2, side_arm=1.0,
+    sleeve=1.0,         # 팔 길이 중 소매가 덮는 비율. **1.0 이면 팔 전체가 소매다**
+                        # (17px — 팔이 세 줄뿐이라 반팔로 갈라봐야 한 줄씩이다).
+    leg_gap=0.35,       # 앞/뒷모습에서 두 다리 사이의 빈 폭(설계 단위)
+    hair_lines=1,       # 앞모습 머리결(가르마) 경계 수 — `HAIR_STYLES` 의 `strand`
     belt=True, limb_shade=0.16, contact=0.18, cuff=0.0, collar=0.0,
     torso_r=0.7, ears=0, arm_in=0.55, shoe_lip=0.34,
     fringe=3.7, fringe_tilt=0.0, side_hair=5.6,
@@ -713,15 +717,15 @@ CFG_KIND = {
         "toe", "heel", "foot_out", "side_arm", "torso_r", "ears",
         "fringe", "side_hair", "eye_dx", "eye_y",
         "nose_y", "nose_r", "nose_in",
-        "leg_top", "foot_y", "boot_h",
+        "leg_top", "foot_y", "boot_h", "leg_gap",
         "bob", "lift", "stride", "stride_f", "arm_swing", "arm_swing_f",
         "stance_drag", "arm_slant")},
     **{k: "ratio" for k in (
-        "head_p", "head_pb", "arm_taper", "leg_taper", "fringe_tilt",
+        "head_p", "head_pb", "arm_taper", "leg_taper", "fringe_tilt", "sleeve",
         "belt", "limb_shade", "contact", "cuff", "collar", "shoe_lip",
         "hair_shine", "dither", "key", "amb", "rim")},
     **{k: "grid" for k in ("eye_style", "eye_side", "glint", "blush", "blush_w",
-                           "brow", "buttons", "button_lum")},
+                           "brow", "buttons", "button_lum", "hair_lines")},
 }
 assert set(CFG_KIND) == set(CFG), set(CFG_KIND) ^ set(CFG)
 
@@ -846,8 +850,12 @@ def _body(b, d, cfg, pose):
 
     # 다리 — 사이를 조금 비워 두면 외곽선이 그 틈에 들어가 두 다리로 읽힌다.
     # 옆모습은 두 다리가 거의 겹치므로 간격을 좁히고 앞뒤(x)로만 벌린다.
+    # **틈은 설계 단위라 캔버스가 커지면 같이 벌어진다 — 그런데 「두 다리로 읽히는가」는
+    # 픽셀 수로 정해진다**(2026-09-08, INBOX #47): 17px 에서 0.35 는 화면에서 딱
+    # 외곽선 한 줄이지만, 32px 에서도 그 한 줄뿐이라 어두운 바지·신발 사이에서
+    # 묻혀 다리가 덩어리 하나로 보였다. 그래서 `leg_gap` 으로 빼서 칸마다 잡는다.
     lw = 1.9 if not side else 1.7
-    gap = 0.35 if not side else 0.0
+    gap = cfg["leg_gap"] if not side else 0.0
     # 옆모습으로 걸을 때만 두 다리를 한 자리로 모은다(`side_merge`) — 그래야 앞뒤
     # 착지가 좌우 대칭이 된다. idle 은 0 이라 #13 에서 확정된 서 있는 자세 그대로다.
     spread = (lw / 2 + gap) * (1.0 - pose["side_merge"])
@@ -915,10 +923,30 @@ def _body(b, d, cfg, pose):
         # 팔도 어깨에서 꺾는다 — `pose["arm_dx"]` 는 **손이** 앞뒤로 나가는 폭이다.
         lean = (cfg["arm_slant"] * sx if side
                 else -cfg["arm_slant"] * (1.0 if offx > 0 else -1.0)) + pose["arm_dx"][i]
-        limbs.append(b.add(_fall_shape(ax, aw / 2, arm_top, arm_bot, taper=cfg["arm_taper"],
-                                       tip=0.5, slant=lean), "shirt"))
-        # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다
-        limbs.append(b.add(ellipsoid(ax + lean, arm_bot + 0.5, 0.6, 0.58), "skin"))
+        sleeve_shape = _fall_shape(ax, aw / 2, arm_top, arm_bot, taper=cfg["arm_taper"],
+                                   tip=0.5, slant=lean)
+        # **소매가 팔 전체를 덮느냐 반만 덮느냐**(2026-09-08, INBOX #47). 17px 은
+        # 팔이 세 줄뿐이라 통째로 소매다(`sleeve=1.0`) — 갈라봐야 한 줄씩이라
+        # 팔이 아니라 얼룩이 된다. 32px 에서는 반팔로 갈라야 **몸통 옆에 살색
+        # 팔뚝**이 보인다: 스타듀 농부와 우리 것을 나란히 놓았을 때 가장 먼저
+        # 눈에 띈 차이가 "팔이 아예 없다"였다.
+        arm_skin = None
+        if cfg["sleeve"] >= 1.0:
+            limbs.append(b.add(sleeve_shape, "shirt"))
+        else:
+            # 팔뚝(맨살)을 먼저 깔고 그 위에 소매를 얹는다. **재질이 달라서
+            # 경계에 내부선이 안 들어간다** — 램프가 이미 갈라놓은 자리다
+            # (STYLE_GUIDE 「음영과 형태」). 반대로 소매와 몸통은 같은 재질
+            # 다른 부위라 그 경계에는 내부선이 들어가 어깨선이 살아난다.
+            arm_skin = b.add(sleeve_shape, "skin")
+            limbs.append(arm_skin)
+            limbs.append(b.add(sleeve_shape, "shirt",
+                               mask=GY <= arm_top + (arm_bot - arm_top) * cfg["sleeve"]))
+        # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다. 팔뚝이 맨살이면
+        # **같은 부위로 묶는다** — 안 묶으면 손목에 내부선이 그어져 팔에 어두운
+        # 고리가 생긴다.
+        limbs.append(b.add(ellipsoid(ax + lean, arm_bot + 0.5, 0.6, 0.58), "skin",
+                           part=arm_skin))
         hands.append((ax + lean, arm_bot + 0.5))
     return limbs + far, hands
 
@@ -1844,12 +1872,25 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
                   down + st["tail"] * 1.2, LIFT, w=0.95, slant=-0.45)
 
     if st["strand"]:
-        # 앞머리 한 갈래 — 뒷모습의 결과 같은 방법이다(부위 id 만 다른 같은 껍데기를
+        # 앞머리 갈래 — 뒷모습의 결과 같은 방법이다(부위 id 만 다른 같은 껍데기를
         # **실루엣 끝까지 가는 기울인 반평면**으로 잘라 넣어 경계를 하나만 만든다).
         # 좌우대칭이 깨져서 밋밋함이 사라진다.
+        #
+        # **경계를 몇 줄 그을지는 앞머리가 몇 줄인가가 정한다**(2026-09-08, INBOX #47).
+        # 17px 은 앞머리가 세 줄뿐이라 한 줄이 상한이고(두 줄이면 빗자루다),
+        # 32px 은 여섯 줄이라 **가르마 한 줄 + 그 반대쪽 결 한 줄**이 들어간다 —
+        # 스타듀 농부와 나란히 놓았을 때 우리 머리가 "매끈한 돔"이던 이유가
+        # 이 결이 하나뿐이어서였다. 두 줄은 **반대 방향으로 기울여야** 한다:
+        # 같은 방향으로 나란히 두면 폭 일정한 세로 띠 두 개가 되어 빗자루가 된다.
         tip = 1.0 if not side else sx
-        b.add(shell, "hair", mask=sm & below(edge)
-              & ((GX - hx) * tip > 0.9 + 0.35 * (GY - hy) / ry), lift=LIFT)
+        cuts = [(tip, 0.9, 0.35)]
+        if cfg["hair_lines"] >= 2 and not side:
+            # 가르마 — 반대쪽으로 더 안쪽에서, 반대로 기운다. 정수리 근처에서
+            # 시작해 관자놀이로 벌어져야 "가른 자리"로 읽힌다.
+            cuts.append((-tip, 0.35, -0.75))
+        for s, off, slope in cuts:
+            b.add(shell, "hair", mask=sm & below(edge)
+                  & ((GX - hx) * s > off + slope * (GY - hy) / ry), lift=LIFT)
 
 
 def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
@@ -1932,6 +1973,11 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         "eye3": ("wee", "wee"),         # 흰자 한 줄이 **바깥쪽**(거울상이라 양쪽 다)
         "eye3in": ("eew", "eew"),       # 흰자가 **안쪽** — 서로를 보는 눈
         "bead3": ("*ee", "eee"),        # 3×2 잉크 + 하이라이트 1px
+        # **2×2 인데 바깥 칸이 흰자다** (2026-09-08, INBOX #47). 스타듀 농부의 눈을
+        # 실측하니 아트 2칸 폭에 **바깥이 흰자 · 안쪽이 눈동자**였다 — 우리가 쓰던
+        # `bead3`(3×2 통짜 잉크 + 하이라이트 한 칸)는 얼굴 폭의 절반을 먹으면서도
+        # 흰자가 하이라이트 한 칸뿐이라 "검은 안경"으로 읽혔다.
+        "sclera2": ("we", "we"),
     }
 
     def eye(x, y, flip=False, style=None):
@@ -2456,20 +2502,59 @@ IDLE_N = 32
 # **설계 길이("design")와 무차원 비율("ratio")은 한 줄도 안 바꾼다** — 그래서 머리가
 # 전체에서 차지하는 비율이 17px 과 같고(43% → 42%), 늘어난 칸이 전부 디테일로 간다.
 # 어떻게 골랐는지는 `try_canvas32.py` 와 `#45` 의 커밋 메시지에 있다.
+_K32 = IDLE_N / float(DESIGN_N)      # 1.882 — 설계 단위 하나가 32px 칸에서 몇 px 인가
+
+
+def _p(px):
+    """32px 칸의 픽셀 좌표 → 설계 단위. 아래 값들은 **픽셀을 세어서** 잡았다."""
+    return px / _K32
+
+
+# **2026-09-08 (INBOX #47) 에 통째로 다시 잡았다.** 사람 피드백: *"크기만 커졌지
+# 디테일이 하나도 없는데? 스타듀벨리랑 같은 32픽셀이라며"* — `#46` 까지는 여기에
+# `CFG_KIND` 의 "grid" 값만 있었다(= 같은 그림을 더 촘촘한 격자에 찍은 것뿐이라
+# 실루엣이 17px 과 한 칸도 다르지 않았다). 이제 **설계 길이("design")도 함께** 잡는다.
+#
+# 가장 큰 값은 **세로비**다: 옛 32px idle 은 외곽선까지 **가로 18 × 세로 28 = 1:1.56**
+# 으로 32칸 중 28칸만 썼는데, 스타듀 농부는 **16 × 32 = 1:2** 다(참고 이미지를 실측).
+# 캔버스가 정사각이라고 캐릭터까지 정사각에 가깝게 그린 것이 "밋밋함"의 뿌리였다.
+# 검사도 그 자리를 안 보고 있었다 — `qa_sprite_check.py` 에 「세로비」를 넣었다.
 IDLE_OVER = dict(
-    # 눈 — 얼굴이 세 줄에서 **일곱 줄**이 되면서 3×2 잉크 + 하이라이트 한 칸이 든다.
-    eye_style="bead3", glint=True,
-    eye_dx=3.5 / (IDLE_N / float(DESIGN_N)),
-    eye_y=9 / (IDLE_N / float(DESIGN_N)),
-    # **옆모습만 2×2 로 줄인다** — 앞모습은 눈 양옆에 얼굴이 남지만 옆모습은 눈 앞이
-    # 곧 얼굴 앞선이라, 같은 3칸이면 얼굴 앞이 통째로 검은 사각형이 된다.
-    eye_side="bead",
-    brow=(2, 4, 0.85),      # 눈썹 — **머리색으로 옅게**. 잉크로 찍으면 째려본다
-    fringe=3.3,             # 앞머리를 한 줄 올려야 눈썹이 앞머리에 안 붙는다
+    # ── 세로로 길게 · 가로로 좁게 (칸을 위아래로 다 쓴다) ──────────────────
+    # 실측 결과: 외곽선까지 **16 × 32**, 알맹이 14 × 30, 머리 40% /
+    # 몸통 6 / 다리 8 / 신발 4px.
+    head_rx=3.55, head_ry=2.95, head_cy=3.35, head_pb=2.4,
+    torso_w=4.80, side_torso_w=4.10, torso_r=1.30,
+    torso_top=6.90, torso_bot=10.625,
+    leg_top=10.00, foot_y=16.40, boot_h=2.06,
+    arm_w=1.45, arm_in=0.50,
+    # 두 다리 사이를 2px 벌린다 — 17px 의 0.35(=1px)를 그대로 두면 어두운 바지·신발
+    # 사이에서 외곽선 한 줄이 묻혀 다리가 덩어리 하나로 보인다.
+    leg_gap=0.60,
+    # **반팔** — 몸통 옆에 살색 팔뚝이 보여야 팔이 있는 것으로 읽힌다.
+    sleeve=0.48,
+    fringe=3.06, side_hair=4.94,
+
+    # ── 격자값(축소가 끝난 32px 격자에 칸을 세어 찍는 것들) ────────────────
+    # 눈 — **2×2 이고 바깥 칸이 흰자다**(`sclera2`). `#45`/`#46` 의 3×2 통짜 잉크
+    # (`bead3`)는 좁아진 얼굴에서 검은 안경이 된다. 참고 이미지의 눈도 아트 2칸
+    # 폭에 바깥이 흰자·안쪽이 눈동자였다.
+    eye_style="sclera2", eye_side="sclera2", glint=True,
+    eye_dx=_p(2.6), eye_y=_p(8),
+    # **눈썹은 뺐다**(`#45` 가 넣었던 것). 얼굴이 다섯 줄로 줄면서 눈썹 한 줄이
+    # 눈 바로 위에 붙어 **눈이 위아래로 두 배가 되어 째려본다** — STYLE_GUIDE
+    # 「자연스러움」이 금지한 인상이다. 후보를 나란히 놓고 확인했다.
+    brow=None,
     blush_w=2,
-    nose_y=1.9, nose_r=(0.58, 0.55), nose_in=0.3,
-    collar=0.45,            # 상의가 일곱 줄이라 허리띠와 옷깃이 둘 다 들어간다
-    buttons=3, button_lum=-0.55,    # 앞섶 단추 — 어두운 쪽이라야 보인다
+    nose_y=1.55, nose_r=(0.55, 0.52), nose_in=0.25,
+    # 옷깃 — 허리띠와 함께 옷 포인트 둘이다(상의가 여섯 줄이라 들어간다).
+    # **음수 = 어둡게**다. 17px 때처럼 어깨선을 밝게 하면 그 줄이 바로 위의 목
+    # 피부 쪽으로 붙어 「대비 skin|shirt」가 41 → 30 으로 떨어진다(하한과 같다) —
+    # 턱 아래는 원래 그늘이라 어두운 옷깃이 그림으로도 맞다.
+    collar=-0.35,
+    buttons=0,              # 앞섶 단추는 뺐다 — 상의 한가운데가 여섯 줄뿐이라
+                            # 단추 셋을 넣으면 옷이 아니라 자수가 된다
+    hair_lines=2,           # 앞머리 결(가르마) 경계 수
 )
 
 # 모션별 캔버스/설정. **여기 없는 모션은 네이티브 17px 그대로**다.

@@ -258,7 +258,9 @@ func _check_use_length() -> void:
 		if sheet == null:
 			_fails.append("%s 시트를 못 읽었다 — `--import` 를 안 돌렸을 수 있다" % motion)
 			continue
-		var columns := sheet.get_width() / PlayerFrames.CELL
+		# 칸 크기는 그 시트에서 읽는다 — `CELL` 로 나누면 17px 시트가 절반
+		# 길이로 읽혀서 그림과 코어의 길이가 안 맞는다고 나온다(INBOX #47).
+		var columns := sheet.get_width() / PlayerFrames.cell_of(sheet)
 		var art_seconds := float(columns) / PlayerFrames.USE_FPS
 		var core_seconds := float(PlayerMotion.USE_TICKS) / float(PlayerMotion.TICK_RATE)
 		if not is_equal_approx(art_seconds, core_seconds):

@@ -171,7 +171,11 @@ func _check_animations() -> void:
 		if sheet == null:
 			_fails.append("%s 시트를 못 읽었다 — `--import` 를 안 돌렸을 수 있다" % motion)
 			continue
-		var columns := sheet.get_width() / PlayerFrames.CELL
+		# **칸 크기는 그 시트에서 읽는다**(2026-09-08, INBOX #47). `CELL` 하나로
+		# 나누면 32px idle 옆의 17px 걷기 시트가 6열이 아니라 3열로 읽혀서
+		# 멀쩡한 시트가 「4~6프레임이 아니다」로 걸린다 — 엔진(`add_motion()`)이
+		# 이미 시트마다 자기 칸으로 자르는 것과 같은 규칙이다(INBOX #46).
+		var columns := sheet.get_width() / PlayerFrames.cell_of(sheet)
 		if columns > 1 and (columns < 4 or columns > 6):
 			_fails.append("%s 가 %d프레임이다 — DESIGN.md 「캐릭터 애니메이션」은 4~6프레임이다"
 					% [motion, columns])
@@ -220,7 +224,9 @@ func _check_recolored_motion(motion: String) -> bool:
 	var sprite := _sprite()
 	if sprite == null or sprite.sprite_frames == null:
 		return false
-	var cell := PlayerFrames.CELL
+	# 칸 크기는 **그 모션의 시트**에서 읽는다 — 32px idle 옆의 17px 걷기 시트를
+	# `CELL`(32)로 자르면 엉뚱한 자리를 견주게 된다(2026-09-08, INBOX #47).
+	var cell := PlayerFrames.cell_of(want)
 	for row in PlayerFrames.DIR_NAMES.size():
 		var anim := "%s_%s" % [motion, PlayerFrames.DIR_NAMES[row]]
 		if not sprite.sprite_frames.has_animation(anim):
