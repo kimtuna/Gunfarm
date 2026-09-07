@@ -34,14 +34,18 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </style></head><body><main>
 <h1>Gunfarm</h1>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
+<div class="warn"><strong>루프 멈춤</strong><pre>INBOX #49 은 사람이 정해줘야 합니다 — 세션을 열지 않았습니다.
+  항목: [ASK] **논리 해상도를 1440×810 으로 넓히고 나니, 고를 수 있는 창 해상도 네 개가 전부 「소수 배율」이 됐습니다 — 어떻게 할까요.**
+  정한 뒤 그 항목의 [ASK] 를 [BUILD]/[DESIGN] 으로 바꾸고 ./ctl.sh start 하세요.
 
+(2026-09-08 02:37:54)</pre></div>
 <div class="cards">
   <div class="card"><b>48</b><span>완료</span></div>
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead ask">사람 결정</span><span class="num">#49</span> [ASK] **논리 해상도를 1440×810 으로 넓히고 나니, 고를 수 있는 창 해상도 네 개가 전부 「소수 배율」이 됐습니다 — 어떻게 할까요.**</li></ul></section>
-<section><h2>마지막 커밋</h2><code>331fa7d  [INBOX #48] 논리 해상도를 1440×810 으로 넓혔다 — 카메라가 30.0×16.9 타일이 됐다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 02:36</p></section>
+<section><h2>마지막 커밋</h2><code>8240ea7  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 02:37</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #48 [BUILD] 논리 해상도를 1440×810 으로 넓혔다.**
 **자체 QA 22벌 전부 통과**하고, **전체 스위트를 5바퀴 연달아 돌려 전부 통과**했다
 (불안정한 검사가 남지 않은 것을 확인하려고 반복했다). 시야는 창 크기 네 개 전부에서
@@ -74,7 +78,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908023732";
+  var STAMP = "20260908023754";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
