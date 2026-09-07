@@ -42,8 +42,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><span class="num">#40</span> [DESIGN] **데스드롭 상자 스프라이트.** (2026-09-07, INBOX #37 바퀴에서 남긴 것 — 기능은 다 됐고 그림만 자리표시다.)</li>
 <li><span class="num">#41</span> [BUILD] **여는 좌클릭이 도구를 쓰는 좌클릭과 겹치는 것 — 대상이 늘어나면 규칙을 한 곳으로 모을 것.** (2026-09-07, INBOX #37 바퀴에서 나온 것이다. 지금은 고장이 아니다.)</li>
 <li><span class="num">#42</span> [BUILD] **버린 아이템이 발밑에 놓여 캐릭터에 완전히 가려진다.** (2026-09-07, INBOX #38 바퀴에서 발견 — 고장이 아니라 **지금 코드가 그렇게 놓는 것**이다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>c1a127f  [INBOX #38] 바닥 아이템을 월드와 같은 도트 결(3배)로 + 자리표시를 궤짝에서 더미로</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 17:54</p></section>
+<section><h2>마지막 커밋</h2><code>bc43237  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 17:55</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #38 ([DESIGN] 바닥에 놓인 아이템의 도트 크기 + 자리표시) 완료.
 
 ## 시작할 때 이미 있던 것
@@ -73,7 +73,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907175515";
+  var STAMP = "20260907175537";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
