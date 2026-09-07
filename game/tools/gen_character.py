@@ -968,8 +968,8 @@ SICKLE = dict(
     # `swing_fwd` 가 **음수**인 것이 가로베기다 — 날이 내려갈수록(up 이 -1 로
     # 갈수록) 손이 앞으로 나간다. 도끼는 반대로(양수) 들 때 손이 앞으로 나가고
     # 내려칠 때 몸쪽으로 당긴다(내리찍기).
-    use_rise=-0.90, swing_lift=0.25, swing_fwd=-0.80, swing_loop=0.50,
-    swing_sag=0.30, swing_tuck=3.40,
+    use_rise=-0.90, swing_lift=0.25, swing_fwd=-0.80, swing_loop=1.10,
+    swing_sag=0.30, swing_tuck=4.00,
     head="sickle",
 )
 

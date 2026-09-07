@@ -14,12 +14,15 @@ extends SceneTree
 ##   4) 좌클릭하면 `use_axe` 가 **한 번** 돌고, 끝나면 `hold_axe` 로 돌아온다.
 ##      **대상이 없어도(허공에 대고) 나가고**, 재생 중에 또 눌러도 처음부터 다시
 ##      시작하지 않는다 (docs/DESIGN.md 「생활 스킬 — 채집 계열」/「캐릭터 애니메이션」).
-##   5) **빈 칸을 고르면 빈손**(`idle`)이고, **시트가 없는 도구**(곡괭이)를 골라도
-##      빈손으로 조용히 넘어간다 — 에러로 죽지 않는다.
+##   5) **빈 칸을 고르면 빈손**(`idle`)이고, **시트가 없는 도구**(그때 남아 있는 것
+##      하나를 데이터에서 고른다)를 골라도 빈손으로 조용히 넘어간다 — 에러로 죽지 않는다.
 ##   6) **E 창에서 칸을 옮기면 하단 핫바가 따라온다** — 화면 픽셀로 본다.
 ##   7) **창이 열려 있는 동안 좌클릭이 안 먹는다** (인벤토리 드래그와 부딪히므로).
 ##   8) 사용 모션의 **길이**(`player_motion.gd` 의 `USE_TICKS`)와 그림의 길이
 ##      (프레임 수 ÷ `USE_FPS`)가 같은가 — 어긋나면 모션이 끊기거나 늘어진다.
+##   9) **그림이 있는 도구 전부**가 2)~4) 를 지나는지 훑는다 (2026-09-07, INBOX #27).
+##      도구는 바퀴마다 하나씩 늘어나므로, 도끼 하나만 보면 새 도구의 배선이
+##      검사되지 않은 채 지나간다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -171,6 +174,27 @@ func _initialize() -> void:
 		_settle,
 		func(): _check_animation("hold_axe", "도끼를 옮긴 칸의 번호를 눌렀는데"),
 	])
+	# 9) **그림이 있는 도구는 전부** 골라서 좌클릭하면 그 도구의 모션이 나온다.
+	# 도끼는 위에서 자세히 봤으므로(걷기·겹쳐 재생·창에 막히기까지) 나머지는 훑기만
+	# 한다 — 도구가 늘 때마다(`docs/DESIGN.md` 「새 도구를 추가하는 절차」 1단계 8번)
+	# **이름을 적지 않아도 여기서 저절로 검사된다.** 도끼가 MOVED_SLOT 으로 옮겨가서
+	# AXE_SLOT 이 비어 있으므로 그 칸을 돌려쓴다.
+	for tool: String in PlayerFrames.TOOLS:
+		if tool == "axe":
+			continue
+		_steps.append_array([
+			func(): _move_to(_inventory(), tool, AXE_SLOT),
+			func(): _send_action("hotbar_%d" % (AXE_SLOT + 1)),
+			_settle,
+			func(): _check_animation("hold_%s" % tool, "%s 를 든 칸의 번호를 눌렀는데" % tool),
+			func(): _warp(CLICK_POINT),
+			_mouse_settle,
+			_click,
+			func(): _check_animation("use_%s" % tool, "%s 로 허공에 대고 좌클릭했는데" % tool),
+			func(): _shoot("76_use_%s" % tool),
+			_wait_out_use,
+			func(): _check_animation("hold_%s" % tool, "%s 의 사용 모션이 끝났는데" % tool),
+		])
 
 
 func _process(delta: float) -> bool:
