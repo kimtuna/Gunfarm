@@ -25,6 +25,8 @@ extends SceneTree
 ##     10) **죽으면 죽은 자리에 상자가 생기고 인벤토리가 통째로 들어간다**(플레이어는
 ##         리스폰 지점으로 돌아간다).
 ##     11) 상자가 실제로 화면에 보인다(캡처의 픽셀로 본다).
+##    11-b) 상자 그림이 **구워진 스프라이트 그대로** 그려진다(자리·배율이 안 어긋난다)
+##         고, **열린 상태면 뚜껑이 열린 프레임**으로 바뀐다 (INBOX #40).
 ##     12) **좌클릭으로 열린다** — 창이 뜨고 그 좌클릭은 도구로 가지 않는다.
 ##     13) 창이 열려 있는 동안 남은 시간이 **실제로 멈춘다**.
 ##     14) 「모두 가져가기」로 되돌아오고, 빈 상자는 사라지고 창도 닫힌다.
@@ -54,6 +56,25 @@ const STAND_OFFSET := Vector2(56.0, 20.0)
 
 ## "창이 열려 있는 동안 시간이 멈추는가"를 재는 시간.
 const HOLD_SECONDS := 0.6
+
+## 상자 스프라이트 (INBOX #40). `death_box_node.gd` 의 `SHEET` 와 같아야 한다.
+const BOX_SHEET := "res://assets/sprites/death_box.png"
+const BOX_FRAMES := 2
+
+## 화면과 시트를 견줄 아트 픽셀들. **나무 · 쇠 띠 · 그늘진 오른쪽**을 하나씩 골랐다 —
+## 한 재질만 짚으면 그림이 통째로 한 칸 밀려도 같은 색이 나와서 통과한다.
+const SHEET_PROBES: Array[Vector2i] = [
+	Vector2i(2, 10),        # 몸통 왼쪽(밝은 나무)
+	Vector2i(13, 10),       # 몸통 오른쪽(그늘진 나무)
+	Vector2i(4, 5),         # 뚜껑과 몸통을 가르는 쇠 띠
+]
+
+## 열린 프레임에서 **구멍**(뚜껑 밑 빈 자리)이 있는 자리. 닫힌 프레임에서는 나무다.
+const HOLE_PROBE := Vector2i(4, 5)
+
+## 화면 픽셀과 시트 픽셀의 허용 오차(R+G+B 합, 0~3). 캡처가 논리 해상도와 크기가
+## 다를 수 있어(GOTCHAS) 경계 한 칸이 섞일 수 있으므로 딱 맞기를 요구하지는 않는다.
+const SHEET_TOLERANCE := 0.12
 
 var _steps: Array[Callable] = []
 var _step := 0
@@ -90,6 +111,14 @@ func _initialize() -> void:
 		_settle,
 		func(): _shoot("95_death_box_world"),
 		_check_box_is_on_screen,
+		# 11-b) 화면의 상자가 **구워진 시트 그대로**이고, 열면 뚜껑이 열린 프레임이 된다
+		_check_box_matches_sheet,
+		_open_box_core,
+		_settle,
+		func(): _shoot("95b_death_box_open_lid"),
+		_check_open_frame_on_screen,
+		_close_box_core,
+		_settle,
 		# 12) 좌클릭으로 열린다
 		_point_at_box,
 		_click,
@@ -412,6 +441,88 @@ func _check_box_is_on_screen() -> void:
 	# 궤짝은 나무색(붉은 기가 도는 갈색)이라 풀밭(초록)과 R/G 관계가 뒤집힌다.
 	if color.r <= color.g:
 		_fails.append("상자 자리의 픽셀이 %s 다 — 나무색(R>G)이 아니다. 상자가 안 그려졌다" % color)
+
+
+## 11-b) **화면의 상자가 구워진 시트의 픽셀 그대로인가.**
+##
+## `_check_box_is_on_screen` 은 "나무색이 나오는가"만 봐서, 그림이 반 칸 밀렸거나
+## 배율이 어긋나도 통과한다. 여기서는 **시트에서 고른 아트 픽셀 몇 개를 그 자리의
+## 화면 픽셀과 직접 견준다** — 자리·배율·프레임이 셋 다 맞아야 통과한다.
+## (`death_boxes.gd` 의 `box_rect` 가 클릭 판정이 쓰는 바로 그 사각형이라, 이게 맞으면
+## **보이는 자리와 클릭이 먹는 자리가 같다**도 같이 지켜진다.)
+func _check_box_matches_sheet() -> void:
+	var image := _capture()
+	if image == null:
+		return
+	var sheet := _sheet_image()
+	if sheet == null:
+		return
+	var art := Vector2i(sheet.get_width() / BOX_FRAMES, sheet.get_height())
+	if Vector2(art) * 3.0 != DeathBoxes.BOX_SIZE:
+		_fails.append("구워진 칸 %s × 3배가 BOX_SIZE %s 와 다르다" % [art, DeathBoxes.BOX_SIZE])
+		return
+	var rect := DeathBoxes.box_rect(_box_position)
+	for probe: Vector2i in SHEET_PROBES:
+		var want := sheet.get_pixelv(probe)
+		# 아트 픽셀 한가운데를 짚는다 — 모서리를 짚으면 반올림 한 칸에 옆 칸이 나온다.
+		var at := rect.position + (Vector2(probe) + Vector2(0.5, 0.5)) * 3.0
+		var got := image.get_pixelv(_to_pixels(at, image))
+		if want.a < 1.0:
+			_fails.append("검사가 고른 아트 픽셀 %s 가 시트에서 비어 있다" % probe)
+		elif _color_gap(want, got) > SHEET_TOLERANCE:
+			_fails.append("상자 아트 %s: 화면은 %s 인데 시트는 %s 다 — 그림이 밀렸거나 배율이 다르다"
+					% [probe, got, want])
+
+
+## 창을 거치지 않고 **코어만** 열었다 닫는다. 창을 띄우면 그 창이 화면을 덮어서
+## 상자 그림을 픽셀로 볼 수가 없다 — 여기서 보려는 것은 창이 아니라 **뚜껑**이다.
+func _open_box_core() -> void:
+	_boxes().open(_boxes().items[0])
+
+
+func _close_box_core() -> void:
+	_boxes().close(_boxes().items[0])
+
+
+## 11-b) 열려 있으면 **뚜껑이 젖혀진 프레임**이 그려진다.
+##
+## 짚는 자리는 열린 프레임의 **구멍**(뚜껑 밑의 빈 자리)이다 — 닫힌 프레임에서는
+## 같은 자리가 뚜껑/몸통의 나무색이라, 그 한 점만으로 두 프레임이 갈린다.
+func _check_open_frame_on_screen() -> void:
+	var image := _capture()
+	if image == null:
+		return
+	var sheet := _sheet_image()
+	if sheet == null:
+		return
+	var art := Vector2i(sheet.get_width() / BOX_FRAMES, sheet.get_height())
+	var want := sheet.get_pixelv(HOLE_PROBE + Vector2i(art.x, 0))
+	var closed := sheet.get_pixelv(HOLE_PROBE)
+	if _color_gap(want, closed) < 0.25:
+		_fails.append("시트의 열린 프레임과 닫힌 프레임이 이 자리에서 같다 — 검사가 무의미하다")
+		return
+	var rect := DeathBoxes.box_rect(_box_position)
+	var at := rect.position + (Vector2(HOLE_PROBE) + Vector2(0.5, 0.5)) * 3.0
+	var got := image.get_pixelv(_to_pixels(at, image))
+	if _color_gap(want, got) > SHEET_TOLERANCE:
+		_fails.append("상자를 열었는데 그 자리가 %s 다 — 열린 프레임(%s)이 아니다" % [got, want])
+
+
+func _sheet_image() -> Image:
+	var texture: Texture2D = load(BOX_SHEET) as Texture2D
+	if texture == null:
+		_fails.append("상자 스프라이트(%s)를 못 읽었다" % BOX_SHEET)
+		return null
+	# 칸은 정사각형이 아니다(16 × 14) — 크기는 `BOX_SIZE` 가 정한 것이라 그림 쪽에서
+	# 고를 값이 아니다. 여기서는 **열 수만** 본다.
+	if texture.get_width() % BOX_FRAMES != 0:
+		_fails.append("상자 시트가 %s 다 — 칸 %d장으로 안 나뉜다"
+				% [texture.get_size(), BOX_FRAMES])
+	return texture.get_image()
+
+
+func _color_gap(a: Color, b: Color) -> float:
+	return absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b)
 
 
 ## 상자 한가운데로 마우스를 옮긴다. **각도로 밀어넣지 않고 실제 커서를 옮긴다** —

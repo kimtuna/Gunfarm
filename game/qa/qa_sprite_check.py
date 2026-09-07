@@ -96,6 +96,13 @@ def _gen():
     return gen
 
 
+def _gen_box():
+    """상자 생성기(`game/tools/gen_box.py`). 칸 크기를 **베껴 적지 않고** 불러온다."""
+    _gen()                     # `game/tools` 를 sys.path 에 올린다
+    import gen_box
+    return gen_box
+
+
 def _cloth_accents():
     """생성기가 지금 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리)."""
     if TOOLS not in sys.path:
@@ -359,7 +366,26 @@ def _ground_spec(**over):
     return _icon_spec(cell=_gen().GROUND_N, **over)
 
 
-SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
+def _box_spec(**over):
+    """데스드롭 상자 시트(`death_box.png`, **16 × 14px** 칸 × 2프레임 — INBOX #40).
+
+    상자도 도구 아이콘과 **같은 램프(나무 `helve` / 쇠 `blade`) · 같은 광원 · 같은
+    잉크**로 굽는다(`gen_box.py`) — 그래서 스펙도 아이콘 것을 그대로 쓰고 **칸 크기
+    두 줄만** 다르다. 바닥에 놓인 도구 옆에 나란히 놓이는 물건이라, 여기서 갈리면
+    「어울림」이 그대로 깨진다.
+
+    **칸이 정사각형이 아닌 첫 시트다** — 크기는 그림 사정이 아니라 `death_boxes.gd`
+    의 `BOX_SIZE`(48 × 42)가 정한 것이라 그림 쪽에서 고를 값이 아니다.
+
+    **숫자는 한 줄도 늦추지 않았다** — 실측이 아이콘과 같은 자리에 모였다
+    (평균명도 126 / 명암폭 78 / 채도 69 / 쇠 161 · 나무 121). 바닥 그림
+    (`_ground_spec()`)이 아이콘 스펙을 그대로 쓴 것과 같다.
+    """
+    return _icon_spec(cell=_gen_box().BOX_W, cell_h=_gen_box().BOX_H,
+                      rows=["box"], **over)
+
+
+SPECS = {"terrain_tiles.png": TERRAIN_SPEC, "death_box.png": _box_spec()}
 for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
     SPECS["ground_%s.png" % _tool] = _ground_spec()
@@ -522,12 +548,17 @@ def check_sheet(path, spec):
     rgb, alpha = a[..., :3].astype(np.int32), a[..., 3]
 
     cell = spec["cell"]
+    # **칸이 정사각형이 아닐 수 있다**(2026-09-07, INBOX #40 — 데스드롭 상자는
+    # 16 × 14px 이다. 크기를 `death_boxes.gd` 의 `BOX_SIZE` 가 이미 정해뒀다).
+    # 안 준 시트는 지금까지처럼 세로도 `cell` 이다.
+    cell_h = spec.get("cell_h", cell)
     rows = spec["rows"]
     h, w = alpha.shape
-    ok_size = h % cell == 0 and w % cell == 0 and h // cell == len(rows) and w >= cell
+    ok_size = (h % cell_h == 0 and w % cell == 0 and h // cell_h == len(rows)
+               and w >= cell)
     rep.add(ok_size, "규격",
-            "%dx%d 은 %dpx 칸 × %d행 이 아니다" % (w, h, cell, len(rows)),
-            "%dpx × %d방향 × %d프레임" % (cell, len(rows), max(w // cell, 1)))
+            "%dx%d 은 %dx%dpx 칸 × %d행 이 아니다" % (w, h, cell, cell_h, len(rows)),
+            "%dx%dpx × %d방향 × %d프레임" % (cell, cell_h, len(rows), max(w // cell, 1)))
     if not ok_size:
         rep.dump()
         return rep
@@ -587,7 +618,7 @@ def check_sheet(path, spec):
     cut = []
     for r, d in enumerate(rows):
         for c in range(cols):
-            sub_m = (body & ~inkm)[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            sub_m = (body & ~inkm)[r * cell_h:(r + 1) * cell_h, c * cell:(c + 1) * cell]
             n = int(sub_m[0].sum() + sub_m[-1].sum() + sub_m[:, 0].sum() + sub_m[:, -1].sum())
             if n:
                 cut.append("%s#%d:%dpx" % (d, c, n))
@@ -597,7 +628,7 @@ def check_sheet(path, spec):
     bad = []
     for r in range(len(rows)):
         for c in range(cols):
-            sub = body[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            sub = body[r * cell_h:(r + 1) * cell_h, c * cell:(c + 1) * cell]
             lab = measure.label(sub, connectivity=1)
             n = int(lab.max())
             if n != 1:
@@ -609,7 +640,7 @@ def check_sheet(path, spec):
     box = {}
     for r, d in enumerate(rows):
         for c in range(cols):
-            sub = body[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            sub = body[r * cell_h:(r + 1) * cell_h, c * cell:(c + 1) * cell]
             ys, xs = np.nonzero(sub)
             box[(d, c)] = (int(ys.min()), int(ys.max()), int(xs.min()), int(xs.max()))
     msgs = []
