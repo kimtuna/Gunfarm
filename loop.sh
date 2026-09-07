@@ -120,6 +120,12 @@ while true; do
   render_and_push_dashboard
 
   OUT_JSON="$HARNESS/lap_${NUM}_$(date +%s).json"
+  # 한도 감지를 **이번 바퀴가 쓴 줄에만** 걸기 위해 지금 로그 길이를 기억한다.
+  # 2026-09-07: 한도에 걸릴 때 받은 문구를 로그에 남기게 했더니, 그 줄이 다음 바퀴의
+  # `tail -50` 에 그대로 잡혀서 **성공한 바퀴 뒤에 한도로 오인해 멈췄다**(실제로 #31 이
+  # 통과했는데 멈췄다). 옛 줄을 다시 읽지 않게 이번 바퀴 이후만 본다.
+  LOG_MARK="$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')"
+  LOG_MARK="${LOG_MARK:-0}"
   # PROMPT.md 를 그대로 세션에 넘긴다. 세션이 커밋/push 까지 스스로 한다.
   claude -p "$(cat "$PROMPT")" \
     --model "$MODEL" \
@@ -160,7 +166,8 @@ while true; do
   fi
 
   # 크레딧/사용량 한도 — LLM 판단이 아니라 스크립트가 기계적으로 감지한다
-  if grep -qiE "$CREDIT_RE" "$OUT_JSON" 2>/dev/null || tail -50 "$LOG" | grep -qiE "$CREDIT_RE"; then
+  if grep -qiE "$CREDIT_RE" "$OUT_JSON" 2>/dev/null \
+     || tail -n "+$((LOG_MARK + 1))" "$LOG" 2>/dev/null | grep -qiE "$CREDIT_RE"; then
     # 감지된 문구에는 대개 "resets 9:50am" 처럼 **언제 풀리는지**가 들어 있다.
     HIT="$(grep -oiE "[^\"]*($CREDIT_RE)[^\"]*" "$OUT_JSON" 2>/dev/null | head -1)"
     RESET_AT="$(/usr/bin/python3 "$ROOT/scripts/parse_reset.py" "$HIT" 2>/dev/null)"
