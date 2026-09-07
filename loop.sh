@@ -145,10 +145,50 @@ while true; do
 
   # 크레딧/사용량 한도 — LLM 판단이 아니라 스크립트가 기계적으로 감지한다
   if grep -qiE "$CREDIT_RE" "$OUT_JSON" 2>/dev/null || tail -50 "$LOG" | grep -qiE "$CREDIT_RE"; then
-    # 감지된 문구를 그대로 보여준다 — 대개 "resets 9:50am" 처럼 **언제 풀리는지**가 들어 있어서,
-    # 그게 없으면 사람이 언제 다시 켜야 할지 알 수 없다.
+    # 감지된 문구에는 대개 "resets 9:50am" 처럼 **언제 풀리는지**가 들어 있다.
     HIT="$(grep -oiE "[^\"]*($CREDIT_RE)[^\"]*" "$OUT_JSON" 2>/dev/null | head -1)"
-    halt "크레딧/사용량 한도에 걸린 것으로 보입니다. 한도가 풀린 뒤 ./ctl.sh start 로 다시 시작하세요.${HIT:+
+    RESET_AT="$(/usr/bin/python3 "$ROOT/scripts/parse_reset.py" "$HIT" 2>/dev/null)"
+
+    # 한도로 못 돈 바퀴는 **연속 실패로 세지 않는다.** 이걸 안 되돌리면 한도 한 번에
+    # STUCK_REPEAT_LIMIT 이 다 타버린다(2026-09-07 에 실제로 그렇게 멈췄다).
+    echo "$((COUNT - 1))" > "$REPEAT_FILE"
+
+    # 언제 걸렸고 얼마나 굴린 뒤였는지 남긴다 — 대시보드가 이걸 읽어 한도 상태를 보여준다.
+    # 한도 잔량 자체는 조회할 방법이 없어서, **창마다 얼마에서 걸렸는지**를 실측으로 쌓는 게
+    # 지금 얻을 수 있는 유일한 눈금이다.
+    printf '%s\t%s\t%s\t%s\n' "$(date +%s)" "${RESET_AT:-0}" "$(cat "$HARNESS/total_cost" 2>/dev/null || echo 0)" "$HIT" \
+      >> "$HARNESS/limit_log"
+
+    if [[ -n "$RESET_AT" ]]; then
+      # 60초 여유를 둔다 — 리셋 시각 정각에 깨면 아직 안 풀려 있을 수 있다.
+      WAKE=$((RESET_AT + 60))
+      log "== 한도에 걸림 — $(date -r "$RESET_AT" '+%H:%M') 리셋. 그때까지 자고 INBOX #$NUM 을 이어서 돈다"
+      log "   받은 문구: $HIT"
+      printf '%s\n\n(%s 까지 기다리는 중 — 자동으로 이어서 돕니다)\n' \
+        "한도에 걸려 대기 중입니다. 사람이 할 일은 없습니다." "$(date -r "$RESET_AT" '+%H:%M')" > "$WARNING_FILE"
+      render_and_push_dashboard
+
+      # **벽시계로 잰다.** 한 번에 길게 자면 맥이 잠든 동안 타이머까지 멈춰서 영영 안 깬다
+      # (바퀴 타임아웃에서 이미 겪은 문제다). 30초씩 깨어나 실제 시각을 비교한다.
+      while (( $(date +%s) < WAKE )); do
+        if [[ -f "$STOP_FILE" ]]; then
+          rm -f "$STOP_FILE" "$WARNING_FILE"
+          log "== 한도 대기 중 STOP 파일 감지 — 정상 종료"
+          render_and_push_dashboard
+          exit 0
+        fi
+        sleep 30
+      done
+
+      rm -f "$WARNING_FILE"
+      log "== 한도 리셋됨 — 다시 시작"
+      render_and_push_dashboard
+      continue
+    fi
+
+    # 언제 풀리는지 못 읽었으면 짐작해서 자지 않는다 — 예전처럼 멈춰서 사람에게 넘긴다.
+    halt "크레딧/사용량 한도에 걸린 것으로 보입니다. 한도가 풀린 뒤 ./ctl.sh start 로 다시 시작하세요.
+  (리셋 시각을 문구에서 읽지 못해 자동 대기를 못 했습니다.)${HIT:+
 
   받은 문구: $HIT}"
   fi
