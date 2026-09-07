@@ -36,18 +36,17 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>46</b><span>완료</span></div>
+  <div class="card"><b>47</b><span>완료</span></div>
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#47</span> [DESIGN] **32px idle 을 제대로 다시 그린다 — 지금은 크기만 커지고 그림이 그대로다.** 사람 피드백(2026-09-08): *&quot;크기만 커졌지 디테일이 하나도 없는데? 스타듀벨리랑 같은 32픽셀이라며&quot;* 그리고 스타듀 농부 스프라이트를 주며 *&quot;이거 똑같이 만들어봐.&quot;*</li></ul></section>
-<section><h2>마지막 커밋</h2><code>f703410  design: 밋밋함의 가장 큰 원인은 세로 비율 — 우리는 1:1.56, 스타듀는 1:2</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 00:54</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — **INBOX #46 [DESIGN] 32px idle 을 실제 게임에 넣었다. 샘플이다.**
-`player_idle_&lt;머리모양&gt;.png` **4장만** 32px 이 됐고 **걷기·도구 시트 18장은 17px 그대로**다.
-**끝나면 큐가 빈다**고 지시에 적혀 있었고, 실제로 `INBOX.md` 에 미완료 항목이 0개다.
-**다음 항목은 만들지 않았다**(지시). 사람이 게임을 돌려보고 정한다.
-
-## 시작할 때 이미 있던 것</pre></section>
+<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead ask">사람 결정</span><span class="num">#48</span> [ASK] **새 32px idle 을 보고 다음을 정해 주세요.** `#47` 이 idle 4장을 스타듀 농부 비율(가로 16 × 세로 32 = 1 : 2)로 다시 그렸습니다. **먼저 볼 것**: `docs/design_reference/idle32_vs_stardew.png` — 실제 게임 캡처·참고 이미지·옛 32px 을 도트 크기를 맞춰 나란히 놓은 것입니다. 아래 셋 중 하나(또는 둘)를 골라 주세요.</li></ul></section>
+<section><h2>마지막 커밋</h2><code>ff64786  inbox: #48 [ASK] — 새 32px idle 을 보고 다음을 정해 주세요 (이사 / 얼굴 / 비율 / 보류)</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 01:38</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #47 [DESIGN] 32px idle 을 비율부터 다시 그렸다.**
+바뀐 자산은 `player_idle_&lt;머리모양&gt;.png` **4장뿐**이고, 걷기·도구 시트 18장은 **17px
+그대로**다(바이트 단위로 확인했다). **자체 QA 는 전부 통과한다** — 그림 검사 104장 전부
+`ok`, Godot QA 22벌 전부 통과. 지난 바퀴의 실패 36건 + 2벌이 이번에 다 없어졌다.
+**큐가 비었다.**</pre></section>
 <section><h2>나중에 할 것</h2>
   <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
   만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/feedback/LATER.md</code>)</p>
@@ -61,7 +60,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><strong>물의 종류(서식지)</strong> — 지금 지형은 땅/바다 2종뿐이라 <strong>서식지를 나눌 기준이 없다.</strong> 민물·깊은 바다·동굴 물 같은 구분이 생겨야 &quot;서식지에 따라 잡히는 물고기가 다르다&quot;가 성립한다. <strong>물고기 종류를 먼저 만들지 말 것</strong> — 나눌 기준 없이 종류만 늘리면 전부 같은 물에서 나온다. 지형 확장 → 서식지 → 물고기 순이다.</li>
 <li><strong>여는 좌클릭과 도구를 쓰는 좌클릭을 한 곳으로 모으기</strong> (원래 INBOX #41, 2026-09-07 에 여기로 옮김). 지금 열 수 있는 것은 데스드롭 상자 하나뿐이라 <strong>미리 만들면 껍데기만 늘어난다.</strong> 상자·제작대처럼 「여는 것」이 둘 이상이 되는 바퀴가 가져간다.</li>
 <li><strong>캐릭터 32px 이사 — 채택하기로 정한 뒤에 할 것</strong> (INBOX #45 가 이미지로 시험 중이다). 순서와 범위: ① 걷기 6프레임 ② 도구 7종(#44 추정으로 2~3바퀴 — `STYLE_GUIDE` 「손에 쥔 도구」의 통과 구간이 전부 17px 격자 실측값이라 다시 뽑아야 한다) ③ 아이콘 7종·바닥 그림 7종·데스드롭 상자(크기 하한이 16 → 32px 로 돌아왔다) ④ 엔진 상수(`player_frames.gd` 의 `CELL` 17→32, 충돌 상자, 미리보기 배율)와 자체 QA 22벌 재확인. <strong>타일 아트·씬 스케일·이동 속도·사거리·카메라 범위는 안 바뀐다</strong> — 캐릭터와 도구 그림만이다.</li></ul></section>
-<footer>갱신: 2026-09-08 00:54 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-08 01:39 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -74,7 +73,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908005428";
+  var STAMP = "20260908013920";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
