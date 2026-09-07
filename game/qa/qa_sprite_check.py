@@ -325,7 +325,7 @@ TERRAIN_SPEC = dict(
 
 # 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
 # 손에 쥔 세 모션 시트 12장과 아이템 아이콘 한 장이 함께 등록된다.
-TOOL_NAMES = ("axe", "pickaxe", "sickle", "gun", "hoe")
+TOOL_NAMES = ("axe", "pickaxe", "sickle", "gun", "hoe", "watering_can")
 
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
 for _tool in TOOL_NAMES:

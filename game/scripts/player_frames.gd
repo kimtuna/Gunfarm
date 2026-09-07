@@ -53,7 +53,7 @@ const USE_FPS := 12.0
 ## (`docs/DESIGN.md` 「새 도구를 추가하는 절차」 1). **도구가 늘면 아래 `TOOLS` 에
 ## 이름 한 줄만 늘린다** — 시트가 같이 실리고 색 바꿔치기도 따라온다.
 ## 생성기(`gen_character.py` 의 `TOOLS`)와 같은 목록이어야 한다.
-const TOOLS := ["axe", "pickaxe", "sickle", "gun", "hoe"]
+const TOOLS := ["axe", "pickaxe", "sickle", "gun", "hoe", "watering_can"]
 
 
 ## 한 캐릭터가 가진 모션과 그 재생 속도. **여기 한 줄을 늘리면** 시트가 자동으로
