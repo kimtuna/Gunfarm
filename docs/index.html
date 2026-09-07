@@ -40,7 +40,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#41</span> [BUILD] **여는 좌클릭이 도구를 쓰는 좌클릭과 겹치는 것 — 대상이 늘어나면 규칙을 한 곳으로 모을 것.** (2026-09-07, INBOX #37 바퀴에서 나온 것이다. 지금은 고장이 아니다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>7db3e65  [INBOX #39] 총알이 물을 통과한다 — 총알 코어에서 지형 의존을 끊었다</code>
+<section><h2>마지막 커밋</h2><code>e9f8d49  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-07 20:08</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX **#39**(총알이 물에 막히던 것) 완료.
 
@@ -71,7 +71,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907200819";
+  var STAMP = "20260907200841";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
