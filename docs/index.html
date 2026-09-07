@@ -35,8 +35,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>다음 항목</h2><span class="num">#25</span> [BUILD] **하단 핫바 + 든 도구가 캐릭터에 보이고, 좌클릭하면 사용 모션이 나온다.** 사람 피드백: *&quot;마인크래프트처럼 하단바에 1~9 인벤토리가 보이게 하고 이걸 들어야지. 1번칸에 도끼가 있고 1번 키를 누르면 도끼가 들려있고 마우스 왼쪽 클릭을 해서 모션까지 나오게.&quot;* `DESIGN.md` 「인벤토리 / 장비」의 하단 핫바 항목과 「캐릭터 애니메이션」의 &quot;손에 든 도구가 캐릭터에 그대로 보인다&quot;가 이번에 추가됐으니 그대로 따를 것. **재료는 거의 다 있다** — #23 이 9칸·숫자키·아이콘을, #24 가 `hold_axe`/`use_axe`/`walk_axe` 시트를 이미 만들어뒀고 `player_frames.gd` 가 그 셋을 이미 싣고 있다. 없는 것은 아래 셋이다.</section>
 <section><h2>대기 중인 항목</h2><ul><li><span class="num">#25</span> [BUILD] **하단 핫바 + 든 도구가 캐릭터에 보이고, 좌클릭하면 사용 모션이 나온다.** 사람 피드백: *&quot;마인크래프트처럼 하단바에 1~9 인벤토리가 보이게 하고 이걸 들어야지. 1번칸에 도끼가 있고 1번 키를 누르면 도끼가 들려있고 마우스 왼쪽 클릭을 해서 모션까지 나오게.&quot;* `DESIGN.md` 「인벤토리 / 장비」의 하단 핫바 항목과 「캐릭터 애니메이션」의 &quot;손에 든 도구가 캐릭터에 그대로 보인다&quot;가 이번에 추가됐으니 그대로 따를 것. **재료는 거의 다 있다** — #23 이 9칸·숫자키·아이콘을, #24 가 `hold_axe`/`use_axe`/`walk_axe` 시트를 이미 만들어뒀고 `player_frames.gd` 가 그 셋을 이미 싣고 있다. 없는 것은 아래 셋이다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>18c1b7b  harness: 큐가 비거나 멈추면 macOS 알림을 띄운다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 10:35</p></section>
+<section><h2>마지막 커밋</h2><code>63ebc99  inbox: 하단 핫바 + 든 도구가 캐릭터에 보이는 것(#25) 큐잉</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 10:39</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #24 ([DESIGN] 도끼를 든 캐릭터 — 도구 그림 파이프라인의 첫 사례) 완료.
 
 ## 시작할 때 이미 있던 것
@@ -62,7 +62,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907103943";
+  var STAMP = "20260907103955";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
