@@ -37,11 +37,11 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 
 <div class="cards">
   <div class="card"><b>43</b><span>완료</span></div>
-  <div class="card"><b>0</b><span>남음</span></div>
+  <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>대기 중인 항목</h2><ul class="queue"><li class="idle">큐가 비었습니다 — 루프는 세션을 열지 않고 종료합니다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>97b8996  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 20:15</p></section>
+<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#44</span> [DESIGN] **캔버스 26px 를 시험만 해본다 — 판단 재료를 만드는 것이지 바꾸는 것이 아니다.** 사람 요청(2026-09-07): 참고작(Fields of Mistria) 수준의 디테일이 가능한지 보려고 **한 바퀴만** 써서 확인한다. **이번 바퀴는 아무것도 채택하지 않는다.**</li></ul></section>
+<section><h2>마지막 커밋</h2><code>1283f5c  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 20:16</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — **만든 것 없음.** 큐가 비어서 만들 항목이 없었다. 대신 **전체 자체 QA 를
 현재 HEAD 에서 한 번 다 돌려 초록인 것을 확인**했다.
 
@@ -60,7 +60,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><strong>낚시 던지기(2단계)</strong> — 좌클릭으로 던지고, 거리는 마우스 커서까지로 조절하며(최소는 바로 앞, <strong>최대는 화면 안</strong>), <strong>찌가 떨어진 칸이 물이어야</strong> 낚시가 시작된다. 규칙은 `DESIGN.md` 「생활 스킬 — 채집 계열」의 낚시 항목에 다 있다. 정해야 할 것: 최대 거리 수치, 찌를 던지고 무는 것을 기다리는 시간, 무엇이 잡히는지.</li>
 <li><strong>물의 종류(서식지)</strong> — 지금 지형은 땅/바다 2종뿐이라 <strong>서식지를 나눌 기준이 없다.</strong> 민물·깊은 바다·동굴 물 같은 구분이 생겨야 &quot;서식지에 따라 잡히는 물고기가 다르다&quot;가 성립한다. <strong>물고기 종류를 먼저 만들지 말 것</strong> — 나눌 기준 없이 종류만 늘리면 전부 같은 물에서 나온다. 지형 확장 → 서식지 → 물고기 순이다.</li>
 <li><strong>여는 좌클릭과 도구를 쓰는 좌클릭을 한 곳으로 모으기</strong> (원래 INBOX #41, 2026-09-07 에 여기로 옮김). 지금 열 수 있는 것은 데스드롭 상자 하나뿐이라 <strong>미리 만들면 껍데기만 늘어난다.</strong> 상자·제작대처럼 「여는 것」이 둘 이상이 되는 바퀴가 가져간다.</li></ul></section>
-<footer>갱신: 2026-09-07 20:16 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-07 20:27 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -73,7 +73,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907201619";
+  var STAMP = "20260907202742";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
