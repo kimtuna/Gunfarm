@@ -344,9 +344,25 @@ TOOL_NAMES = ("axe", "pickaxe", "sickle", "gun", "hoe", "watering_can",
 def _tool_motions(tool):
     return ("hold", "use", "walk") if _gen().has_use(tool) else ("hold", "walk")
 
+def _ground_spec(**over):
+    """바닥에 놓인 도구 한 장(`ground_<도구>.png`, 12px 한 칸 — INBOX #38).
+
+    아이콘과 **같은 도형을 작은 칸에 그대로 축소한 것**이라(`gen_character.shrink()`)
+    검사도 아이콘 것을 그대로 쓴다 — **칸 크기 한 줄만 다르다.** 숫자를 늦추지
+    않은 것은 그럴 필요가 없어서다(실측 평균명도 132~165 / 명암폭 69~76 /
+    채도 34~57 로 아이콘과 같은 자리에 모였다).
+
+    **「명암폭」이 실제로 한 번 잡았다** — 낚싯대는 대가 1px 굵기라 축소하면서
+    밝은 윗면과 그늘이 한 톤으로 평균나서 34 까지 떨어졌다. 그건 검사를 늦출
+    자리가 아니라 그림을 고칠 자리였다(`gen_character.GROUNDS`).
+    """
+    return _icon_spec(cell=_gen().GROUND_N, **over)
+
+
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
 for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
+    SPECS["ground_%s.png" % _tool] = _ground_spec()
 for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STYLES
     SPECS["player_idle_%s.png" % _style] = _player_spec()
     SPECS["player_walk_%s.png" % _style] = _walk_spec(_style)

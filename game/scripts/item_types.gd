@@ -14,6 +14,10 @@ extends RefCounted
 ## 된다). 진짜 아이콘은 DESIGN.md 「새 도구를 추가하는 절차」 6번대로 그 도구의
 ## [DESIGN] 바퀴가 같이 만든다 — 그림은 `gen_character.py` 의 `tool_icon()` 이
 ## 캐릭터와 **같은 램프·같은 광원**으로 굽는다.
+##
+## **`ground` 한 줄은 그 아이템이 바닥에 놓였을 때 쓸 그림이다** (2026-09-07, INBOX #38) —
+## 아이콘과 **다른 파일**이다(칸이 더 작다. 이유는 `ground_path()` 주석). 없으면
+## 그리는 쪽이 자리표시로 되돌아간다.
 
 # --- 카테고리 (docs/DESIGN.md 「카테고리」) -------------------------------------
 const CAT_RAW := "원재료"
@@ -60,13 +64,13 @@ const EQUIP_NAMES := {
 const ITEMS := {
 	# 도구 7종 (docs/DESIGN.md 「생활 스킬 — 채집 계열」의 도구 표).
 	# 도구는 「카테고리」의 완성품이고, 한 칸에 하나씩만 들어간다.
-	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE, "icon": "item_gun"},
-	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE, "icon": "item_axe"},
-	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE, "icon": "item_pickaxe"},
-	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE, "icon": "item_sickle"},
-	"hoe": {"name": "괭이", "category": CAT_PRODUCT, "color": Color(0.55, 0.56, 0.47), "stack": MAX_STACK_UNIQUE, "icon": "item_hoe"},
-	"watering_can": {"name": "물뿌리개", "category": CAT_PRODUCT, "color": Color(0.42, 0.58, 0.57), "stack": MAX_STACK_UNIQUE, "icon": "item_watering_can"},
-	"fishing_rod": {"name": "낚싯대", "category": CAT_PRODUCT, "color": Color(0.69, 0.55, 0.33), "stack": MAX_STACK_UNIQUE, "icon": "item_fishing_rod"},
+	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE, "icon": "item_gun", "ground": "ground_gun"},
+	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE, "icon": "item_axe", "ground": "ground_axe"},
+	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE, "icon": "item_pickaxe", "ground": "ground_pickaxe"},
+	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE, "icon": "item_sickle", "ground": "ground_sickle"},
+	"hoe": {"name": "괭이", "category": CAT_PRODUCT, "color": Color(0.55, 0.56, 0.47), "stack": MAX_STACK_UNIQUE, "icon": "item_hoe", "ground": "ground_hoe"},
+	"watering_can": {"name": "물뿌리개", "category": CAT_PRODUCT, "color": Color(0.42, 0.58, 0.57), "stack": MAX_STACK_UNIQUE, "icon": "item_watering_can", "ground": "ground_watering_can"},
+	"fishing_rod": {"name": "낚싯대", "category": CAT_PRODUCT, "color": Color(0.69, 0.55, 0.33), "stack": MAX_STACK_UNIQUE, "icon": "item_fishing_rod", "ground": "ground_fishing_rod"},
 
 	# 원재료
 	"wood": {"name": "목재", "category": CAT_RAW, "color": Color(0.54, 0.36, 0.20)},
@@ -132,9 +136,19 @@ static func icon_path(id: String) -> String:
 	return "" if name.is_empty() else "res://assets/sprites/%s.png" % name
 
 
+## 바닥에 놓였을 때 쓸 그림. **아이콘과 다른 그림이다** (2026-09-07, INBOX #38) —
+## 아이콘은 17px 칸이라 월드에 3배로 놓으면 도구가 사람만 해지고, 2배로 놓으면
+## 크기는 맞지만 **아트 픽셀 하나가 2px** 이 되어 캐릭터·지형(3px)과 도트 결이
+## 갈린다. 그래서 12px 칸에 따로 굽는다(`gen_character.py` 의 `ground_icon()`).
+static func ground_path(id: String) -> String:
+	var name := String(of(id).get("ground", ""))
+	return "" if name.is_empty() else "res://assets/sprites/%s.png" % name
+
+
 ## 아이콘 텍스처(없으면 `null`). **한 번 읽고 들고 있는다** — 인벤토리는 매 프레임
 ## 다시 그려지는데 칸마다 `load()` 를 부르면 그리기 한 번에 27번 파일을 뒤진다.
 static var _icons := {}
+static var _grounds := {}
 
 static func icon_of(id: String) -> Texture2D:
 	if _icons.has(id):
@@ -142,6 +156,16 @@ static func icon_of(id: String) -> Texture2D:
 	var path := icon_path(id)
 	var texture: Texture2D = null if path.is_empty() else load(path)
 	_icons[id] = texture
+	return texture
+
+
+## 바닥용 그림 텍스처(없으면 `null`). 캐시하는 이유는 `icon_of()` 와 같다.
+static func ground_of(id: String) -> Texture2D:
+	if _grounds.has(id):
+		return _grounds[id]
+	var path := ground_path(id)
+	var texture: Texture2D = null if path.is_empty() else load(path)
+	_grounds[id] = texture
 	return texture
 
 

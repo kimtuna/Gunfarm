@@ -22,6 +22,7 @@
 위에서 다시 잡은 실측값이고, 눈·옷 포인트처럼 "몇 개를 넣을 것인가"가 달라진
 것들은 `docs/STYLE_GUIDE.md` 「자연스러움」이 함께 바뀌었다.
 """
+import contextlib
 import os
 
 import numpy as np
@@ -283,6 +284,27 @@ def palette(skin=BASE_SKIN, hair=BASE_HAIR, cloth=BASE_CLOTH, bands=None):
 _yy, _xx = np.mgrid[0:H, 0:H].astype(np.float32)
 GX = (_xx + 0.5) / SS
 GY = (_yy + 0.5) / SS
+
+
+@contextlib.contextmanager
+def canvas(n):
+    """캔버스 한 변을 잠시 `n` 으로 바꾼다(`N`/`H`/`GX`/`GY`).
+
+    **슈퍼샘플 배율(`SS`)은 건드리지 않는다** — 도형은 전부 네이티브 px 단위로
+    적혀 있어서, 격자만 다시 깔면 같은 코드가 그대로 다른 칸에 그려진다.
+
+    쓰는 곳은 **바닥에 놓인 아이템**(`ground_icon()`, 12px)뿐이다. 캐릭터·아이콘은
+    17px 그대로다 — 왜 바닥만 칸이 작아야 하는지는 그 함수의 주석에 있다.
+    """
+    global N, H, GX, GY
+    keep = (N, H, GX, GY)
+    N, H = n, n * SS
+    yy, xx = np.mgrid[0:H, 0:H].astype(np.float32)
+    GX, GY = (xx + 0.5) / SS, (yy + 0.5) / SS
+    try:
+        yield
+    finally:
+        N, H, GX, GY = keep
 
 
 ROUND = 0.55    # 덩어리를 얼마나 둥글게 볼 것인가 (높이 = ROUND × 반지름)
@@ -1925,7 +1947,10 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
 # ── 후보 비교용 유틸 ───────────────────────────────────────────────────────
 def to_img(rgb, scale=1):
     im = Image.fromarray(rgb, "RGBA")
-    return im.resize((N * scale, N * scale), Image.NEAREST) if scale != 1 else im
+    # 크기는 **그림에서** 본다 — 전역 `N` 을 쓰면 `canvas()` 로 다른 칸에 구운
+    # 그림(바닥 스프라이트)을 밖에서 저장할 때 엉뚱한 크기로 늘어난다.
+    return im.resize((im.width * scale, im.height * scale), Image.NEAREST) \
+        if scale != 1 else im
 
 
 def strip(imgs, pad=8, bg=(30, 28, 34, 255)):
@@ -2156,6 +2181,105 @@ def icon_path(tool):
     return f"{SPRITES}/item_{tool}.png"
 
 
+# ── 바닥에 놓인 아이템 (2026-09-07, INBOX #38) ─────────────────────────────
+# **인벤토리 아이콘을 그대로 월드에 놓을 수 없다.** 아이콘은 17px 칸에 그려져
+# 있는데, 그걸 3배로 그리면 도끼가 플레이어(51px)의 8할이 되어 사람만 해지고,
+# 2배로 그리면 크기는 맞지만 **아트 픽셀 하나가 화면에서 2px** 이 된다 — 캐릭터와
+# 지형은 3px 이라 도트 결이 혼자 다르다(`docs/STYLE_GUIDE.md` 1번).
+#
+# 그래서 **더 작은 칸에 따로 굽고 3배로 그린다.** 12px × 3 = 36px 이라 화면에서
+# 차지하는 크기는 예전(34px)과 거의 같은데 도트 결만 월드와 같아진다.
+#
+# **10 / 11 / 12px 을 다 구워 나란히 놓고 골랐다**(`GEN_OUT` 의 `ground_x12.png`).
+# 10 은 곡괭이 갈래와 총 탄창이 사라져 도구가 서로 안 갈리고, 11 은 그 둘이 한 칸씩만
+# 남아 아슬아슬하다. 12 는 일곱 도구가 전부 아이콘과 같은 실루엣으로 읽히면서도
+# 화면 크기(36px)가 플레이어(51px)의 7할이라 "사람만 한 도끼"가 되지 않는다.
+GROUND_N = 12
+
+# 아이콘(17px)에서 바닥(12px)으로 줄이는 배율. **그림을 다시 정의하지 않고 같은
+# 도형을 그대로 축소한다** — 손에 쥔 도끼와 칸 안의 도끼가 같은 도끼여야 하는 것과
+# 같은 이유다(`docs/STYLE_GUIDE.md` 「손에 쥔 도구와 그 아이템 아이콘」). 형태를
+# 따로 잡으면 같은 도구가 세 군데에서 서로 달라진다.
+GROUND_K = GROUND_N / N
+
+
+def _is_length(key):
+    """이 설정값이 **길이 단위**인가 (= 캔버스를 줄일 때 같이 줄어드는 값인가).
+
+    각도(`hold`)·비율(`bit_bulge`)·자세(`swing_*`)는 줄이면 안 된다 — 미니어처는
+    같은 그림을 작게 그린 것이지 다른 그림이 아니다. 길이인 것은 이름 끝으로
+    갈린다: 좌표(`_a`/`_b`/`_c`/`_cut`), 반지름(`_r`/`_r2`), 높이(`_dome`).
+    """
+    return key in ("helve", "back", "barrel", "eye") \
+        or key.split("_")[-1] in ("a", "b", "c", "cut", "r", "r2", "dome")
+
+
+def shrink(kit, k=GROUND_K):
+    """도구 설정의 길이 값만 `k` 배로 줄인 미니어처 설정."""
+    out = dict(kit)
+    for key, value in kit.items():
+        if not _is_length(key):
+            continue
+        out[key] = tuple(v * k for v in value) if isinstance(value, tuple) else value * k
+    return out
+
+
+# **줄이기만 해서는 안 되는 자리 둘.** 나머지 다섯 도구는 아이콘을 그대로 축소한
+# 것이 그대로 통과한다 — 여기 없는 도구는 손댈 곳이 없었다는 뜻이다.
+# 값은 전부 **12px 칸 단위**이고, 축소한 값 위에 얹는다.
+GROUNDS = {
+    # 낫 — 초승달이 도끼날보다 위로 넓어서, 줄이면 날 끝이 칸 위 테두리에 한 칸
+    # 닿는다(「잘림」 = 외곽선이 잘린다). 손잡이를 조금 내려 잡으면 없어진다.
+    # 통과 구간은 -0.2 ~ -0.4 였고(그 밖은 위든 아래든 다시 닿는다) 가운데를 골랐다.
+    "sickle": dict(grip_shift=(0.0, -0.30)),
+    # 낚싯대 — **릴(쇠 두 칸)이 축소하면서 통째로 사라진다.** 12px 에서 그대로 줄인
+    # 릴은 반지름이 0.44px 이라 축소 격자에서 한 칸도 못 채우고, 그러면 낚싯대가
+    # 그냥 휜 나뭇가지가 된다(`docs/STYLE_GUIDE.md` 「손에 쥔 도구」의 "쇠 한 칸은
+    # 축소하면서 사라진다 — 두 칸이라야 남는다"가 한 칸 더 작은 칸에서 되풀이된
+    # 것이다). 1.9배부터 은색 두 칸이 남는다.
+    #
+    # **손잡이도 같이 굵혀야 한다** — 이건 「명암폭」이 잡았다. 12px 에서 낚싯대는
+    # 몸 픽셀이 18칸뿐이고 대는 1px 굵기라, 축소하면서 대의 밝은 윗면과 그늘진
+    # 아랫면이 **한 톤으로 평균나서** 그림 전체가 한 단계짜리 막대가 된다(명암폭 34).
+    # 굵은 곳이 한 군데는 있어야 밝은면과 그늘이 따로 남는데, 낚싯대에서 굵은
+    # 곳은 손잡이뿐이다(`ICON_ROD` 의 "굵은 곳은 여기뿐이다"). 통과 구간은
+    # 1.1~1.3 이고(1.0 은 명암폭 41, 1.4 부터는 「잘림」) 가운데를 골랐다.
+    "fishing_rod": dict(kit_scale=dict(reel_r=1.9, reel_dome=1.9, helve_r=1.2)),
+}
+
+
+def ground_icon(tool="axe", pal=None):
+    """바닥에 떨어진 도구 한 장(12px). 화면에서는 3배(36px)로 그린다.
+
+    `tool_icon()` 과 **같은 도형·같은 램프·같은 광원**이고 칸과 도구가 함께
+    작아질 뿐이다(`shrink()`). 자루 각도와 손잡이 자리도 아이콘 것을 그대로 쓴다 —
+    바닥의 도끼와 칸 안의 도끼가 같은 자세여야 같은 물건으로 읽힌다.
+    **줄이기만 해서는 안 되는 자리는 `GROUNDS` 에만 적는다.**
+    """
+    spec = ICONS[tool]
+    over = GROUNDS.get(tool, {})
+    pal = pal or palette()
+    kit = shrink(spec["kit"])
+    for key, mul in over.get("kit_scale", {}).items():
+        kit[key] = tuple(v * mul for v in kit[key]) \
+            if isinstance(kit[key], tuple) else kit[key] * mul
+    shift = over.get("grip_shift", (0.0, 0.0))
+    with canvas(GROUND_N):
+        b = Build()
+        draw_tool(b, spec["grip"][0] * GROUND_K + shift[0],
+                  spec["grip"][1] * GROUND_K + shift[1],
+                  spec["angle"], 1.0, kit, lift=0.0)
+        lum = light(b.hgt, b.mat, key=CFG["key"], amb=CFG["amb"], rim=CFG["rim"])
+        m, l = downsample(b.mat, lum)
+        pm = downsample_part(b.part)
+        return outline(inner_lines(quantize(m, l, pal, 0.0), m, pm, pal), m)
+
+
+def ground_path(tool):
+    """`item_types.gd` 의 `ground` 한 줄과 같은 규칙이어야 한다."""
+    return f"{SPRITES}/ground_{tool}.png"
+
+
 def motion_path(motion, style):
     """머리모양 하나당 시트 하나. `player_frames.gd` 의 `sheet_path()` 와 같은 규칙이다."""
     return f"{SPRITES}/player_{motion}_{style}.png"
@@ -2273,6 +2397,8 @@ if __name__ == "__main__":
     for tool in ICONS:
         to_img(tool_icon(tool)).save(icon_path(tool))
         print("saved", icon_path(tool))
+        to_img(ground_icon(tool)).save(ground_path(tool))
+        print("saved", ground_path(tool))
     print("saved", export_palettes())
     if os.environ.get("GEN_OUT"):     # 후보 비교용 — 저장소를 더럽히지 않는다
         strip([to_img(character(d), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
@@ -2310,3 +2436,9 @@ if __name__ == "__main__":
                            for d in DIRS]).save(f"{OUT}/{tool}_{name}_x{scale}.png")
             for scale in (12, 6, 3):
                 to_img(tool_icon(tool), scale).save(f"{OUT}/{tool}_icon_x{scale}.png")
+        # 바닥에 놓인 그림 — **아이콘과 나란히 놓아야** 같은 도구로 읽히는지 보인다
+        # (INBOX #38). 칸 크기 후보(10/11/12px)도 여기서 견줬다.
+        for scale in (12, 6, 3):
+            stack([strip([to_img(tool_icon(t), scale) for t in ICONS])]
+                  + [strip([to_img(ground_icon(t), scale) for t in ICONS])]) \
+                .save(f"{OUT}/ground_x{scale}.png")

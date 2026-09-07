@@ -13,13 +13,15 @@ extends SceneTree
 ##      4) **꽉 찬 인벤토리에서 넘치는 몫이 바닥에 남는다** (「인벤토리 안전」).
 ##      5) 수명이 다한 것은 사라진다(실제 시간 기준).
 ##      6) 저장·불러오기 왕복 — 자리·수량·놓인 시각이 그대로고, 불러온 것은 잠겨 있다.
+##      7) **도트 크기가 월드와 같다** (INBOX #38) — 배율이 캐릭터·타일과 같은 3배이고,
+##         구워진 바닥 그림의 칸이 그 배율이 전제하는 크기다.
 ##   B. 화면(실제 월드 씬에서)
-##      7) 버리면 **그 자리에 실제로 그려진다** — 버리기 전 캡처에는 없던 아이템 색이 생긴다.
-##      8) **앞뒤(Y) 정렬이 플레이어와 맞는다** — 플레이어보다 위에 놓이면 뒤에, 아래면 앞에
+##      8) 버리면 **그 자리에 실제로 그려진다** — 버리기 전 캡처에는 없던 아이템 색이 생긴다.
+##      9) **앞뒤(Y) 정렬이 플레이어와 맞는다** — 플레이어보다 위에 놓이면 뒤에, 아래면 앞에
 ##         그려진다. 겹치는 픽셀만 골라 네 장(빈 화면/아이템만/플레이어만/둘 다)을 견준다.
-##      9) 버린 자리에 서 있으면 안 주워지고, **걸어 나갔다 돌아오면** 주워진다.
-##     10) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어가고 나머지는 바닥에 그대로 보인다.
-##     11) 메인 메뉴로 나갔다 같은 슬롯으로 다시 들어와도 그 자리에 그대로 있고 보인다.
+##     10) 버린 자리에 서 있으면 안 주워지고, **걸어 나갔다 돌아오면** 주워진다.
+##     11) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어가고 나머지는 바닥에 그대로 보인다.
+##     12) 메인 메뉴로 나갔다 같은 슬롯으로 다시 들어와도 그 자리에 그대로 있고 보인다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -28,6 +30,8 @@ const ItemStack := preload("res://scripts/item_stack.gd")
 const ItemTypes := preload("res://scripts/item_types.gd")
 const GroundItems := preload("res://scripts/ground_items.gd")
 const GroundItemNode := preload("res://scripts/ground_item_node.gd")
+const PlayerFrames := preload("res://scripts/player_frames.gd")
+const TerrainTiles := preload("res://scripts/terrain_tiles.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
@@ -47,9 +51,18 @@ const PAUSE_BOX := "HUD/PauseMenu/Box/BoxLayout"
 const WOOD_SLOT := 7
 const WOOD_COUNT := 64
 
+## **발밑에 버린 것은 캐릭터에 가려 그림을 볼 수 없다** — 그림을 보는 검사에서는
+## 아이템을 이만큼 아래로 내려놓는다(Y정렬상 캐릭터 앞이라 통째로 보인다).
+## **줍히는 거리(36) 안이라 잠금이 그대로 남는다** — 밖으로 내보내면 잠금이 풀려서
+## 뒤따르는 "버린 자리에 서 있으면 안 주워진다"가 헛돈다.
+const SHOW_OFFSET := Vector2(0.0, 30.0)
+
 ## Y정렬 검사에서 아이템을 플레이어 위/아래로 얼마나 옮기는가. 그림이 겹칠 만큼
-## 가깝고(34px 짜리 그림), 줍히는 거리(36) 안이라 **잠긴 채로 남는다**.
-const SORT_OFFSET := 14.0
+## 가깝고, 줍히는 거리(36) 안이라 **잠긴 채로 남는다**.
+## **2026-09-07(INBOX #38)에 14 → 10 으로 줄였다** — 바닥 아이템 그림이 34px 짜리
+## 정사각형에서 자루(30 × 27px)로 바뀌면서 캐릭터와 겹치는 픽셀이 아래 하한 근처로
+## 내려왔다. 검사가 헛돌지 않게 더 가까이 놓는다(하한을 낮추는 쪽이 아니다).
+const SORT_OFFSET := 10.0
 
 ## Y정렬 검사가 "겹쳤다"고 인정하는 최소 픽셀 수 — 이보다 적으면 검사가 헛돈 것이다.
 const SORT_MIN_PIXELS := 100
@@ -64,6 +77,8 @@ var _fails: Array[String] = []
 var _drop_position := Vector2.ZERO
 var _shots := {}
 var _hold_from := Vector2.ZERO
+var _axe_position := Vector2.ZERO
+var _shown_position := Vector2.ZERO
 
 
 func _initialize() -> void:
@@ -78,18 +93,19 @@ func _initialize() -> void:
 		_settle,
 		_stand_on_open_land,
 		_settle,
-		# 7) 버리면 그려진다
+		# 8) 버리면 그려진다
 		func(): _remember_shot("empty"),
 		_drop_wood,
+		_show_item_beside_player,
 		_settle,
 		func(): _shoot("70_ground_dropped"),
 		_check_drawn_after_drop,
 	]
-	# 8) 앞뒤(Y) 정렬 — 위에 놓으면 플레이어 뒤, 아래에 놓으면 플레이어 앞
+	# 9) 앞뒤(Y) 정렬 — 위에 놓으면 플레이어 뒤, 아래에 놓으면 플레이어 앞
 	_steps.append_array(_sort_steps(-SORT_OFFSET, false, "71_ground_behind"))
 	_steps.append_array(_sort_steps(SORT_OFFSET, true, "72_ground_front"))
 	_steps.append_array([
-		# 9) 버린 자리에 서 있는 동안은 안 주워진다
+		# 10) 버린 자리에 서 있는 동안은 안 주워진다
 		_move_item_onto_player,
 		_settle,
 		_check_not_taken_while_standing,
@@ -101,16 +117,18 @@ func _initialize() -> void:
 		_settle,
 		_check_picked_up,
 		func(): _shoot("73_ground_picked_up"),
-		# 10) 꽉 찬 인벤토리 — 들어갈 만큼만 들어가고 나머지는 바닥에 남는다
+		# 11) 꽉 찬 인벤토리 — 들어갈 만큼만 들어가고 나머지는 바닥에 남는다
 		_fill_inventory_and_drop_stone,
 		_settle,
 		_step_onto_stone,
 		_settle,
 		_check_overflow_left_on_ground,
-		func(): _shoot("74_ground_overflow"),
-		# 11) 나갔다 들어와도 그 자리에 그대로
+		# 밟고 선 채로는 캐릭터가 가려서 안 보인다 — 비켜선 뒤에 그림을 본다.
 		_step_away_from_stone,
 		_settle,
+		func(): _shoot("74_ground_overflow"),
+		_check_leftover_drawn,
+		# 12) 나갔다 들어와도 그 자리에 그대로
 		func(): _press(PAUSE_BOX + "/ExitButton"),
 		_settle,
 		func(): change_scene_to_file(WORLD_SCENE),
@@ -123,6 +141,7 @@ func _initialize() -> void:
 		# 아이콘이 있는 아이템(도구)도 바닥에서 어떻게 보이는지 남긴다 — 자리표시
 		# 사각형과 달리 이쪽이 실제 그림이다.
 		_drop_axe,
+		func(): _remember_shot("before_tool"),
 		_place_axe_beside_player,
 		_settle,
 		func(): _shoot("76_ground_tool"),
@@ -165,6 +184,7 @@ func _check_core() -> void:
 	_check_full_inventory_keeps_leftover()
 	_check_lifetime()
 	_check_save_round_trip()
+	_check_dot_scale()
 
 
 ## 1) 버리면 그 자리에 놓이고 잠긴 채로 시작한다.
@@ -187,6 +207,36 @@ func _check_drop_starts_locked() -> void:
 	# 빈 뭉치는 아무것도 안 놓는다.
 	if ground.drop(ItemStack.new("wood", 0), at, 1000.0) != null or ground.size() != 1:
 		_fails.append("코어: 빈 뭉치가 바닥에 놓였다")
+
+
+## 7) **도트 크기가 월드와 같다** (2026-09-07, INBOX #38 — 전에는 바닥 아이템만 2배라
+## 아트 픽셀 하나가 화면에서 2px 이었고, 캐릭터·지형(3px)과 결이 달랐다).
+##
+## 화면 없이 잴 수 있는 검사라 코어 쪽에 둔다. 보는 것 셋:
+##   - 바닥 아이템의 배율이 **캐릭터와 같은가**(`PlayerFrames.SCALE`).
+##   - 그 배율이 **타일과도 같은가** — 타일은 아트 16px 이 화면 48px 이다.
+##   - 구워진 그림의 칸이 **`ART` 와 같은가.** 생성기(`gen_character.py` 의 `GROUND_N`)만
+##     고치고 게임 쪽 상수를 안 고치면 여기서 걸린다.
+func _check_dot_scale() -> void:
+	if GroundItemNode.ZOOM != PlayerFrames.SCALE:
+		_fails.append("코어: 바닥 아이템 배율 %d 가 캐릭터 %d 와 다르다 — 도트 결이 갈린다"
+				% [GroundItemNode.ZOOM, PlayerFrames.SCALE])
+	var tile_zoom := WorldGen.TILE_SIZE / TerrainTiles.TILE_ART
+	if GroundItemNode.ZOOM != tile_zoom:
+		_fails.append("코어: 바닥 아이템 배율 %d 가 타일 %d 와 다르다"
+				% [GroundItemNode.ZOOM, tile_zoom])
+	for id in ["axe", "gun", "fishing_rod"]:
+		var art := ItemTypes.ground_of(id)
+		if art == null:
+			_fails.append("코어: %s 의 바닥 그림이 없다" % id)
+			continue
+		if art.get_size() != Vector2(GroundItemNode.ART, GroundItemNode.ART):
+			_fails.append("코어: %s 의 바닥 그림이 %s — %dpx 한 칸이어야 한다"
+					% [id, art.get_size(), GroundItemNode.ART])
+	# 자리표시(그림이 없는 아이템)도 같은 격자 위에 있어야 한다.
+	if GroundItemNode.PLACEHOLDER % GroundItemNode.ZOOM != 0:
+		_fails.append("코어: 자리표시 %dpx 가 배율 %d 로 안 나눠떨어진다"
+				% [GroundItemNode.PLACEHOLDER, GroundItemNode.ZOOM])
 
 
 ## 2) 버린 자리를 벗어나야 잠금이 풀린다.
@@ -310,7 +360,7 @@ func _check_save_round_trip() -> void:
 # B. 화면 — 실제 월드 씬에서
 # =============================================================================
 
-## 7) 버리기 전에는 없던 아이템 색이 버린 뒤에 그 자리에 생긴다.
+## 8) 버리기 전에는 없던 아이템 색이 버린 뒤에 그 자리에 생긴다.
 func _check_drawn_after_drop() -> void:
 	var ground := _ground()
 	if ground == null or ground.size() != 1:
@@ -319,15 +369,15 @@ func _check_drawn_after_drop() -> void:
 	if _view().get_child_count() != 1:
 		_fails.append("바닥 아이템 노드가 %d개다 — 1개여야 한다" % _view().get_child_count())
 		return
-	var before := _count_color(_shots["empty"], _drop_position, ItemTypes.color_of("wood"))
-	var after := _count_color(_capture(), _drop_position, ItemTypes.color_of("wood"))
+	var before := _count_item(_shots["empty"], _shown_position, "wood")
+	var after := _count_item(_capture(), _shown_position, "wood")
 	if before >= SORT_MIN_PIXELS:
 		_fails.append("버리기 전인데 그 자리에 이미 목재 색이 %d px 있다" % before)
 	if after < SORT_MIN_PIXELS:
 		_fails.append("버린 자리에 목재가 안 보인다 (%d px)" % after)
 
 
-## 8) 앞뒤(Y) 정렬 — 아이템을 플레이어 위/아래로 옮겨 놓고, **겹친 픽셀만** 골라
+## 9) 앞뒤(Y) 정렬 — 아이템을 플레이어 위/아래로 옮겨 놓고, **겹친 픽셀만** 골라
 ## "둘 다 그린 화면"이 이긴 쪽과 같은지 본다. 네 장을 견주므로 그림 모양을 몰라도 된다.
 func _sort_steps(offset_y: float, item_in_front: bool, shot_name: String) -> Array[Callable]:
 	var steps: Array[Callable] = []
@@ -429,7 +479,7 @@ func _check_picked_up() -> void:
 		_fails.append("주웠는데 바닥 그림이 %d개 남아 있다" % _view().get_child_count())
 
 
-## 10) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어간다.
+## 11) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어간다.
 func _fill_inventory_and_drop_stone() -> void:
 	var inv := _inventory()
 	var full := ItemTypes.MAX_STACK
@@ -461,11 +511,15 @@ func _check_overflow_left_on_ground() -> void:
 		_fails.append("들어갈 만큼 안 들어갔다 (돌 %d개)" % _inventory().count_of("stone"))
 	if _view().get_child_count() != 1:
 		_fails.append("바닥에 남았는데 그림이 %d개다" % _view().get_child_count())
-	if _count_color(_capture(), _drop_position, ItemTypes.color_of("stone")) < SORT_MIN_PIXELS:
+
+
+## 넘쳐서 바닥에 남은 몫이 **화면에도** 남아 있는가.
+func _check_leftover_drawn() -> void:
+	if _count_item(_capture(), _drop_position, "stone") < SORT_MIN_PIXELS:
 		_fails.append("바닥에 남은 돌이 화면에 안 보인다")
 
 
-## 11) 나갔다 들어와도 그 자리에 그대로.
+## 12) 나갔다 들어와도 그 자리에 그대로.
 func _check_survives_save_load() -> void:
 	var ground := _ground()
 	if ground == null or ground.size() != 1:
@@ -499,15 +553,21 @@ func _place_axe_beside_player() -> void:
 	if ground == null or ground.size() < 2:
 		_fails.append("옆에 놓을 도끼가 없다")
 		return
-	(ground.items[ground.size() - 1] as Dictionary)[GroundItems.KEY_POSITION] = \
-			_player().global_position + Vector2(60.0, 0.0)
+	_axe_position = _player().global_position + Vector2(60.0, 0.0)
+	(ground.items[ground.size() - 1] as Dictionary)[GroundItems.KEY_POSITION] = _axe_position
 	ground.version += 1
 
 
+## 도구는 자리표시가 아니라 **구워진 그림**이라 아이템 색으로 셀 수가 없다 —
+## 옮기기 전 캡처와 견줘서 그 자리의 픽셀이 실제로 바뀌었는지 본다.
 func _check_tool_drawn() -> void:
 	if _view().get_child_count() != 2:
 		_fails.append("도구를 버렸는데 바닥 그림이 %d개다 — 2개여야 한다"
 				% _view().get_child_count())
+		return
+	var changed := _count_changed(_shots["before_tool"], _capture(), _axe_position)
+	if changed < SORT_MIN_PIXELS:
+		_fails.append("옆에 놓은 도끼가 화면에 안 보인다 (바뀐 픽셀 %d)" % changed)
 
 
 ## 다시 들어온 뒤 그림을 확인할 자리로 간다 — **줍히는 거리 밖**이라 안 주워진다.
@@ -519,7 +579,7 @@ func _check_drawn_after_reload() -> void:
 	if _view().get_child_count() != 1:
 		_fails.append("다시 들어오니 바닥 그림이 %d개다" % _view().get_child_count())
 		return
-	if _count_color(_capture(), _drop_position, ItemTypes.color_of("stone")) < SORT_MIN_PIXELS:
+	if _count_item(_capture(), _drop_position, "stone") < SORT_MIN_PIXELS:
 		_fails.append("다시 들어오니 바닥 아이템이 화면에 안 보인다")
 
 
@@ -563,6 +623,12 @@ func _land_around(world: RefCounted, tile: Vector2i, radius: int) -> bool:
 
 ## 인벤토리 창 밖으로 끌어다 놓은 것과 **같은 경로**로 버린다(창을 여는 부분은
 ## `qa_inventory.gd` 가 이미 검사한다 — 여기 관심사는 버린 뒤에 무슨 일이 나는가다).
+## 버린 아이템을 캐릭터 밖으로 내려놓는다(위 `SHOW_OFFSET`).
+func _show_item_beside_player() -> void:
+	_shown_position = _drop_position + SHOW_OFFSET
+	_place_item(_shown_position)
+
+
 func _drop_wood() -> void:
 	_drop_position = _player().global_position
 	current_scene.call("_on_drop_outside", Inventory.AREA_GENERAL, WOOD_SLOT)
@@ -629,12 +695,37 @@ func _image_point(image: Image, world_point: Vector2) -> Vector2i:
 func _image_rect(image: Image, world_point: Vector2) -> Rect2i:
 	var zoom := float(image.get_width()) / root.get_visible_rect().size.x
 	var center := _image_point(image, world_point)
-	var side := int(ceil(GroundItemNode.PLACEHOLDER * zoom))
+	var side := int(ceil(GroundItemNode.BOX * zoom))
 	var sink := int(ceil(GroundItemNode.SINK * zoom))
 	var margin := 2
 	var at := Vector2i(center.x - side / 2 - margin, center.y + sink - side - margin)
 	var rect := Rect2i(at, Vector2i(side + margin * 2, side + margin * 2))
 	return rect.intersection(Rect2i(Vector2i.ZERO, image.get_size()))
+
+
+## 두 캡처에서 그 자리의 픽셀이 몇 개나 달라졌는가.
+func _count_changed(before: Image, after: Image, world_point: Vector2) -> int:
+	if before == null or after == null:
+		return 0
+	var rect := _image_rect(after, world_point)
+	var found := 0
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			if not _same(before.get_pixel(x, y), after.get_pixel(x, y)):
+				found += 1
+	return found
+
+
+## 그 자리 주변에서 **그 아이템의 자리표시 색**으로 칠해진 픽셀 수.
+## 자리표시는 아이템 색 하나에서 만든 램프 4단계로 그려지므로(`ground_item_node.gd`),
+## 기본색 한 가지만 세면 그림의 일부만 세는 셈이 된다.
+func _count_item(image: Image, world_point: Vector2, id: String) -> int:
+	var base := ItemTypes.color_of(id)
+	var found := 0
+	for color in [base.lightened(GroundItemNode.LIGHTEN), base,
+			base.darkened(GroundItemNode.DARKEN), base.darkened(GroundItemNode.DARKEST)]:
+		found += _count_color(image, world_point, color)
+	return found
 
 
 ## 그 자리 주변에서 그 색으로 칠해진 픽셀 수.
