@@ -27,6 +27,7 @@ const Inventory := preload("res://scripts/inventory.gd")
 const InventoryPanel := preload("res://scripts/inventory_panel.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
+const ItemTypes := preload("res://scripts/item_types.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
@@ -52,7 +53,10 @@ const COLOR_EPSILON := 0.03
 ## 끌어다 옮겨볼 칸.
 const AXE_SLOT := 0
 const MOVED_SLOT := 4
-## 시트가 아직 없는 도구를 두는 칸(곡괭이) 과, 비워둘 칸.
+## 시트가 아직 없는 도구를 두는 칸과, 비워둘 칸. **어느 도구를 쓸지는 박아두지
+## 않는다** — 도구는 바퀴마다 하나씩 그림이 생기므로(DESIGN.md 「새 도구를 추가하는
+## 절차」), 이름을 적어두면 그 도구를 그리는 바퀴가 여기서 거짓 실패한다.
+## `_no_sheet_tool()` 이 그때그때 남아 있는 것 하나를 고른다.
 const NO_SHEET_SLOT := 2
 const EMPTY_SLOT := 8
 
@@ -132,10 +136,10 @@ func _initialize() -> void:
 		func(): _check_use_blocked("지도"),
 		func(): _send_action("ui_cancel"),
 		_settle,
-		# 5) 시트가 없는 도구(곡괭이) → 빈손
+		# 5) 시트가 없는 도구 → 빈손
 		func(): _send_action("hotbar_%d" % (NO_SHEET_SLOT + 1)),
 		_settle,
-		func(): _check_animation("idle", "시트가 없는 곡괭이를 들었는데"),
+		func(): _check_no_sheet_tool(),
 		# 빈 칸 → 빈손
 		func(): _send_action("hotbar_%d" % (EMPTY_SLOT + 1)),
 		_settle,
@@ -440,10 +444,34 @@ func _arrange_inventory() -> void:
 		_fails.append("월드에 인벤토리가 없다")
 		return
 	_move_to(inv, "axe", AXE_SLOT)
-	_move_to(inv, "pickaxe", NO_SHEET_SLOT)
+	var bare := _no_sheet_tool()
+	if bare != "":
+		_move_to(inv, bare, NO_SHEET_SLOT)
 	inv.take_out(Inventory.AREA_GENERAL, EMPTY_SLOT)
 	if inv.at(Inventory.AREA_GENERAL, MOVED_SLOT) != null:
 		inv.take_out(Inventory.AREA_GENERAL, MOVED_SLOT)
+
+
+## 아직 그림이 없는 도구 하나(없으면 빈 문자열). **도구**는 한 칸에 하나만 들어가고
+## (`MAX_STACK_UNIQUE`) 장비 칸에 안 들어가는 아이템이다 — 그 정의로 고르면
+## DESIGN.md 「채집 계열」의 도구 7종이 그대로 나오고, 목록을 여기 또 적지 않아도 된다.
+func _no_sheet_tool() -> String:
+	for id: String in ItemTypes.ITEMS:
+		if ItemTypes.max_stack(id) == ItemTypes.MAX_STACK_UNIQUE \
+				and ItemTypes.equip_kind(id) == ItemTypes.EQUIP_NONE \
+				and not PlayerFrames.TOOLS.has(id):
+			return id
+	return ""
+
+
+## 5) 시트가 없는 도구를 들어도 **빈손으로 조용히 넘어간다**. 도구 7종이 전부 그려지면
+## 시험할 것이 없어지므로 그때는 건너뛴다 — 거짓 실패를 만들지 않는다.
+func _check_no_sheet_tool() -> void:
+	var bare := _no_sheet_tool()
+	if bare == "":
+		print("[qa] 건너뜀 — 시트 없는 도구가 이제 없다 (도구 7종 전부 그려졌다)")
+		return
+	_check_animation("idle", "시트가 없는 도구(%s)를 들었는데" % bare)
 
 
 func _move_to(inv: RefCounted, id: String, slot: int) -> void:

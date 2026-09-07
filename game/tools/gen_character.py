@@ -323,7 +323,7 @@ def rbox(x0, y0, x1, y1, r=1.2, dome=None, axis="x"):
     return m, h * m
 
 
-def capsule(x0, y0, x1, y1, r0, r1=None):
+def capsule(x0, y0, x1, y1, r0, r1=None, dome=None):
     """두 점을 잇는 **아무 각도나 되는** 둥근 막대. 굵기는 r0 → r1 로 변한다.
 
     `rbox`/`_fall_shape` 는 축에 붙어 있어서(세로로만 흐른다) 비스듬한 도구 자루를
@@ -340,7 +340,11 @@ def capsule(x0, y0, x1, y1, r0, r1=None):
     d = np.hypot(GX - (x0 + t * dx), GY - (y0 + t * dy))
     r = r0 + (r1 - r0) * t
     m = d <= r
-    h = np.sqrt(np.clip(1.0 - (d / np.maximum(r, 1e-6)) ** 2, 0, 1)) * (ROUND * max(r0, r1))
+    # `dome` 을 주면 높이를 굵기에서 떼어낸다 — **가늘면서도 볼록한** 막대를
+    # 만들 때 쓴다(곡괭이 갈래). 굵기로만 높이를 정하면 가는 쇠붙이가 납작해져서
+    # 옆에 붙은 나무 자루와 명도가 같아진다(`qa_sprite_check.py` 「대비」).
+    h = (np.sqrt(np.clip(1.0 - (d / np.maximum(r, 1e-6)) ** 2, 0, 1))
+         * (ROUND * max(r0, r1) if dome is None else dome))
     return m, h * m
 
 
@@ -838,9 +842,66 @@ AXE = dict(
     # 걷는 동안 도구를 든 팔은 덜 흔든다 — 실제로도 연장을 든 팔은 잘 안 흔들고,
     # 안 줄이면 도끼가 팔을 따라 크게 움직여 「이어짐」 상한을 넘는다.
     arm_damp=0.35,
+    head="axe",
 )
 
-TOOLS = {"axe": AXE}
+# 곡괭이 (INBOX #26). **도끼와 같은 자루**(길이·굵기·램프)를 쓰고 **머리만 다르다** —
+# 그래야 둘이 같은 손에서 나온 도구로 보인다(STYLE_GUIDE 「손에 쥔 도구」).
+#
+# 값을 치르고 알아낸 것:
+#  - **차이는 자루가 아니라 머리의 대칭성이다.** 도끼는 한쪽으로만 넓은 쐐기라
+#    실루엣이 자루 한쪽에 쏠려 있고, 곡괭이는 **양쪽으로 뾰족한 두 갈래**라 자루를
+#    가운데 두고 좌우가 같다. 17px 에서 이 좌우 대칭 하나가 두 도구를 가른다 —
+#    머리 모양을 아무리 다듬어도 한쪽에만 달려 있으면 도끼로 읽힌다.
+#  - **갈래는 곧은 쐐기가 아니라 끝만 꺾이는 갈고리다.** `wedge` 로 뿌리에서 끝까지
+#    곧게 좁혀봤더니 갈래가 삼각형이 되어 머리 전체가 **화살촉/뿔**로 읽혔다.
+#    실제로 곡괭이를 곡괭이로 만드는 것은 **크로스바 한 줄 + 그 양끝에서 한 칸
+#    떨어진 갈래 끝** 두 점이다(끝만 떨어지려면 곡선이어야 한다 — `_bez`).
+#  - **뾰족함은 굵기가 아니라 그 한 칸의 빈틈에서 나온다.** 17px 에서 갈래 끝을
+#    아무리 가늘게 해도(반지름 0.3 이하) 축소하면서 통째로 사라진다. 굵기는
+#    한 칸을 유지할 만큼만 두고, 끝을 크로스바에서 **대각선으로 떨어뜨려**
+#    사이에 빈 칸이 보이게 하는 쪽이 훨씬 잘 읽힌다.
+#  - **갈래를 도끼날만큼 길게 뽑을 수 없다.** 도끼는 한쪽으로 2.05 였는데 곡괭이는
+#    양쪽으로 그만큼 나가면 머리 폭이 앞모습에서 얼굴을, 옆모습에서 칸 테두리를
+#    친다(「잘림」). 한쪽 2.4 로 잡아 크로스바가 4px, 갈래 끝까지 6px 다.
+PICKAXE = dict(
+    AXE,
+    # 갈래 한 짝의 2차 베지에: 뿌리 → **제어점** → 끝 (자루에서 바깥으로, 자루를
+    # 따라 위로). 좌우 두 벌이 자동으로 만들어진다(바깥 방향만 뒤집는다).
+    # **제어점이 뿌리 높이에 가까이 있어야** 갈래가 앞쪽 2/3 을 가로로 뻗다가
+    # 끝에서만 한 칸 떨어진다 — 그 갈고리가 곡괭이의 전부다.
+    tine_a=(0.15, 0.35), tine_c=(1.90, 0.55), tine_b=(2.40, -1.40),
+    tine_r=(0.62, 0.36),
+    # **갈래의 볼록함은 굵기에서 떼어낸다.** 굵기(0.62)로 높이를 정하면 갈래가
+    # 납작해져서 바로 옆 나무 자루와 명도가 붙는다 — 17px 에서 곡괭이가 곡괭이로
+    # 읽히는 것은 형태가 아니라 **쇠와 나무의 명도차**다(도끼도 같은 이유로
+    # 날이 두껍다). 도끼날의 볼록함(0.55 × 1.75 ≈ 0.96)에 맞춰 잡았다.
+    tine_dome=0.95,
+    # 자루가 머리를 뚫고 올라온 부분(자루 방향 길이). 손에 쥔 크기에서는 그 한
+    # 칸이 머리를 두 조각으로 끊어서 쓰지 않는다 — 아이콘에서만 쓴다.
+    eye=0.0,
+    # **거의 세워 든다(86도).** 도끼(80도)보다 세운 것은 머리가 좌우 대칭이기
+    # 때문이다 — 자루를 기울이면 크로스바가 같이 기울어 한쪽 갈래만 한 칸 내려가고,
+    # 17px 에서 그건 "휜 곡괭이"가 아니라 **부러진 도구**로 보인다.
+    hold=86.0,
+    # 머리가 어깨 높이에 오도록 도끼(0.25)보다 내려 잡는다 — 세워 든 만큼 머리가
+    # 위로 가서, 안 내리면 안쪽 갈래가 턱을 문다.
+    reach=1.05, drop=0.80,
+    # 채광은 벌목보다 **덜 크게 휘두르고 앞으로 찍는다** — 바위벽을 향해 치는
+    # 동작이라 머리 위로 크게 넘기지 않는다.
+    swing_mid=5.0, swing_amp=64.0,
+    # 드는 동안 손이 **덜 올라가고 더 앞으로 나간다**(도끼: rise -1.60 / fwd 0.70
+    # / lift 0.60). 곡괭이 머리는 좌우 대칭이라 **안쪽 갈래가 얼굴 쪽으로 돌아온다** —
+    # 도끼처럼 손을 얼굴 옆까지 들어올리면 그 갈래가 눈을 덮는다(「눈」이 잡는다).
+    # 앞으로 밀어 그 갈래를 얼굴 앞을 지나 바깥으로 보낸다.
+    # **통과 구간을 표로 뽑아 가운데를 골랐다**: rise -1.2~-1.0 / fwd 1.0~1.2 /
+    # lift 0.22~0.38. 위로는 「눈」, 아래로는 「대비」(자루와 갈래가 겹쳐 붙는다)와
+    # 「이어짐」이 벽이다.
+    use_rise=-1.10, swing_fwd=1.15, swing_lift=0.30,
+    head="pick",
+)
+
+TOOLS = {"axe": AXE, "pickaxe": PICKAXE}
 
 ## 도구를 쥔 손. 앞/뒷모습은 **화면 오른쪽 손**(팔 두 개 중 1번), 옆모습은 보이는
 ## 손 하나뿐이다. 방향이 바뀌어도 도구가 화면 같은 쪽에 있어야 덜 어지럽다.
@@ -898,29 +959,91 @@ def tool_pose(direction, motion, phase, cfg, tool):
     return pose
 
 
-def _tool_axe(b, gx, gy, angle_deg, sx, tool, lift=0.16):
-    """손 자리(gx, gy)에 도끼를 쥐여준다. `sx` 가 -1 이면 좌우가 뒤집힌다.
+def _head_axe(b, at, tool, lift):
+    """도끼머리 — 자루 끝에서 **바깥으로 벌어지다 끝이 잘리는 쐐기**(`wedge`) 하나.
+
+    `capsule` 을 쓰면 바깥 끝이 반원이라 **망치**로 읽힌다 — 실제로 그렇게 나왔다.
+    자루에 수직인 막대(굵기 일정)로 붙여도 망치고, 자루와 나란한 판으로 붙이면
+    벽돌이다. **한쪽에만 달려 있는 것**이 곡괭이와 갈리는 자리다.
+    """
+    b.add(wedge(*at(*tool["bit_a"]), *at(*tool["bit_b"]),
+                *tool["bit_r"], bulge=tool["bit_bulge"]), "blade", lift=lift + 0.05)
+
+
+## 곡괭이 갈래 한 짝을 몇 토막으로 나눠 그릴 것인가. 토막마다 굵기가 줄어드는
+## `capsule` 을 이어 붙여 **곡선**을 만든다 — `wedge` 는 곧아서 갈고리가 안 된다.
+TINE_STEPS = 8
+
+
+def _bez(pts, t):
+    """2차 베지에 한 점. 곡괭이 갈래의 휨을 제어점 하나로 정한다."""
+    (x0, y0), (x1, y1), (x2, y2) = pts
+    u = 1.0 - t
+    return (u * u * x0 + 2 * u * t * x1 + t * t * x2,
+            u * u * y0 + 2 * u * t * y1 + t * t * y2)
+
+
+def _head_pick(b, at, tool, lift):
+    """곡괭이머리 — 자루를 가운데 두고 **좌우로 뻗는 뾰족한 갈래 두 개**.
+
+    도끼머리와 정확히 뒤집힌 쐐기다(뿌리가 굵고 끝이 뾰족하다). 좌우 대칭이라
+    17px 에서도 도끼와 실루엣이 겹치지 않는다 — INBOX #26 이 요구한 구별이 여기서
+    나온다. 두 갈래의 뿌리가 가운데서 겹쳐 **곡괭이눈**(자루가 꿰이는 덩어리)이
+    저절로 생기므로 따로 그리지 않는다.
+    """
+    # 자루가 머리를 뚫고 조금 올라온 끝. **갈래보다 먼저 그린다** — 나중에 그리면
+    # 머리 한가운데 나무색 한 칸이 남아서 머리가 두 조각으로 끊겨 보인다.
+    if tool["eye"] > 0:
+        b.add(capsule(*at(0.0, 0.0), *at(0.0, tool["eye"]), tool["helve_r"][1] * 0.9),
+              "helve", lift=lift + 0.03)
+    r0, r1 = tool["tine_r"]
+    # **두 갈래를 한 덩어리(`part`)로 묶는다.** 토막마다 새 부위 id 가 붙으면
+    # `inner_lines()` 가 토막 경계마다 가장 어두운 단계를 그어서 머리가 통째로
+    # 검게 칠해진다(실제로 그렇게 나왔다 — 머리 34px 중 21px 이 최암부였다).
+    # 갈래는 한 쇳덩이라 안에 내부선이 있을 이유가 없다.
+    head_part = None
+    for side in (1.0, -1.0):
+        pts = [(side * ox, oy) for ox, oy in
+               (tool["tine_a"], tool["tine_c"], tool["tine_b"])]
+        # **곧은 쐐기로는 곡괭이가 안 된다** — 뿌리에서 끝까지 곧게 벌어지면
+        # 갈래가 삼각형이 되어 화살촉/뿔로 읽힌다. 17px 에서 곡괭이를 곡괭이로
+        # 만드는 것은 **끝만 아래로 꺾이는 갈고리**다(가운데 제어점이 그 꺾임을
+        # 늦춘다 — 앞쪽 2/3 은 가로로 뻗고 마지막에 한 칸 떨어진다).
+        for i in range(TINE_STEPS):
+            t0, t1 = i / TINE_STEPS, (i + 1) / TINE_STEPS
+            head_part = b.add(capsule(*at(*_bez(pts, t0)), *at(*_bez(pts, t1)),
+                                      r0 + (r1 - r0) * t0, r0 + (r1 - r0) * t1,
+                                      dome=tool["tine_dome"]),
+                              "blade", part=head_part, lift=lift + 0.05)
+
+
+HEADS = {"axe": _head_axe, "pick": _head_pick}
+
+
+def draw_tool(b, gx, gy, angle_deg, sx, tool, lift=0.16):
+    """손 자리(gx, gy)에 도구를 쥐여준다. `sx` 가 -1 이면 좌우가 뒤집힌다.
+
+    **자루는 모든 도구가 공유하고 머리만 갈린다**(`tool["head"]` → `HEADS`) —
+    자루 굵기·길이·램프가 도구마다 달라지면 같은 손에서 나온 도구로 안 보인다
+    (STYLE_GUIDE 「손에 쥔 도구와 그 아이템 아이콘」).
 
     **손보다 반 칸 위에서 시작한다** — 정확히 손 위에서 시작하면 자루가 손을 통째로
     덮어서 팔이 자루 속으로 사라진다. 반 칸 띄우면 손끝 한 칸이 남아 쥔 것으로 읽힌다.
     """
     a = np.radians(angle_deg)
-    ux, uy = np.cos(a) * sx, -np.sin(a)          # 자루 방향(손 → 날)
-    nx, ny = np.sin(a) * sx, np.cos(a)           # 날이 벌어지는 쪽(자루의 바깥)
+    ux, uy = np.cos(a) * sx, -np.sin(a)          # 자루 방향(손 → 머리)
+    nx, ny = np.sin(a) * sx, np.cos(a)           # 머리가 벌어지는 쪽(자루의 바깥)
     L = tool["helve"]
     x0, y0 = gx - ux * 0.55, gy - uy * 0.55      # 손 아래로 조금 삐져나온 자루 끝
     hx, hy = gx + ux * L, gy + uy * L
     b.add(capsule(x0, y0, hx, hy, *tool["helve_r"]), "helve", lift=lift)
-    # 날 — 자루 끝에서 **바깥으로 벌어지다 끝이 잘리는 쐐기**(`wedge`)다.
-    # `bit_a`(자루 쪽, 도끼눈)에서 `bit_b`(날 끝)로 가면서 넓어진다. 여기에
-    # `capsule` 을 쓰면 바깥 끝이 반원이라 **망치**로 읽힌다 — 실제로 그렇게
-    # 나왔다. 자루에 수직인 막대(굵기 일정)로 붙여도 망치고, 자루와 나란한
-    # 판으로 붙이면 벽돌이다.
-    ax0, ay0 = tool["bit_a"]
-    bx0, by0 = tool["bit_b"]
-    b.add(wedge(hx + nx * ax0 + ux * ay0, hy + ny * ax0 + uy * ay0,
-                hx + nx * bx0 + ux * by0, hy + ny * bx0 + uy * by0,
-                *tool["bit_r"], bulge=tool["bit_bulge"]), "blade", lift=lift + 0.05)
+
+    # 머리 좌표는 **자루 끝을 원점으로 한 (바깥, 자루 방향)** 으로 적는다 —
+    # 방향/각도가 바뀌어도 머리 모양이 자루에 대해 그대로다.
+    def at(out, along):
+        return hx + nx * out + ux * along, hy + ny * out + uy * along
+
+    HEADS[tool["head"]](b, at, tool, lift)
 
 
 def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3, slant=0.0, wave=0.0):
@@ -1184,7 +1307,7 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
     # 도구는 **맨 나중에** 얹는다 — 손에 쥔 것이므로 몸/머리보다 앞이다.
     if kit:
         gx, gy = hands[tool_hand(direction)]
-        _tool_axe(b, gx, gy, pose["tool_angle"], -1.0 if direction == "left" else 1.0, kit)
+        draw_tool(b, gx, gy, pose["tool_angle"], -1.0 if direction == "left" else 1.0, kit)
 
     lum = light(b.hgt, b.mat, key=cfg["key"], amb=cfg["amb"], rim=cfg["rim"])
     m, l = downsample(b.mat, lum)
@@ -1420,7 +1543,25 @@ def tool_motions(tool):
 # 「각짐」(캐릭터 옆선 규칙)을 여기에 적용하지 않는다.**
 ICON_AXE = dict(AXE, helve=8.6, helve_r=(0.95, 0.75),
                 bit_a=(-0.7, 0.6), bit_b=(3.6, -0.2), bit_r=(0.75, 3.4), bit_bulge=0.26)
-ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0)}
+# 곡괭이 아이콘 (INBOX #26). **도끼 아이콘과 같은 자루 굵기·같은 여백**이라야 칸에
+# 나란히 놓였을 때 하나만 커 보이지 않는다(STYLE_GUIDE 10번 `item_axe_x6.png`).
+# 머리는 손에 쥔 것과 같은 두 갈래인데, **아이콘에서는 갈래를 더 길고 가늘게**
+# 뽑는다 — 칸 하나에 곡괭이 하나뿐이라 뭉툭하면 망치로 읽힌다.
+# **자루를 도끼보다 더 세운다(84도).** 머리가 좌우 대칭이라 자루를 기울이면 두 갈래의
+# 높이가 어긋나서 한쪽만 달린 것처럼(=도끼처럼) 보인다 — 세워야 대칭이 살아난다.
+# **아이콘의 갈래는 손에 쥔 것보다 굵다.** 가늘게 뽑았더니 갈래가 어두워져서
+# (가는 원기둥은 윗면이 좁아 광원을 거의 못 받는다) 옆 칸의 도끼날보다 한 단계
+# 탁해 보였다 — 「어울림」이 깨진다. 굵히면 윗면이 넓어져 도끼날과 같은 밝기가
+# 나오고, 뾰족함은 굵기가 아니라 **끝이 크로스바에서 대각선으로 떨어진 것**이
+# 만든다(손에 쥔 것과 같은 이유).
+ICON_PICKAXE = dict(PICKAXE, helve=8.2, helve_r=(0.95, 0.75),
+                    tine_a=(0.3, 0.7), tine_c=(2.8, 1.2), tine_b=(4.9, -3.4),
+                    tine_r=(1.45, 0.80), tine_dome=0.85, eye=1.2)
+ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0),
+         # 곡괭이는 머리가 좌우 대칭이라 **자루를 칸 한가운데 세운다**(도끼는 날이
+         # 한쪽으로만 나가서 자루를 왼쪽에 붙였다). 84도 — 여기서 더 눕히면
+         # 크로스바가 기울어 한쪽 갈래만 내려간다.
+         "pickaxe": dict(kit=ICON_PICKAXE, grip=(8.2, 14.2), angle=84.0)}
 
 
 def tool_icon(tool="axe", pal=None):
@@ -1434,7 +1575,7 @@ def tool_icon(tool="axe", pal=None):
     spec = ICONS[tool]
     pal = pal or palette()
     b = Build()
-    _tool_axe(b, spec["grip"][0], spec["grip"][1], spec["angle"], 1.0, spec["kit"], lift=0.0)
+    draw_tool(b, spec["grip"][0], spec["grip"][1], spec["angle"], 1.0, spec["kit"], lift=0.0)
     lum = light(b.hgt, b.mat, key=CFG["key"], amb=CFG["amb"], rim=CFG["rim"])
     m, l = downsample(b.mat, lum)
     pm = downsample_part(b.part)
@@ -1549,7 +1690,9 @@ const CLOTHES := {
 
 # 이번에 다시 굽는 모션. 2026-09-07 (INBOX #20) 에 걷기가 돌아왔다 — `CFG` 의
 # 걷기 진폭을 17px 격자에서 다시 잡아서 idle 과 같은 칸 크기로 굽는다.
-MOTIONS_NOW = (("idle", idle_sheet), ("walk", walk_sheet)) + tool_motions("axe")
+MOTIONS_NOW = (("idle", idle_sheet), ("walk", walk_sheet))
+for _t in TOOLS:                      # 도구가 늘면 `TOOLS` 한 줄만 늘어난다
+    MOTIONS_NOW = MOTIONS_NOW + tool_motions(_t)
 
 if __name__ == "__main__":
     for style in HAIR_STYLES:

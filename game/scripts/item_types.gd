@@ -62,7 +62,7 @@ const ITEMS := {
 	# 도구는 「카테고리」의 완성품이고, 한 칸에 하나씩만 들어간다.
 	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE},
 	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE, "icon": "item_axe"},
-	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE},
+	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE, "icon": "item_pickaxe"},
 	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE},
 	"hoe": {"name": "괭이", "category": CAT_PRODUCT, "color": Color(0.55, 0.56, 0.47), "stack": MAX_STACK_UNIQUE},
 	"watering_can": {"name": "물뿌리개", "category": CAT_PRODUCT, "color": Color(0.42, 0.58, 0.57), "stack": MAX_STACK_UNIQUE},

@@ -250,7 +250,6 @@ func _build_board() -> void:
 func _build_tool_board() -> void:
 	var step := CELL * SCALE + 12
 	var motions: Array[String] = ["idle", "hold", "use"]
-	var columns := 2
 	var sheets := {}
 	for tool: String in PlayerFrames.TOOLS:
 		for motion in motions:
@@ -259,8 +258,11 @@ func _build_tool_board() -> void:
 			if texture == null:
 				continue
 			sheets[key] = texture
-			if motion == "use":
-				columns += texture.get_width() / CELL
+	# 칸 수는 **실제로 그릴 것에서 센다** — 도구 하나를 전제로 미리 더해두면
+	# (전에는 `2 + use 프레임 수` 였다) 도구가 늘 때마다 풀밭이 그림보다 좁아진다.
+	var columns := 0
+	for key: String in sheets:
+		columns += int(sheets[key].get_width() / CELL)
 	var board := ColorRect.new()
 	board.color = TerrainPalettes.color_of("grass", 1)
 	board.size = Vector2(step * columns + 24, step * DIRS.size() + 24)

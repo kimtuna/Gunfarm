@@ -293,6 +293,11 @@ def _icon_spec(**over):
         chroma_mean=25.0,
         # 도구가 그림의 전부다 — 「비율」에서 뺄 것이 없다.
         tool_mats=(),
+        # **쇠와 나무의 밝기는 도구가 늘어도 같아야 한다** — 아이콘은 인벤토리
+        # 칸에 나란히 놓이므로 하나만 탁하면 바로 보인다(STYLE_GUIDE 10번의
+        # `item_axe_x6.png` 가 기준선이다). 실측: 도끼 날 173 / 자루 133,
+        # 곡괭이 날 166 / 자루 131.
+        mat_luma=dict(blade=(150.0, 195.0), helve=(112.0, 155.0)),
     ), **over)
 
 
@@ -320,7 +325,7 @@ TERRAIN_SPEC = dict(
 
 # 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
 # 손에 쥔 세 모션 시트 12장과 아이템 아이콘 한 장이 함께 등록된다.
-TOOL_NAMES = ("axe",)
+TOOL_NAMES = ("axe", "pickaxe")
 
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
 for _tool in TOOL_NAMES:
@@ -620,6 +625,21 @@ def check_sheet(path, spec):
     rep.add(not bad, "대비", " ".join(bad),
             " ".join("%s|%s %s" % (m1, m2, "-" if g is None else "%.0f" % g)
                      for g, m1, m2, _, _ in gaps))
+
+    # 재질별 평균 명도 — **도구끼리 쇠와 나무의 밝기가 같은가**
+    # (2026-09-07, INBOX #26). 전체 평균(아래 「평균명도」)만 보면 자루가 길어진
+    # 만큼 상쇄돼서 **날만 통째로 어두워진 그림이 통과한다** — 실제로 곡괭이머리를
+    # 토막 낸 `capsule` 마다 부위 id 가 붙어 `inner_lines()` 가 토막 경계를 전부
+    # 최암부로 그었을 때, 머리 34px 중 21px 이 가장 어두운 단계인데도 전체 평균은
+    # 합격선 안이었다. 그 상태를 도끼 옆에 놓으면 곡괭이만 탁해 보인다(「어울림」).
+    for mat, (lo, hi) in sorted(spec.get("mat_luma", {}).items()):
+        sel = matmap == mat
+        if int(sel.sum()) < 4:
+            rep.add(True, "재질명도", "", "%s -" % mat)
+            continue
+        v = float(L[sel].mean())
+        rep.add(lo <= v <= hi, "재질명도",
+                "%s %.0f (%.0f~%.0f 밖)" % (mat, v, lo, hi), "%s %.0f" % (mat, v))
 
     # 명도 분포 — 잉크(외곽선·눈)를 빼고 본다
     vals = L[body & (matmap != "")]
