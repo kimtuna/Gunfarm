@@ -195,10 +195,11 @@ func _draw_slot(font: Font, area: String, index: int) -> void:
 ## 칠한 자리표시(밝은 띠 + 그림자 + 어두운 테두리)를 그린다 — 도구가 하나씩 그려지는
 ## 동안 두 가지가 섞여 있게 된다(`item_types.gd` 의 `icon`).
 ##
-## **그리는 대상(`canvas`)을 인자로 받는다** — 칸 안에 그릴 때는 이 Control 이고, 끌고
-## 있는 동안 마우스를 따라다니는 그림은 창 위를 덮는 다른 노드다. 같은 함수를 쓰므로
-## 끌기 전과 끌고 있는 동안의 그림이 어긋날 수 없다.
-func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCounted, alpha: float = 1.0) -> void:
+## **그리는 대상(`canvas`)을 인자로 받는 `static` 함수다** — 칸 안에 그릴 때는 이
+## Control 이고, 끌고 있는 동안 마우스를 따라다니는 그림은 창 위를 덮는 다른 노드이며,
+## **데스드롭 상자 창의 칸**(`death_box_panel.gd`)도 이 함수를 그대로 부른다. 같은
+## 아이템이 창 안팎에서 다르게 보일 자리가 없다.
+static func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCounted, alpha: float = 1.0) -> void:
 	var rect := slot.grow(-ITEM_INSET)
 	var icon := ItemTypes.icon_of(stack.id)
 	if icon != null:
@@ -221,7 +222,7 @@ func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCounted, a
 ## 픽셀 하나가 화면에서 2px, 3px 로 들쭉날쭉해져 도트가 뭉개진다. 칸(56px)에
 ## 들어가는 가장 큰 정수 배율을 쓰고, **자리도 정수로 반올림**한다(반 픽셀에
 ## 놓으면 같은 일이 벌어진다).
-func _draw_icon(canvas: CanvasItem, icon: Texture2D, slot: Rect2, alpha: float) -> void:
+static func _draw_icon(canvas: CanvasItem, icon: Texture2D, slot: Rect2, alpha: float) -> void:
 	var art := Vector2(icon.get_size())
 	var zoom := maxi(1, int(floor(minf(slot.size.x / art.x, slot.size.y / art.y))))
 	var size := art * float(zoom)
@@ -231,7 +232,7 @@ func _draw_icon(canvas: CanvasItem, icon: Texture2D, slot: Rect2, alpha: float) 
 
 ## 아이콘이 아직 없는 아이템의 자리표시 — 아이템 색으로 칠한 사각형 위에 밝은
 ## 띠(빛)와 아래 그림자, 어두운 테두리를 넣어 도트 그림들과 같은 결로 보이게 한다.
-func _draw_placeholder(canvas: CanvasItem, font: Font, rect: Rect2, stack: RefCounted,
+static func _draw_placeholder(canvas: CanvasItem, font: Font, rect: Rect2, stack: RefCounted,
 		alpha: float) -> void:
 	var base: Color = ItemTypes.color_of(stack.id)
 	canvas.draw_rect(rect, Color(base, alpha))
@@ -259,7 +260,7 @@ func _draw_centered(font: Font, rect: Rect2, text: String, font_size: int, color
 	_string_centered(self, font, rect, text, font_size, color)
 
 
-func _string_centered(canvas: CanvasItem, font: Font, rect: Rect2, text: String,
+static func _string_centered(canvas: CanvasItem, font: Font, rect: Rect2, text: String,
 		font_size: int, color: Color) -> void:
 	var size_of := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size)
 	var at := rect.position + (rect.size - Vector2(size_of.x, 0.0)) * 0.5

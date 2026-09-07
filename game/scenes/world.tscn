@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=14 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/bullets_view.gd" id="7_bullets"]
 [ext_resource type="Script" path="res://scripts/aim_line.gd" id="8_aim"]
 [ext_resource type="Script" path="res://scripts/gun_hud.gd" id="9_gunhud"]
+[ext_resource type="Script" path="res://scripts/death_boxes_view.gd" id="10_dboxes"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hotbar"]
 content_margin_left = 10.0
@@ -48,6 +49,11 @@ y_sort_enabled = true
 unique_name_in_owner = true
 y_sort_enabled = true
 script = ExtResource("6_ground")
+
+[node name="DeathBoxesView" type="Node2D" parent="Entities"]
+unique_name_in_owner = true
+y_sort_enabled = true
+script = ExtResource("10_dboxes")
 
 [node name="Player" parent="Entities" instance=ExtResource("3_player")]
 unique_name_in_owner = true
@@ -178,9 +184,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -260.0
-offset_top = -200.0
+offset_top = -236.0
 offset_right = 260.0
-offset_bottom = 200.0
+offset_bottom = 236.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_pause")
@@ -221,6 +227,12 @@ custom_minimum_size = Vector2(0, 56)
 layout_mode = 2
 text = "설정"
 
+[node name="WorldSettingsButton" type="Button" parent="HUD/PauseMenu/Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "월드 설정"
+
 [node name="ExitButton" type="Button" parent="HUD/PauseMenu/Box/BoxLayout"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 56)
@@ -229,4 +241,5 @@ text = "메인 메뉴로 나가기"
 
 [connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/ResumeButton" to="." method="_on_resume_pressed"]
 [connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/SettingsButton" to="." method="_on_pause_settings_pressed"]
+[connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/WorldSettingsButton" to="." method="_on_pause_world_settings_pressed"]
 [connection signal="pressed" from="HUD/PauseMenu/Box/BoxLayout/ExitButton" to="." method="_on_exit_to_main_menu_pressed"]

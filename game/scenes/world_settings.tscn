@@ -1,0 +1,121 @@
+[gd_scene load_steps=3 format=3 uid="uid://bgunfarmwrldset"]
+
+[ext_resource type="Script" path="res://scripts/world_settings_screen.gd" id="1_wset"]
+[ext_resource type="Theme" path="res://ui/menu_theme.tres" id="2_theme"]
+
+[node name="WorldSettingsScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_wset")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.105882, 0.121569, 0.101961, 1)
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 40
+text = "월드 설정"
+horizontal_alignment = 1
+
+[node name="SubTitle" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.603922, 0.627451, 0.560784, 1)
+theme_override_font_sizes/font_size = 17
+text = "이 월드에만 적용됩니다 — 해상도 같은 그래픽 설정과 다른 자리입니다."
+horizontal_alignment = 1
+
+[node name="Gap" type="Control" parent="Layout"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="DeathBoxLabel" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.909804, 0.894118, 0.847059, 1)
+theme_override_font_sizes/font_size = 24
+text = "데스드롭 상자가 남아 있는 시간"
+horizontal_alignment = 1
+
+[node name="DeathBoxRow" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="PrevButton" type="Button" parent="Layout/DeathBoxRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 56)
+layout_mode = 2
+text = "<"
+
+[node name="DeathBoxValue" type="Label" parent="Layout/DeathBoxRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 30
+text = "30분"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="NextButton" type="Button" parent="Layout/DeathBoxRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 56)
+layout_mode = 2
+text = ">"
+
+[node name="DeathBoxNote" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.603922, 0.627451, 0.560784, 1)
+theme_override_font_sizes/font_size = 18
+text = "죽으면 그 자리에 상자가 생기고 짐이 전부 들어갑니다. 이 시간이 지나면 상자와 내용물이 함께 사라집니다 — 상자를 열어둔 동안에는 시간이 흐르지 않습니다."
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[node name="ApplyNote" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 16
+text = "바꾼 값은 다음에 생기는 상자부터 적용됩니다."
+horizontal_alignment = 1
+
+[node name="Gap2" type="Control" parent="Layout"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+
+[node name="EscHint" type="Label" parent="Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 18
+text = "Esc — 돌아가기"
+horizontal_alignment = 1
+
+[connection signal="pressed" from="Layout/DeathBoxRow/PrevButton" to="." method="_on_prev_pressed"]
+[connection signal="pressed" from="Layout/DeathBoxRow/NextButton" to="." method="_on_next_pressed"]

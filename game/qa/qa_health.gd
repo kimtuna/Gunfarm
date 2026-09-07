@@ -33,6 +33,7 @@ const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerHealth := preload("res://scripts/player_health.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerInput := preload("res://scripts/player_input.gd")
+const Inventory := preload("res://scripts/inventory.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
@@ -88,6 +89,7 @@ func _initialize() -> void:
 	_enter_world()
 	_steps = [
 		_settle,
+		_empty_inventory,
 		_aim_right,
 		func(): _wait_time = FOCUS_SECONDS,
 		# 7) 들어오면 가득이고 리스폰 지점이 스폰 칸이다
@@ -386,6 +388,20 @@ func _enter_world() -> void:
 
 func _settle() -> void:
 	_wait_time = SETTLE_SECONDS
+
+
+## **빈손으로 시작한다.** 죽으면 인벤토리가 「데스드롭 상자」로 통째로 옮겨가므로
+## (INBOX #37) 하단 핫바 그림이 죽기 전과 뒤가 달라진다 — 그러면 아래 10번의
+## "되살아난 화면이 스폰 화면과 같은가"가 **체력·리스폰과 무관한 이유로** 실패한다.
+## 이 파일이 보는 것은 체력과 리스폰이다(상자 자체는 `qa_death_box.gd` 가 본다).
+func _empty_inventory() -> void:
+	var inventory: RefCounted = current_scene.get("inventory")
+	if inventory == null:
+		_fails.append("월드에 인벤토리가 없다")
+		return
+	for area: String in [Inventory.AREA_GENERAL, Inventory.AREA_EQUIPMENT]:
+		for index in inventory.slot_count(area):
+			inventory.take_out(area, index)
 
 
 ## 마우스를 한 자리에 고정한다 — 조준 각도가 캡처마다 달라지면 조준선과 캐릭터

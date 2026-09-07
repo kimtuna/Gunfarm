@@ -1,0 +1,104 @@
+[gd_scene load_steps=5 format=3 uid="uid://bgunfarmdbxscr"]
+
+[ext_resource type="Script" path="res://scripts/death_box_screen.gd" id="1_dbox"]
+[ext_resource type="Script" path="res://scripts/death_box_panel.gd" id="2_panel"]
+[ext_resource type="Theme" path="res://ui/menu_theme.tres" id="3_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dbox"]
+content_margin_left = 24.0
+content_margin_top = 18.0
+content_margin_right = 24.0
+content_margin_bottom = 18.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
+
+[node name="DeathBoxScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_dbox")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0392157, 0.045098, 0.0352941, 0.72)
+
+[node name="Box" type="PanelContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -212.0
+offset_right = 320.0
+offset_bottom = 212.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_dbox")
+
+[node name="BoxLayout" type="VBoxContainer" parent="Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="Title" type="Label" parent="Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.85098, 0.760784, 0.478431, 1)
+theme_override_font_sizes/font_size = 32
+text = "데스드롭 상자"
+horizontal_alignment = 1
+
+[node name="TimeLabel" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.909804, 0.894118, 0.847059, 1)
+theme_override_font_sizes/font_size = 20
+text = "남은 시간"
+horizontal_alignment = 1
+
+[node name="Panel" type="Control" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(568, 184)
+layout_mode = 2
+size_flags_horizontal = 4
+mouse_filter = 2
+script = ExtResource("2_panel")
+
+[node name="DescLabel" type="Label" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.803922, 0.827451, 0.760784, 1)
+theme_override_font_sizes/font_size = 20
+text = " "
+horizontal_alignment = 1
+
+[node name="TakeAllButton" type="Button" parent="Box/BoxLayout"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(280, 52)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "모두 가져가기"
+
+[node name="Hint" type="Label" parent="Box/BoxLayout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.470588, 0.494118, 0.435294, 1)
+theme_override_font_sizes/font_size = 18
+text = "칸을 누르면 그 칸만 가져옵니다   ·   Esc — 닫기(타이머가 다시 흐릅니다)"
+horizontal_alignment = 1
+
+[connection signal="pressed" from="Box/BoxLayout/TakeAllButton" to="." method="_on_take_all_pressed"]

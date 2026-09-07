@@ -143,8 +143,17 @@ var health: RefCounted = PlayerHealth.new()
 var respawn_position := Vector2.ZERO
 
 ## **이 틱에 죽어서 리스폰했는가** — `use_started` 와 같은, 그 틱 하나에만 참인 표시다.
-## #37 의 데스드롭 상자가 붙을 자리이기도 하다(이번 범위가 아니다).
+## 데스드롭 상자가 여기에 붙는다(`world.gd` — 인벤토리를 아는 쪽이다).
 var respawned := false
+
+## **죽은 자리(월드 좌표).** `respawned` 가 참인 틱에만 뜻이 있다 — 데스드롭 상자가
+## 생겨야 하는 자리다 (docs/DESIGN.md 「데스드롭 상자」의 "죽으면 그 자리에").
+##
+## **되살아나기 전에 적어둔다** — `_respawn()` 이 `position` 을 리스폰 지점으로
+## 덮어쓰고 나면 죽은 자리를 아무도 모르게 된다. **상자를 만드는 것은 여기가 아니다**:
+## 이 코어는 인벤토리를 모르므로(「서버 권위」의 칸 번호까지만 안다), 상자를 채우는
+## 것은 인벤토리를 아는 `world.gd` 다.
+var death_position := Vector2.ZERO
 
 var _world: RefCounted = null
 ## 지난 틱에 눌려 있었는가 — 누르고 있는 동안 매 틱 다시 시작되지 않게 하는 것뿐이다.
@@ -165,6 +174,8 @@ func tick(input: RefCounted) -> void:
 	# 부르는 함수가 위치를 옮기면 그 틱의 이동 계산과 순서가 어긋난다.
 	respawned = false
 	if health.is_dead():
+		# 죽은 자리를 먼저 적어둔다 — `_respawn()` 이 위치를 덮어쓴다.
+		death_position = position
 		_respawn()
 		respawned = true
 	# **바라보는 방향은 이동이 아니라 조준이 정한다** (docs/DESIGN.md 「조작」) —
@@ -274,8 +285,9 @@ func place_at_tile(t: Vector2i) -> void:
 
 ## 리스폰 지점에서 되살아난다 — 체력을 가득 채우고 그 자리로 옮긴다.
 ##
-## **인벤토리는 건드리지 않는다** — 죽을 때 아이템이 어떻게 되는지(데스드롭 상자)는
-## 별도 항목이고(INBOX #37), 애초에 이 코어는 인벤토리를 모른다.
+## **인벤토리는 건드리지 않는다** — 죽을 때 아이템이 어떻게 되는지(「데스드롭 상자」)는
+## 인벤토리를 아는 쪽(`world.gd`)이 `respawned` 와 `death_position` 을 보고 정한다.
+## 애초에 이 코어는 인벤토리를 모른다.
 func _respawn() -> void:
 	position = respawn_position
 	health.refill()

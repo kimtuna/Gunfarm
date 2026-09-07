@@ -30,6 +30,11 @@ signal reload_requested
 ## 이 틱에 **우클릭(탄종 전환)을 눌렀다.** 위와 같은 규칙이다.
 signal ammo_switch_requested
 
+## 이 틱에 **죽어서 리스폰했다** — 인자는 **죽은 자리**(데스드롭 상자가 생길 곳)다.
+## `use_started` 와 같은 자리·같은 이유로 노드는 "죽었다"만 알린다: 상자에 무엇을
+## 넣을지는 인벤토리를 아는 쪽(`world.gd`)이 정한다 (docs/DESIGN.md 「서버 권위」).
+signal died(at: Vector2)
+
 ## 한 프레임에 몰아서 돌릴 수 있는 최대 틱 수. 창을 끌거나 잠깐 멈췄다 돌아왔을 때
 ## 밀린 시간을 한꺼번에 시뮬레이션하면 순간이동처럼 보인다 — 그냥 버린다.
 const MAX_TICKS_PER_FRAME := 5
@@ -230,6 +235,10 @@ func _process(delta: float) -> void:
 			reload_requested.emit()
 		if motion.switch_started:
 			ammo_switch_requested.emit()
+		# **틱 안에서 알린다** — `respawned` 는 그 틱 하나에만 참이라, 프레임이
+		# 끝난 뒤에 보면 여러 틱이 돈 프레임에서 죽음을 통째로 놓친다.
+		if motion.respawned:
+			died.emit(motion.death_position)
 		ticks += 1
 	if ticks > 0:
 		# 틱이 실제로 돈 뒤에야 지운다 — 프레임이 빠를 때 클릭이 틱을 못 만나고

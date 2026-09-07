@@ -24,6 +24,16 @@ const INVENTORY_KEY := "inventory"
 ## 날이 오면 이 키가 월드 쪽 저장으로 옮겨간다.
 const GROUND_KEY := "ground"
 
+## 슬롯 안에서 **데스드롭 상자**가 앉는 자리 (docs/DESIGN.md 「데스드롭 상자」).
+## 바닥 아이템과 같은 이유로 여기 둔다 — 월드에 속한 것이지만 지금은 월드가 슬롯
+## 하나에 한 개다.
+const DEATH_BOXES_KEY := "death_boxes"
+
+## 슬롯 안에서 **월드 설정**이 앉는 자리 (docs/DESIGN.md 「월드 설정」).
+## **그래픽 설정(`user://settings.json`)과 일부러 다른 자리다** — 그쪽은 기계 단위이고
+## 이쪽은 그 월드(슬롯)의 것이라, 같은 사람이 월드를 여러 개 만들면 서로 다를 수 있다.
+const WORLD_SETTINGS_KEY := "world_settings"
+
 ## 슬롯 화면에서 고른 슬롯 번호를 다음 화면(커스터마이징 / 월드)으로 넘기는 자리.
 ## 씬이 바뀌어도 스크립트 자체는 살아 있으므로 static 하나면 충분하다.
 static var selected_slot := -1
@@ -123,6 +133,42 @@ static func save_ground(index: int, data: Array) -> bool:
 static func ground_of(slot: Dictionary) -> Array:
 	var data: Variant = slot.get(GROUND_KEY, [])
 	return data if typeof(data) == TYPE_ARRAY else []
+
+
+## 슬롯 하나의 데스드롭 상자(`death_boxes.gd` 의 `to_data()`)를 저장한다.
+## 바닥 아이템과 같은 규칙이다 — 빈 슬롯에는 붙을 자리가 없다.
+static func save_death_boxes(index: int, data: Array) -> bool:
+	return _save_key(index, DEATH_BOXES_KEY, data)
+
+
+## 저장된 데스드롭 상자. 없으면 빈 배열이다.
+static func death_boxes_of(slot: Dictionary) -> Array:
+	var data: Variant = slot.get(DEATH_BOXES_KEY, [])
+	return data if typeof(data) == TYPE_ARRAY else []
+
+
+## 슬롯 하나의 월드 설정(`world_settings.gd` 의 `to_data()`)을 저장한다.
+static func save_world_settings(index: int, data: Dictionary) -> bool:
+	return _save_key(index, WORLD_SETTINGS_KEY, data)
+
+
+## 저장된 월드 설정. 없으면 빈 Dictionary — 그때는 `world_settings.gd` 의 기본값이다.
+static func world_settings_of(slot: Dictionary) -> Dictionary:
+	var data: Variant = slot.get(WORLD_SETTINGS_KEY, {})
+	return data if typeof(data) == TYPE_DICTIONARY else {}
+
+
+## 슬롯 하나에 값 한 칸을 적는다 — 위 저장 함수들이 전부 이 한 곳을 지나간다.
+static func _save_key(index: int, key: String, value: Variant) -> bool:
+	if index < 0 or index >= SLOT_COUNT:
+		return false
+	var slots := load_slots()
+	var slot: Dictionary = slots[index]
+	if slot.is_empty():
+		return false  # 빈 슬롯에는 붙을 자리가 없다.
+	slot[key] = value
+	slots[index] = slot
+	return save_slots(slots)
 
 
 static func load_slots() -> Array[Dictionary]:
