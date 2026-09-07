@@ -40,8 +40,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#45</span> [DESIGN] **캔버스를 28 / 30 / 32px 까지 마저 재본다 — 「눈썹이 되는 최소 크기」를 찾는 것이 목적이다.** (2026-09-07, #44 에 이어지는 두 번째 시험. 사람 요청.) **이번에도 아무것도 채택하지 않는다** — #44 와 똑같이 게임 자산·`DESIGN.md`·`STYLE_GUIDE.md` 를 건드리지 않고 비교 이미지와 사실만 남긴다. 도구는 `game/tools/try_canvas.py` 가 이미 있다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>c05049d  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 20:52</p></section>
+<section><h2>마지막 커밋</h2><code>1c1018a  inbox: #45 를 28/30/32px 시험으로 — 「눈썹이 되는 최소 크기」를 찾는다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 21:00</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — **INBOX #44 [DESIGN] 캔버스 26px 시험.** 판단 재료만 만들었다.
 **아무것도 채택하지 않았고, 게임 자산은 한 바이트도 안 바뀌었다.**
 
@@ -73,7 +73,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907210016";
+  var STAMP = "20260907210027";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
