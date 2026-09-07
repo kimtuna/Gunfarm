@@ -16,6 +16,12 @@ const WorldGen := preload("res://scripts/world_gen.gd")
 const Appearance := preload("res://scripts/character_appearance.gd")
 const Inventory := preload("res://scripts/inventory.gd")
 
+## 이 틱에 **도구 쓰기가 시작됐다**. 총이면 여기서 한 발이 나간다 — 다만 무엇을 들었는지
+## 아는 것은 인벤토리를 가진 쪽(`world.gd`)이라, 이 노드는 "시작했다"만 알린다
+## (docs/DESIGN.md 「서버 권위」의 "서버는 그 칸에 무엇이 있는지 자기 인벤토리에서
+## 직접 본다"). **틱 안에서 쏘는 것**이라 위치는 `muzzle_position()` 으로 봐야 한다.
+signal use_started
+
 ## 한 프레임에 몰아서 돌릴 수 있는 최대 틱 수. 창을 끌거나 잠깐 멈췄다 돌아왔을 때
 ## 밀린 시간을 한꺼번에 시뮬레이션하면 순간이동처럼 보인다 — 그냥 버린다.
 const MAX_TICKS_PER_FRAME := 5
@@ -97,6 +103,18 @@ func tile() -> Vector2i:
 	return WorldGen.world_to_tile(position)
 
 
+## 총알이 나가는 자리(전역, **지면 평면**). 총알의 좌표계는 플레이어 노드와 같아서
+## 원점이 발밑이다 — 그래야 "지금 어느 타일 위인가"가 바로 나온다. 그림에서 총구
+## 높이로 올리는 것은 그리는 쪽(`bullets_view.gd`)이 한다.
+##
+## **노드의 `position` 이 아니라 코어의 것을 쓴다** — 노드는 틱 루프가 다 끝난 뒤에야
+## 따라오므로, 틱 도중에 나가는 총알이 한 틱 뒤처진 자리에서 출발하게 된다.
+func muzzle_position() -> Vector2:
+	if motion == null:
+		return global_position
+	return motion.position + (global_position - position)
+
+
 ## 조준 각도를 재는 기준점(전역 좌표). **노드 원점은 발밑이라 발에서 재면 안 된다** —
 ## 마우스를 캐릭터 가슴 높이에 두는 것만으로 "위쪽 조준"으로 읽혀서 방향이 뒤집힌다.
 ## 그림 칸의 절반 높이 = 몸 한가운데에서 잰다.
@@ -169,6 +187,10 @@ func _process(delta: float) -> void:
 	while _accumulated >= PlayerMotion.TICK_DELTA and ticks < MAX_TICKS_PER_FRAME:
 		_accumulated -= PlayerMotion.TICK_DELTA
 		motion.tick(input)
+		# **틱 안에서 알린다** — 한 프레임에 여러 틱이 돌면 그중 어느 틱에 쏘았는지가
+		# 총알의 출발 자리를 정한다(코어의 위치는 틱마다 다르다).
+		if motion.use_started:
+			use_started.emit()
 		ticks += 1
 	if ticks > 0:
 		# 틱이 실제로 돈 뒤에야 지운다 — 프레임이 빠를 때 클릭이 틱을 못 만나고

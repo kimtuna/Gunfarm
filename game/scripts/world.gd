@@ -11,6 +11,7 @@ const WorldGen := preload("res://scripts/world_gen.gd")
 const ExploredMap := preload("res://scripts/explored_map.gd")
 const Inventory := preload("res://scripts/inventory.gd")
 const GroundItems := preload("res://scripts/ground_items.gd")
+const Bullets := preload("res://scripts/bullets.gd")
 
 const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const SETTINGS_SCENE := preload("res://scenes/settings.tscn")
@@ -28,6 +29,15 @@ const STARTER_ITEMS := [
 	["iron_ore", 24], ["sulfur_ore", 12], ["plank", 30], ["iron", 8],
 	["charcoal", 16], ["gunpowder", 6], ["rice", 20], ["meat", 9], ["bag", 1],
 ]
+
+## 총을 든 상태에서만 조준선이 뜨고 좌클릭이 총알을 쏜다 — 그 판정에 쓰는 아이템 id
+## (`item_types.gd` 의 열쇠이자 `player_frames.gd` 의 시트 이름과 같은 문자열이다).
+const GUN_ITEM := "gun"
+
+## 한 프레임에 몰아서 돌릴 수 있는 최대 총알 틱 수 — `player.gd` 의
+## `MAX_TICKS_PER_FRAME` 과 같은 이유·같은 값이다(밀린 시간을 한꺼번에 시뮬레이션하면
+## 총알이 순간이동한다).
+const MAX_BULLET_TICKS_PER_FRAME := 5
 
 ## 걸어다니면서 "가봤음"으로 적히는 반경(타일). 화면 세로 절반이 7.5칸이라 그보다 살짝
 ## 작게 잡았다 — 실제로 화면에서 본 만큼만 남는다 (docs/DESIGN.md 「맵 (M)」).
@@ -49,6 +59,10 @@ var inventory: RefCounted = null
 ## (docs/DESIGN.md 「아이템 획득 방식 — 바닥 드롭」).
 var ground_items: RefCounted = null
 
+## 날아가는 중인 총알(`bullets.gd` — 순수 클래스). **저장하지 않는다** — 0.9초면
+## 사라지는 것이라 나갔다 들어왔을 때 되살릴 값이 아니다 (docs/DESIGN.md 「전투」).
+var bullets: RefCounted = null
+
 ## 일시정지 메뉴에서 띄운 설정 화면. 씬을 바꾸지 않고 **월드 위에 겹쳐서** 띄운다 —
 ## 씬을 바꾸면 월드가 통째로 내려가므로 "월드는 멈추지 않는다"가 성립하지 않는다.
 var _settings_overlay: Control = null
@@ -63,6 +77,10 @@ var _slot_index := -1
 var _explored_dirty := false
 var _inventory_dirty := false
 var _ground_dirty := false
+## 총알을 고정 틱으로 돌리는 누적기. 플레이어의 것(`player.gd`)과 따로인 이유는
+## 총알이 플레이어의 소유물이 아니라 **월드의 개체**이기 때문이다 — 쏘고 나면 서로
+## 무관하게 날아가므로 두 누적기가 한 틱 어긋나도 결과가 달라지지 않는다.
+var _bullet_accumulated := 0.0
 ## 마지막으로 슬롯에 적은 인벤토리 버전 — 바뀐 게 없으면 파일을 다시 쓰지 않는다.
 var _saved_inventory_version := -1
 var _explored_save_left := EXPLORED_SAVE_SECONDS
@@ -120,6 +138,10 @@ func _ready() -> void:
 
 	(%TerrainView as Node2D).set_world(world)
 	(%GroundItemsView as Node2D).setup(ground_items)
+	# 총알은 월드가 있어야 지형에 막힐 수 있다 — 여기서 만든다.
+	bullets = Bullets.new(world)
+	(%BulletsView as Node2D).setup(bullets)
+	(%AimLine as Node2D).setup(%Player as Node2D)
 	# 화면 아래 핫바는 **인벤토리 맨 위 9칸을 그대로 비추는 것**이지 별도 보관함이
 	# 아니다 (docs/DESIGN.md 「인벤토리 / 장비」) — 그래서 E 창과 **같은 코어**를 넘긴다.
 	# 그리는 코드도 창과 같은 스크립트다(`inventory_panel.gd` 의 `hotbar_only`).
@@ -134,6 +156,9 @@ func _ready() -> void:
 	# 코드가 없다 — 확대/축소도 하지 않는다(보이는 월드 범위는 모든 해상도에서 고정,
 	# docs/DESIGN.md "카메라 / 해상도" PvP 공정성 규칙).
 	(%Player as Node2D).setup(world, world.spawn_tile)
+	# 좌클릭이 총알이 되는 자리 — **무엇을 들었는지 아는 쪽이 여기다**(인벤토리를
+	# 가진 쪽이 판정한다, docs/DESIGN.md 「서버 권위」).
+	(%Player as Node2D).use_started.connect(_on_player_use_started)
 
 	(%WhoLabel as Label).text = character_name
 	(%InfoLabel as Label).text = "시드 %d   ·   스폰 (%d, %d)   ·   지도 %d×%d칸   ·   바다 %d%%" % [
@@ -161,6 +186,10 @@ func _give_starter_items() -> void:
 
 func _process(delta: float) -> void:
 	_update_ground_items()
+	_tick_bullets(delta)
+	# 조준선은 총을 들고 있을 때만 뜬다 (docs/DESIGN.md 「전투」) — 다른 도구를 들거나
+	# 빈손이면 사라지고, 창이 열려 조작이 끊긴 동안에도 감춘다(핫바와 같은 규칙).
+	(%AimLine as Node2D).armed = not _menu_open() and _held_item_id() == GUN_ITEM
 	var tile: Vector2i = (%Player as Node2D).tile()
 	if tile != _marked_tile:
 		_marked_tile = tile
@@ -183,6 +212,52 @@ func _update_ground_items() -> void:
 	if ground_items.update((%Player as Node2D).global_position, inventory) > 0:
 		_inventory_dirty = true
 		_ground_dirty = true
+
+
+# --- 총알 (docs/DESIGN.md 「전투」) --------------------------------------------
+#
+# **총알은 투사체다** — 쏜 순간 판정하고 끝내는 게 아니라 살아 있는 내내 매 틱 날아간다.
+# 계산은 전부 `bullets.gd`(순수 클래스)가 하고, 여기서는 고정 틱으로 돌려주기만 한다
+# (`player.gd` 가 이동 코어를 돌리는 것과 같은 모양이다).
+
+func _tick_bullets(delta: float) -> void:
+	if bullets == null:
+		return
+	_bullet_accumulated += delta
+	var ticks := 0
+	while _bullet_accumulated >= Bullets.TICK_DELTA and ticks < MAX_BULLET_TICKS_PER_FRAME:
+		_bullet_accumulated -= Bullets.TICK_DELTA
+		bullets.tick()
+		ticks += 1
+	if _bullet_accumulated >= Bullets.TICK_DELTA:
+		_bullet_accumulated = 0.0
+
+
+## 지금 손에 든 칸에 있는 아이템 id. **든 칸은 코어(플레이어 상태)가 들고 있고,
+## 그 칸에 무엇이 있는지는 인벤토리가 답한다** — 클라이언트가 "나는 총을 들었다"고
+## 주장할 자리가 없다 (docs/DESIGN.md 「서버 권위」).
+func _held_item_id() -> String:
+	var player := %Player as Node2D
+	if inventory == null or player.motion == null:
+		return ""
+	var stack: RefCounted = inventory.at(Inventory.AREA_GENERAL, player.motion.held_slot)
+	return "" if stack == null else stack.id
+
+
+## 좌클릭으로 도구 쓰기가 시작됐다 — 그게 총이면 한 발이 나간다.
+##
+## **탄창·재장전·탄종은 아직 없다**(INBOX #35) — 지금은 좌클릭할 때마다 무한히 나가고,
+## 연사 간격은 도구 쓰기 자체가 갖고 있는 0.5초(`player_motion.gd` 의 `USE_TICKS`)가
+## 그대로 「총기 스탯」의 초당 2발이 된다.
+func _on_player_use_started() -> void:
+	if _held_item_id() != GUN_ITEM:
+		return
+	var player := %Player as Node2D
+	# **탄퍼짐은 지금 조준선의 선명도 그대로다** — 쏜 뒤에 반동으로 깎이므로 순서가
+	# 중요하다(먼저 쏘고 그 다음에 흐트러진다).
+	bullets.fire(player.muzzle_position(), player.motion.aim_angle,
+			player.motion.spread_angle())
+	player.motion.apply_recoil()
 
 
 ## 씬이 내려갈 때(메인 메뉴로 나가기, 종료) 마지막으로 한 번 더 적는다 —

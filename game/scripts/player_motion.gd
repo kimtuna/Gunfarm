@@ -60,6 +60,24 @@ const FACING_HYSTERESIS := PI / 18.0
 ## 계산할 때 같은 값을 봐야 하기 때문이다 (docs/DESIGN.md 「서버 권위」).
 const USE_TICKS := 30
 
+## 정조준이 완전히 흐트러졌을 때의 탄퍼짐 반각(도). 사거리 절반(400)에서 좌우로
+## 56 단위 = 타일 한 칸 남짓 벌어진다 — 멈춰 쏘면 거의 안 빗나가고 뛰면서 쏘면
+## 어림잡아야 하는 정도다 (docs/DESIGN.md 「총기 스탯」의 탄퍼짐).
+const MAX_SPREAD_DEGREES := 8.0
+
+## 가만히 있을 때 정조준이 모이는 속도(초당). 1.0 이 완전히 모인 상태라 바닥에서
+## 1.1초면 다 모인다 — "사격을 멈추면 빠르게 원래대로"(「총기 스탯」의 반동).
+const FOCUS_GAIN := 0.9
+
+## 움직일 때 흩어지는 속도(초당). 모이는 것보다 두 배 빠르다 — 뛰기 시작하면 0.55초
+## 만에 완전히 풀린다.
+const FOCUS_LOSS := 1.8
+
+## 한 발 쏠 때 깎이는 정조준. 연사 간격(0.5초)에 다시 모이는 양(0.45)보다 커서,
+## **계속 쏘면 조준이 점점 흐트러지고** 멈추면 곧 돌아온다 (「총기 스탯」의 반동 —
+## 탑다운이라 "위로 튀는" 반동이 아니라 이 축에서 다룬다).
+const RECOIL_KICK := 0.5
+
 var position := Vector2.ZERO
 var facing := DOWN
 var is_moving := false
@@ -72,6 +90,21 @@ var held_slot := 0
 
 ## 도구를 쓰는 중이면 남은 틱 수. 0 이면 안 쓰는 중이다.
 var use_ticks_left := 0
+
+## **이 틱에 도구 쓰기가 시작됐는가.** 쓰는 내내 참인 `is_using()` 과 달리 시작한 틱
+## 하나에만 참이다 — 총이면 이 틱에 한 발이 나간다. **무엇을 들었는지는 여기서 모른다**
+## (칸 번호까지만 안다) — 그 칸에 총이 있는지는 인벤토리를 가진 쪽이 본다
+## (docs/DESIGN.md 「서버 권위」).
+var use_started := false
+
+## 정조준(0~1). 1 이면 완전히 모인 상태다. **가만히 있으면 모이고 움직이면 흩어지며,
+## 쏘면 반동으로 깎인다** (docs/DESIGN.md 「전투」의 조준선).
+##
+## **이 값 하나가 조준선의 선명도이자 탄퍼짐이다** — 조준선은 정조준의 표시가 아니라
+## 정조준 그 자체를 그린 것이라, 퍼짐을 따로 계산하는 자리를 만들지 말 것.
+## 화면 상태가 아니라 **플레이어 상태**다: 총알이 어디로 갈지를 정하므로 나중에
+## 서버가 알아야 한다 (「서버 권위」).
+var aim_focus := 1.0
 
 ## 지금 조준하고 있는 각도(라디안) — **스냅되지 않은 원본이다.**
 ## `facing` 은 4방향 시트를 고르려고 여기서 스냅한 값이고, 총알 방향과 시야 콘은
@@ -97,11 +130,17 @@ func tick(input: RefCounted) -> void:
 	# (docs/DESIGN.md 「캐릭터 애니메이션」의 "한 번 재생된 뒤 다시 hold 로 돌아온다").
 	# **대상이 있는지는 보지 않는다** — 허공에 대고도 나가야 나중에 근접무기가 성립한다
 	# (docs/DESIGN.md 「생활 스킬 — 채집 계열」).
+	use_started = false
 	use_ticks_left = maxi(0, use_ticks_left - 1)
 	if use_ticks_left == 0 and input.use:
 		use_ticks_left = USE_TICKS
+		use_started = true
 	var dir := Vector2(signf(float(input.move.x)), signf(float(input.move.y)))
 	is_moving = dir != Vector2.ZERO
+	# 정조준은 **서 있는가 움직이는가**로만 정해진다 — 조준선이 스스로 흐려지고
+	# 선명해지는 것이 이 두 줄이다 (docs/DESIGN.md 「전투」의 조준선).
+	var focus_rate := -FOCUS_LOSS if is_moving else FOCUS_GAIN
+	aim_focus = clampf(aim_focus + focus_rate * TICK_DELTA, 0.0, 1.0)
 	if not is_moving:
 		return
 	# 대각선도 정규화해서 넘긴다 — 안 하면 대각으로 갈 때만 1.41배 빨라진다.
@@ -121,6 +160,26 @@ func is_using() -> bool:
 ## 쓴다 (`facing` 은 그림을 고르느라 45도 단위로 뭉갠 값이다).
 func aim_direction() -> Vector2:
 	return Vector2.from_angle(aim_angle)
+
+
+## 지금 탄퍼짐 반각(라디안) — 쏜 총알이 조준 각도에서 좌우로 벌어질 수 있는 최대치다.
+##
+## **조준선의 선명도와 같은 값이다**(docs/DESIGN.md 「전투」의 "그 선명도가 곧 정조준이고
+## 탄퍼짐과 같은 값이다 — 따로 계산하지 말 것"). 그래서 그리는 쪽(`aim_line.gd`)과
+## 쏘는 쪽(`bullets.gd` 의 `fire`)이 **둘 다 이 함수 하나를 부른다** — 화면에 보이는
+## 흐릿함과 실제로 빗나가는 정도가 어긋날 자리가 없다.
+func spread_angle() -> float:
+	return deg_to_rad(MAX_SPREAD_DEGREES) * (1.0 - aim_focus)
+
+
+## 한 발 쏜 반동으로 정조준이 풀린다.
+##
+## **틱 안에서 저절로 일어나지 않는다** — 부르는 쪽이 "이번 좌클릭이 실제로 총을 쏜
+## 것"임을 확인한 뒤에 부른다. 이 코어는 든 칸 번호까지만 알고 그 칸에 총이 있는지는
+## 모르기 때문이다(docs/DESIGN.md 「서버 권위」) — 도끼를 휘두른 것으로 조준이
+## 흐트러지면 안 된다.
+func apply_recoil() -> void:
+	aim_focus = clampf(aim_focus - RECOIL_KICK, 0.0, 1.0)
 
 
 ## 지금 서 있는 타일.
