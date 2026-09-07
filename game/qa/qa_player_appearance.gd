@@ -253,7 +253,8 @@ func _crop_shot(shot_name: String) -> void:
 		return
 	# 크롭 좌표는 논리 좌표가 아니라 **캡처한 이미지 크기** 기준이다 (docs/GOTCHAS.md).
 	var size := image.get_size()
-	var side := mini(CROP * size.x / 1280, mini(size.x, size.y))
+	# 논리 폭 → 캡처 이미지 폭. 논리 해상도를 손으로 적지 않는다(2026-09-08 에 넓혔다).
+	var side := mini(int(CROP * size.x / root.get_visible_rect().size.x), mini(size.x, size.y))
 	var region := Rect2i(Vector2i((size.x - side) / 2, (size.y - side) / 2), Vector2i(side, side))
 	var crop := image.get_region(region)
 	crop.resize(side * CROP_ZOOM, side * CROP_ZOOM, Image.INTERPOLATE_NEAREST)

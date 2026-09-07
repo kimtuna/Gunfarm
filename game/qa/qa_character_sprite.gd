@@ -196,7 +196,7 @@ func _fingerprint(counts: Dictionary) -> String:
 
 ## 색 조합 × 방향 4개를 실제 게임 배율로 지형 색 위에 늘어놓는다.
 func _build_board() -> void:
-	# 720px 논리 해상도 안에 조합 6줄이 다 들어가야 한다 — 넘치면 잘려서 캡처에
+	# 논리 해상도 세로(810px) 안에 조합 6줄이 다 들어가야 한다 — 넘치면 잘려서 캡처에
 	# 안 나오고, 그럼 극단 조합을 넣어둔 의미가 없다.
 	var step := CELL * SCALE + 8
 	var board := ColorRect.new()

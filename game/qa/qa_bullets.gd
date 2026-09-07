@@ -26,6 +26,7 @@ extends SceneTree
 ##     13) **물가에서 물 건너로 쏘면 총알이 바다를 지나가고**, 같은 자리에서
 ##         **사람은 여전히 물에 못 들어간다**(이동 판정을 안 건드렸다는 확인).
 
+const SettingsStore := preload("res://scripts/settings_store.gd")
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 const Inventory := preload("res://scripts/inventory.gd")
@@ -176,6 +177,8 @@ func _initialize() -> void:
 func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
+	if _resize_window_if_needed():
+		return false
 	if _wait_time > 0.0:
 		_wait_time -= delta
 		return false
@@ -726,7 +729,7 @@ func _land_around(world: RefCounted, tile: Vector2i, radius: int) -> bool:
 ## 되고, 날아가는 총알이 아래 가로 띠 검사에서 빠져나간다.
 func _aim_right() -> void:
 	var size := root.get_visible_rect().size
-	Input.warp_mouse(Vector2(size.x * 0.5 + AIM_SCREEN_DISTANCE, size.y * 0.5 - BulletsView.LIFT))
+	Input.warp_mouse(_to_window(Vector2(size.x * 0.5 + AIM_SCREEN_DISTANCE, size.y * 0.5 - BulletsView.LIFT)))
 
 
 ## 위 조준이 실제로 수평으로 들어갔는지 — 안 그러면 아래 검사들이 엉뚱한 자리를 본다.
@@ -863,3 +866,27 @@ func _player() -> Node2D:
 
 func _aim_line() -> Node2D:
 	return current_scene.get_node("%AimLine") as Node2D
+
+## 논리 좌표 → 창 픽셀. `Input.warp_mouse` 와 `parse_input_event` 는 OS 가 주는 것과 같은
+## **창 픽셀**을 받는데, 우리가 재는 자리(Control 의 global_rect, 카메라 변환 결과)는 전부
+## **논리 좌표**다. 논리 해상도(1440x810)와 창 크기가 갈린 2026-09-08 부터 둘이 다르다 —
+## 그 전에는 값이 같아서 이 변환 없이도 통했다. `get_screen_transform()` 이 stretch 배율과
+## (비율이 안 맞는 창의) 검은 여백 오프셋까지 함께 처리한다.
+func _to_window(point: Vector2) -> Vector2:
+	return root.get_screen_transform() * point
+
+
+## 창을 논리 해상도와 같게 **유지**한다. 화면 픽셀을 짚어보고 마우스를 논리 좌표로 미는
+## 검사라, 배율이 1 이 아니면 얇은 테두리가 downscale 에 뭉개지고 좌표가 어긋난다
+## (2026-09-08, INBOX #48 — 논리 해상도 1440x810 과 기본 창 크기 1280x720 이 갈렸다).
+##
+## **되돌린 프레임에는 단계를 돌리지 않고 쉰다**(true 를 돌려준다). 창은 늘 기본 크기로
+## 열리므로 이 대기는 **매 실행의 첫 프레임에 반드시 한 번 일어난다** — 없으면 크기 변경이
+## 화면에 반영되기 전에 첫 단계가 마우스를 밀어 가끔 거짓 실패한다.
+## 대기는 프레임 수가 아니라 **초**로 센다 (docs/GOTCHAS.md).
+func _resize_window_if_needed() -> bool:
+	if DisplayServer.window_get_size() == SettingsStore.BASE_SIZE:
+		return false
+	DisplayServer.window_set_size(SettingsStore.BASE_SIZE)
+	_wait_time = SETTLE_SECONDS
+	return true

@@ -25,7 +25,7 @@ var _index := 0
 
 
 func _ready() -> void:
-	var current: Vector2i = SettingsStore.load_settings().get("resolution", SettingsStore.BASE_SIZE)
+	var current: Vector2i = SettingsStore.load_settings().get("resolution", SettingsStore.DEFAULT_SIZE)
 	_options = SettingsStore.available_resolutions(current)
 	_index = maxi(_options.find(current), 0)
 	_refresh()

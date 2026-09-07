@@ -20,6 +20,7 @@ extends SceneTree
 ##      지도 밖이 안 보이는지**, 배율을 바꿔도 안 가본 칸은 여전히 안 보이는지,
 ##      휠이 지도 뒤로 새지 않는지, 닫았다 열어도 배율이 남는지.
 
+const SettingsStore := preload("res://scripts/settings_store.gd")
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 const ExploredMap := preload("res://scripts/explored_map.gd")
@@ -154,6 +155,8 @@ func _zoom_steps() -> Array[Callable]:
 func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
+	if _resize_window_if_needed():
+		return false
 	if _wait_time > 0.0:
 		_wait_time -= delta
 		return false
@@ -541,7 +544,7 @@ func _wheel(steps: int) -> void:
 	var event := InputEventMouseButton.new()
 	event.button_index = MOUSE_BUTTON_WHEEL_UP if steps > 0 else MOUSE_BUTTON_WHEEL_DOWN
 	event.pressed = true
-	event.position = root.get_visible_rect().get_center()
+	event.position = _to_window(root.get_visible_rect().get_center())
 	Input.parse_input_event(event)
 
 
@@ -858,7 +861,7 @@ func _settle() -> void:
 	_wait_time = SETTLE_SECONDS
 
 
-## 논리 좌표(1280×720) → 캡처 이미지의 픽셀. 창 크기가 달라도 맞게 옮긴다.
+## 논리 좌표(1440×810) → 캡처 이미지의 픽셀. 창 크기가 달라도 맞게 옮긴다.
 func _to_pixels(point: Vector2) -> Vector2:
 	var logical := root.get_visible_rect().size
 	var pixels := Vector2(root.get_texture().get_size())
@@ -944,3 +947,27 @@ func _find_text(expect_text: String) -> bool:
 		if (label as Label).text.findn(expect_text) != -1:
 			return true
 	return false
+
+## 논리 좌표 → 창 픽셀. `Input.warp_mouse` 와 `parse_input_event` 는 OS 가 주는 것과 같은
+## **창 픽셀**을 받는데, 우리가 재는 자리(Control 의 global_rect, 카메라 변환 결과)는 전부
+## **논리 좌표**다. 논리 해상도(1440x810)와 창 크기가 갈린 2026-09-08 부터 둘이 다르다 —
+## 그 전에는 값이 같아서 이 변환 없이도 통했다. `get_screen_transform()` 이 stretch 배율과
+## (비율이 안 맞는 창의) 검은 여백 오프셋까지 함께 처리한다.
+func _to_window(point: Vector2) -> Vector2:
+	return root.get_screen_transform() * point
+
+## 창을 논리 해상도와 같게 **유지**한다. 메인 메뉴(`main_menu.gd`)는 뜰 때마다
+## `SettingsStore.apply_saved()` 로 창을 저장된 해상도(기본 1280x720)로 되돌리는데,
+## 그러면 배율이 0.888 이 되어 화면 픽셀을 짚는 검사가 downscale 뭉개짐으로 거짓 실패한다
+## (2026-09-08, INBOX #48 — 논리 해상도 1440x810 과 기본 창 크기가 갈렸다).
+##
+## **되돌린 프레임에는 단계를 돌리지 않고 몇 프레임 쉰다**(true 를 돌려준다) — 크기 변경이
+## 화면에 반영되기 전에 마우스를 밀면 좌표가 어긋나서 오히려 새 거짓 실패가 난다.
+func _resize_window_if_needed() -> bool:
+	if DisplayServer.window_get_size() == SettingsStore.BASE_SIZE:
+		return false
+	DisplayServer.window_set_size(SettingsStore.BASE_SIZE)
+	# **프레임 수가 아니라 초로 센다** — 수직동기화가 꺼진 창은 몇 프레임이 몇 ms 밖에
+	# 안 돼서 "8프레임 대기"가 사실상 대기가 아니다 (docs/GOTCHAS.md).
+	_wait_time = SETTLE_SECONDS
+	return true

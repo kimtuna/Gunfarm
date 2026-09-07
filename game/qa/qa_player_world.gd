@@ -25,6 +25,7 @@ extends SceneTree
 ##
 ## 눈으로 볼 몫은 `user://qa_shots/` 에 캡처로 남긴다.
 
+const SettingsStore := preload("res://scripts/settings_store.gd")
 const _Inventory := preload("res://scripts/inventory.gd")
 
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -143,6 +144,8 @@ func _free_hand() -> void:
 func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
+	if _resize_window_if_needed():
+		return false
 	if _wait_time > 0.0:
 		_wait_time -= delta
 		return false
@@ -382,11 +385,13 @@ func _check_feet_on_origin() -> void:
 ## 카메라가 플레이어의 자식이라 **발밑이 화면 한가운데**고, 조준 기준점은 거기서
 ## 몸 절반만큼 위다(`player.gd` 의 `aim_origin()`). 그 어긋남을 빼줘야 여기서
 ## 넣은 각도가 실제 조준 각도와 같아진다 — 45도 경계를 재는 검사에 필요하다.
-## (논리 해상도와 창 크기가 같다는 전제다 — QA 는 기본 창으로 돈다.)
 func _aim_at(angle: float) -> void:
-	var size := Vector2(DisplayServer.window_get_size())
+	# **논리 좌표**로 잡는다 — 아래에서 `_to_window()` 로 한 번만 창 픽셀로 옮긴다.
+	# 창 크기로 잡으면 이미 창 픽셀인 값을 한 번 더 변환해서 조준 각도가 어긋난다
+	# (2026-09-08, INBOX #48 — 그 전에는 논리 해상도와 창 크기가 같아서 안 드러났다).
+	var size := root.get_visible_rect().size
 	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
-	Input.warp_mouse(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH)
+	Input.warp_mouse(_to_window(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH))
 
 
 func _aim(dir_name: String) -> void:
@@ -579,4 +584,28 @@ func _report() -> bool:
 	for f in _fails:
 		printerr("[qa] FAIL — %s" % f)
 	quit(1)
+	return true
+
+## 논리 좌표 → 창 픽셀. `Input.warp_mouse` 와 `parse_input_event` 는 OS 가 주는 것과 같은
+## **창 픽셀**을 받는데, 우리가 재는 자리(Control 의 global_rect, 카메라 변환 결과)는 전부
+## **논리 좌표**다. 논리 해상도(1440x810)와 창 크기가 갈린 2026-09-08 부터 둘이 다르다 —
+## 그 전에는 값이 같아서 이 변환 없이도 통했다. `get_screen_transform()` 이 stretch 배율과
+## (비율이 안 맞는 창의) 검은 여백 오프셋까지 함께 처리한다.
+func _to_window(point: Vector2) -> Vector2:
+	return root.get_screen_transform() * point
+
+
+## 창을 논리 해상도와 같게 **유지**한다. 화면 픽셀을 짚어보고 마우스를 논리 좌표로 미는
+## 검사라, 배율이 1 이 아니면 얇은 테두리가 downscale 에 뭉개지고 좌표가 어긋난다
+## (2026-09-08, INBOX #48 — 논리 해상도 1440x810 과 기본 창 크기 1280x720 이 갈렸다).
+##
+## **되돌린 프레임에는 단계를 돌리지 않고 쉰다**(true 를 돌려준다). 창은 늘 기본 크기로
+## 열리므로 이 대기는 **매 실행의 첫 프레임에 반드시 한 번 일어난다** — 없으면 크기 변경이
+## 화면에 반영되기 전에 첫 단계가 마우스를 밀어 가끔 거짓 실패한다.
+## 대기는 프레임 수가 아니라 **초**로 센다 (docs/GOTCHAS.md).
+func _resize_window_if_needed() -> bool:
+	if DisplayServer.window_get_size() == SettingsStore.BASE_SIZE:
+		return false
+	DisplayServer.window_set_size(SettingsStore.BASE_SIZE)
+	_wait_time = SETTLE_SECONDS
 	return true

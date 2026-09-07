@@ -49,6 +49,16 @@
 - **`get_root().get_visible_rect().size`(논리 좌표)와 실제 캡처 픽셀 크기가 다를 수
   있다**(디스플레이 배율 등). 크롭 좌표는 항상 캡처한 `Image.get_size()` 기준으로
   계산할 것.
+- **`Input.warp_mouse()` 와 `Input.parse_input_event()` 는 「창 픽셀」을 받는데,
+  `Viewport.get_mouse_position()` 과 Control 의 `global_rect` 는 「논리 좌표」다.** stretch
+  (`canvas_items`)를 쓰면 창 크기와 논리 해상도가 달라질 수 있어 둘이 어긋난다 — 논리
+  좌표를 그대로 넘기면 커서가 엉뚱한 데로 간다(창과 논리가 같을 때만 우연히 맞는다).
+  넘기기 전에 `root.get_screen_transform() * 점` 으로 한 번 변환할 것(배율과 여백
+  오프셋을 함께 처리한다). **이미 창 픽셀인 값을 또 변환하지 않도록** 어느 공간의
+  값인지 함수마다 정해둘 것.
+- **`DisplayServer.window_set_size()` 는 즉시 반영되지 않는다.** 바꾼 그 프레임에
+  캡처하거나 커서를 옮기면 옛 크기 기준으로 찍힌다 — 크기를 바꿨으면 **프레임 수가
+  아니라 초 단위로** 잠시 쉰 뒤에 다음 단계를 돌릴 것.
 - **`Input.warp_mouse()`는 창이 실제로 떠 있을 때만 먹는다**(`--headless` 면 커서가
   없어 마우스 기반 검증이 전부 헛돈다). 대신 창이 있으면 `Viewport.get_mouse_position()`
   이 바로 따라오므로, 마우스로 방향을 정하는 로직은 각도를 코드로 밀어넣지 말고

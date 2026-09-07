@@ -9,7 +9,8 @@ extends SceneTree
 ##   1) 캐릭터가 있는 슬롯으로 들어가면 그 슬롯의 시드로 만든 지형이 화면에 그려진다.
 ##   2) 플레이어와 카메라가 스폰 지점에 있고 스폰 주변은 땅이다(바다 한가운데서
 ##      시작하지 않는다). 카메라는 플레이어의 자식이라 위치를 볼 때 global 로 본다.
-##   3) **보이는 월드 범위는 여전히 1280×720 고정**이다 (docs/DESIGN.md "카메라 / 해상도").
+##   3) **보이는 월드 범위는 여전히 논리 해상도(1440×810) 고정**이다
+##      (docs/DESIGN.md "카메라 / 해상도").
 ##   4) 시드가 다르면 화면도 다르고, 같은 시드로 다시 들어오면 같은 화면이다.
 ##   5) **월드의 Esc 는 나가는 키가 아니라 일시정지 메뉴다** (INBOX #17):
 ##      화면에 뒤로 버튼이 없고, Esc 로 메뉴가 열리며 씬은 그대로 월드다.
@@ -28,8 +29,10 @@ const WORLD_SCENE := "res://scenes/world.tscn"
 ## 고른다 (INBOX #12). 색은 손으로 적지 않고 생성기가 내려보낸 표에서 꺼낸다.
 const TerrainPalettes := preload("res://scripts/terrain_palettes.gd")
 
-## 논리 해상도가 곧 시야다.
-const EXPECTED_RANGE := Rect2(-640, -360, 1280, 720)
+## 논리 해상도가 곧 시야다. **손으로 적지 않는다** — settings_store.gd 에서 끌어온다.
+const SettingsStore := preload("res://scripts/settings_store.gd")
+const EXPECTED_RANGE := Rect2(
+	Vector2(SettingsStore.BASE_SIZE) * -0.5, Vector2(SettingsStore.BASE_SIZE))
 
 const SEED_A := 20260906
 const SEED_B := 31337
@@ -103,6 +106,8 @@ func _initialize() -> void:
 func _process(delta: float) -> bool:
 	if current_scene == null:
 		return false  # change_scene_to_file 은 지연 반영된다 (docs/GOTCHAS.md).
+	if _resize_window_if_needed():
+		return false
 	if _wait_time > 0.0:
 		_wait_time -= delta
 		return false
@@ -153,7 +158,7 @@ func _check_first_entry() -> void:
 
 
 ## 해상도/창 크기와 무관하게 보이는 월드 범위는 고정이어야 한다 (PvP 공정성).
-## 카메라가 스폰으로 옮겨갔으므로 그 위치 기준으로 1280×720 이어야 한다.
+## 카메라가 스폰으로 옮겨갔으므로 그 위치 기준으로 논리 해상도만큼이어야 한다.
 func _check_view_range() -> void:
 	var camera := current_scene.get_node_or_null("%Camera") as Camera2D
 	if camera == null:
@@ -281,7 +286,7 @@ func _check_seed_filled_in() -> void:
 ## (게임 플레이에서는 절대 축소하지 않는다 — 위 _check_view_range 참고).
 func _overview_shot() -> void:
 	var camera := current_scene.get_node_or_null("%Camera") as Camera2D
-	# 지도 전체(12288 월드 단위)가 720px 세로 안에 들어오는 배율.
+	# 지도 전체(12288 월드 단위)가 논리 해상도 세로 안에 들어오는 배율.
 	var fit := root.get_visible_rect().size.y / WorldGen.world_size().y
 	camera.zoom = Vector2(fit, fit)
 	camera.global_position = WorldGen.world_size() * 0.5
@@ -482,3 +487,19 @@ func _find_text(expect_text: String) -> bool:
 func _expect_text(expect_text: String, what: String) -> void:
 	if not _find_text(expect_text):
 		_fails.append("%s: 화면에서 '%s' 를 못 찾았다" % [what, expect_text])
+
+## 창을 논리 해상도와 같게 **유지**한다. 메인 메뉴(`main_menu.gd`)는 뜰 때마다
+## `SettingsStore.apply_saved()` 로 창을 저장된 해상도(기본 1280x720)로 되돌리는데,
+## 그러면 배율이 0.888 이 되어 화면 픽셀을 짚는 검사가 downscale 뭉개짐으로 거짓 실패한다
+## (2026-09-08, INBOX #48 — 논리 해상도 1440x810 과 기본 창 크기가 갈렸다).
+##
+## **되돌린 프레임에는 단계를 돌리지 않고 몇 프레임 쉰다**(true 를 돌려준다) — 크기 변경이
+## 화면에 반영되기 전에 마우스를 밀면 좌표가 어긋나서 오히려 새 거짓 실패가 난다.
+func _resize_window_if_needed() -> bool:
+	if DisplayServer.window_get_size() == SettingsStore.BASE_SIZE:
+		return false
+	DisplayServer.window_set_size(SettingsStore.BASE_SIZE)
+	# **프레임 수가 아니라 초로 센다** — 수직동기화가 꺼진 창은 몇 프레임이 몇 ms 밖에
+	# 안 돼서 "8프레임 대기"가 사실상 대기가 아니다 (docs/GOTCHAS.md).
+	_wait_time = SETTLE_SECONDS
+	return true

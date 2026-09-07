@@ -15,7 +15,8 @@ const FORMAT_VERSION := 1
 
 ## 논리 해상도. project.godot 의 window/size/viewport_width/height 와 반드시 같아야 한다.
 ## 이 값이 곧 "화면에 보이는 월드 범위"다.
-const BASE_SIZE := Vector2i(1280, 720)
+## (2026-09-08 사람이 1280x720 에서 넓혔다 — docs/DESIGN.md "카메라 / 해상도".)
+const BASE_SIZE := Vector2i(1440, 810)
 
 ## 고를 수 있는 해상도. 전부 16:9 다 — 논리 해상도와 비율이 같아야 검은 여백 없이
 ## 꽉 찬다(비율이 다른 창은 여백이 생길 뿐, 보이는 월드 범위는 그대로다).
@@ -26,9 +27,17 @@ const RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(2560, 1440),
 ]
 
+## 창의 기본 크기. **논리 해상도(BASE_SIZE)와 다른 값이다** — 논리 해상도가 1440x810 이
+## 되면서 RESOLUTIONS 에 없는 값이 됐고, 목록에 없는 크기를 기본값으로 두면 설정 화면이
+## 고를 수 없는 값을 보여주게 된다. **반드시 RESOLUTIONS 안의 값**이어야 하고,
+## project.godot 의 window/size/window_*_override 와도 같아야 한다(안 그러면 창이
+## 한 크기로 떴다가 메인 메뉴에서 다른 크기로 튄다).
+## **창 크기와 논리 해상도는 다른 것이다** — 창은 이 그림을 확대/축소해 보여줄 뿐이다.
+const DEFAULT_SIZE := Vector2i(1280, 720)
+
 
 static func default_settings() -> Dictionary:
-	return {"resolution": BASE_SIZE}
+	return {"resolution": DEFAULT_SIZE}
 
 
 ## 지금 화면(모니터)에 실제로 들어가는 해상도만 고를 수 있게 거른다.
@@ -40,7 +49,7 @@ static func available_resolutions(current := Vector2i.ZERO) -> Array[Vector2i]:
 		if (size.x <= usable.x and size.y <= usable.y) or size == current:
 			list.append(size)
 	if list.is_empty():
-		list.append(BASE_SIZE)  # 어떤 화면에서도 최소 하나는 고를 수 있어야 한다.
+		list.append(DEFAULT_SIZE)  # 어떤 화면에서도 최소 하나는 고를 수 있어야 한다.
 	return list
 
 
@@ -72,7 +81,7 @@ static func load_settings() -> Dictionary:
 
 
 static func save_settings(settings: Dictionary) -> bool:
-	var size: Vector2i = settings.get("resolution", BASE_SIZE)
+	var size: Vector2i = settings.get("resolution", DEFAULT_SIZE)
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:
 		push_error("설정을 못 썼다: %s" % error_string(FileAccess.get_open_error()))
@@ -95,7 +104,7 @@ static func apply_resolution(size: Vector2i) -> void:
 
 ## 저장된 해상도를 창에 반영한다. 진입 씬(메인 메뉴)이 시작할 때 한 번 부른다.
 static func apply_saved() -> Vector2i:
-	var size: Vector2i = load_settings().get("resolution", BASE_SIZE)
+	var size: Vector2i = load_settings().get("resolution", DEFAULT_SIZE)
 	apply_resolution(size)
 	return size
 

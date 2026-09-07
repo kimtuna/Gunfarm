@@ -22,7 +22,9 @@ const MAIN_MENU_SCENE := "res://scenes/main_menu.tscn"
 const PROBE_SCENE := "res://qa/world_range_probe.tscn"
 
 ## 논리 해상도가 그대로 월드 범위다 — 카메라가 원점에 있으므로 이 사각형이 나와야 한다.
-const EXPECTED_RANGE := Rect2(-640, -360, 1280, 720)
+## **손으로 적지 않는다**: settings_store.gd 의 BASE_SIZE 에서 끌어온다.
+const EXPECTED_RANGE := Rect2(
+	Vector2(SettingsStore.BASE_SIZE) * -0.5, Vector2(SettingsStore.BASE_SIZE))
 
 var _steps: Array[Callable] = []
 var _step := 0
@@ -35,7 +37,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS)
 	# 이전 실행의 저장 상태가 남아 거짓 실패를 내지 않게 지우고 시작한다 (docs/GOTCHAS.md).
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsStore.SAVE_PATH))
-	SettingsStore.apply_resolution(SettingsStore.BASE_SIZE)
+	SettingsStore.apply_resolution(SettingsStore.DEFAULT_SIZE)
 	change_scene_to_file(SETTINGS_SCENE)
 
 	_options = SettingsStore.available_resolutions()
@@ -89,7 +91,7 @@ func _process(_delta: float) -> bool:
 # --- 설정 화면 -----------------------------------------------------------------
 
 func _step_initial() -> void:
-	_expect_value("1280 × 720", "저장된 설정이 없을 때 기본 해상도")
+	_expect_value(_label(SettingsStore.DEFAULT_SIZE), "저장된 설정이 없을 때 기본 해상도")
 	_shoot("00_settings_default")
 
 
@@ -98,7 +100,7 @@ func _step_after_next() -> void:
 		_fails.append("고를 수 있는 해상도가 %d개뿐이라 이 화면에서는 검증이 불가능하다" % _options.size())
 		return
 	var expected: Vector2i = _options[1]
-	_expect_value("%d × %d" % [expected.x, expected.y], "다음 해상도로 넘긴 뒤")
+	_expect_value(_label(expected), "다음 해상도로 넘긴 뒤")
 	_expect_window(expected, "다음 해상도로 넘긴 뒤")
 	var saved: Vector2i = SettingsStore.load_settings().get("resolution", Vector2i.ZERO)
 	if saved != expected:
@@ -107,8 +109,8 @@ func _step_after_next() -> void:
 
 
 func _step_after_prev() -> void:
-	_expect_value("1280 × 720", "이전 해상도로 되돌린 뒤")
-	_expect_window(SettingsStore.BASE_SIZE, "이전 해상도로 되돌린 뒤")
+	_expect_value(_label(SettingsStore.DEFAULT_SIZE), "이전 해상도로 되돌린 뒤")
+	_expect_window(SettingsStore.DEFAULT_SIZE, "이전 해상도로 되돌린 뒤")
 	_shoot("02_settings_prev")
 
 
@@ -116,7 +118,7 @@ func _step_after_prev() -> void:
 func _step_save_then_reenter_menu() -> void:
 	if _options.size() >= 2:
 		SettingsStore.save_settings({"resolution": _options[1]})
-	SettingsStore.apply_resolution(SettingsStore.BASE_SIZE)  # 일부러 어긋나게 해둔다.
+	SettingsStore.apply_resolution(SettingsStore.DEFAULT_SIZE)  # 일부러 어긋나게 해둔다.
 	change_scene_to_file(MAIN_MENU_SCENE)
 
 
@@ -177,7 +179,7 @@ func _press_escape() -> void:
 
 
 func _step_cleanup() -> void:
-	SettingsStore.apply_resolution(SettingsStore.BASE_SIZE)
+	SettingsStore.apply_resolution(SettingsStore.DEFAULT_SIZE)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SettingsStore.SAVE_PATH))
 
 
@@ -192,6 +194,11 @@ func _press(node_path: String) -> void:
 		_fails.append("버튼이 비활성 상태다: %s" % node_path)
 		return
 	button.emit_signal("pressed")
+
+
+## 설정 화면이 해상도를 적는 방식(scripts/settings.gd `_refresh`)과 같은 문자열.
+func _label(size: Vector2i) -> String:
+	return "%d × %d" % [size.x, size.y]
 
 
 func _expect_value(text: String, what: String) -> void:

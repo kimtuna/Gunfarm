@@ -89,7 +89,7 @@ unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.603922, 0.627451, 0.560784, 1)
 theme_override_font_sizes/font_size = 18
-text = "보이는 월드 범위: 항상 1280 × 720 (해상도와 무관)"
+text = "보이는 월드 범위: 항상 1440 × 810 (해상도와 무관)"
 horizontal_alignment = 1
 
 [node name="FairnessNote" type="Label" parent="Layout"]

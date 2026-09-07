@@ -3,11 +3,15 @@ extends Node2D
 ## 자체 QA 전용 — "카메라가 보여주는 월드 범위"를 눈으로 볼 수 있게 만든 시험용 월드.
 ## 실제 게임 씬이 아니다. (docs/DESIGN.md "카메라 / 해상도" PvP 공정성 규칙 검증용)
 ##
-## 논리 해상도 경계(±640, ±360) 바로 안쪽에 초록 표식을, 바로 바깥에 빨간 표식을 둔다.
+## 논리 해상도 경계 바로 안쪽에 초록 표식을, 바로 바깥에 빨간 표식을 둔다.
 ## **빨간 표식이 화면에 보이면 그 해상도에서 시야가 넓어진 것 = 불합격**이다.
 ## 해상도가 달라져도 초록 표식만 보이고 빨간 표식은 안 보여야 한다.
 
-const BASE_HALF := Vector2(640, 360)  # 논리 해상도 1280x720 의 절반
+const SettingsStore := preload("res://scripts/settings_store.gd")
+
+## 논리 해상도의 절반. **손으로 적지 않는다** — settings_store.gd 에서 끌어와야
+## 논리 해상도를 바꾼 바퀴가 이 표식을 같이 못 고치고 지나가는 일이 없다.
+const BASE_HALF := Vector2(SettingsStore.BASE_SIZE) * 0.5
 const GRID := 80.0
 const MARGIN := 24.0  # 경계에서 표식까지의 거리
 
