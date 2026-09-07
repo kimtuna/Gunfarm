@@ -172,8 +172,10 @@ func _ready() -> void:
 	(%TerrainView as Node2D).set_world(world)
 	(%GroundItemsView as Node2D).setup(ground_items)
 	(%DeathBoxesView as Node2D).setup(death_boxes)
-	# 총알은 월드가 있어야 지형에 막힐 수 있다 — 여기서 만든다.
-	bullets = Bullets.new(world)
+	# **총알 코어는 월드(지형)를 받지 않는다** — 물은 걸어서 못 건너지만 총알은
+	# 통과한다(docs/DESIGN.md 「전투」). 총알을 막는 것이 생기면 그 오브젝트가
+	# `bullets.blocks_bullet` 에 붙는다.
+	bullets = Bullets.new()
 	(%BulletsView as Node2D).setup(bullets)
 	(%AimLine as Node2D).setup(%Player as Node2D)
 	# 화면 아래 핫바는 **인벤토리 맨 위 9칸을 그대로 비추는 것**이지 별도 보관함이

@@ -9,7 +9,9 @@ extends SceneTree
 ##   A. 코어(`bullets.gd` / `player_motion.gd` — 화면 없이 도는 순수 클래스)
 ##      1) **즉시판정이 아니다** — 쏜 순간에는 총구에 있고, 한 틱에 정해진 만큼만 간다.
 ##      2) 사거리(800)를 다 날아가면 사라진다 — 그 자리에서 딱 멈춘다.
-##      3) **막힌 지형에 닿으면 사라지고, 한 칸짜리 벽을 통째로 건너뛰지 않는다.**
+##      3) **물은 총알을 막지 않는다** — 같은 지도 같은 칸에서 사람은 못 들어가고
+##         총알은 지나간다. 그리고 **총알을 막는 것을 꽂으면** 거기서 사라지되
+##         한 칸짜리 벽을 통째로 건너뛰지 않는다.
 ##      4) 각도는 스냅된 4방향이 아니라 **원본 조준 각도**다.
 ##      5) 정조준 — 서 있으면 모이고, 움직이면 흩어지고, 쏘면 반동으로 깎이고, 0~1 을 안 넘는다.
 ##      6) **탄퍼짐은 정조준 하나에서 나온다**(조준선 선명도와 같은 값). 씨앗을 주면 재현된다.
@@ -21,6 +23,8 @@ extends SceneTree
 ##     11) 좌클릭하면 총알이 실제로 나가고 **화면에 보이며 날아간다** — 쏜 직후에는 총구
 ##         근처에 있고(즉시판정이면 이 검사가 실패한다), 잠시 뒤 더 멀리 가 있다.
 ##     12) 쏘면 반동으로 정조준이 깎인다.
+##     13) **물가에서 물 건너로 쏘면 총알이 바다를 지나가고**, 같은 자리에서
+##         **사람은 여전히 물에 못 들어간다**(이동 판정을 안 건드렸다는 확인).
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -57,6 +61,15 @@ const FLIGHT_SECONDS := 0.12
 ## 생기고, 짧아야 총구 근처에서 잡힌다.
 const MUZZLE_SECONDS := 0.06
 
+## 물 통과 검사 — 물가에서 동쪽으로 이만큼까지 훑어서 바다를 찾고, 이어진 바다가
+## 그만큼은 돼야 "물 위로 쐈다"고 할 수 있다.
+const SEA_SCAN_TILES := 6
+const SEA_MIN_TILES := 2
+
+## 물 위로 쏜 총알을 견주기까지 기다리는 시간(초). 바다의 끝(최대 6.5칸 = 312단위)을
+## 넘기고도 사거리(800 = 0.89초)에는 한참 못 미치는 값이다.
+const WATER_FLIGHT_SECONDS := 0.55
+
 ## 예광탄 색을 알아보는 문턱. 픽셀 비교(`DIFF_EPSILON`)보다 느슨하다 — 총알은 배경
 ## 위에 그려지고 선 끝이 살짝 섞이지만, 풀밭과는 애초에 색이 한참 멀다.
 const TRACER_EPSILON := 0.03
@@ -72,16 +85,21 @@ var _line_width := {}
 var _focus_before_shot := 1.0
 var _muzzle := Vector2.ZERO
 var _travelled_first := 0.0
+var _shore_tile := Vector2i.ZERO
+var _shore_sea_far := 0
 
 
-## 총알 검사용 가짜 월드. `bullets.gd` 는 `is_land()` 하나만 본다 — 지형 생성 전체를
-## 끌고 오지 않아야 "한 칸짜리 벽"처럼 원하는 모양을 정확히 만들 수 있다.
-class WallWorld extends RefCounted:
-	## 이 x 타일 한 줄만 막혀 있다. -1 이면 전부 땅이다.
-	var wall_tile := -1
+## 이동 코어(`player_motion.gd`) 검사용 가짜 월드 — `is_land()` 하나만 본다. 지형 생성
+## 전체를 끌고 오지 않아야 "바다 한 줄"처럼 원하는 모양을 정확히 만들 수 있다.
+##
+## **총알 코어는 여기에 안 나온다** — `bullets.gd` 는 이제 월드를 받지 않는다(물은
+## 걸어서 못 건너지만 총알은 통과한다, docs/DESIGN.md 「전투」).
+class SeaWorld extends RefCounted:
+	## 이 x 타일 한 줄만 바다다. -1 이면 전부 땅이다.
+	var sea_tile := -1
 
 	func is_land(x: int, _y: int) -> bool:
-		return x != wall_tile
+		return x != sea_tile
 
 
 func _initialize() -> void:
@@ -139,6 +157,19 @@ func _initialize() -> void:
 		func(): _wait_time = FLIGHT_SECONDS,
 		func(): _shoot("84_bullet_flying"),
 		_check_bullet_flew_further,
+		# 13) 물 위로 쏘면 지나간다 / 그 자리에서 사람은 여전히 물에 못 들어간다
+		_stand_on_shore,
+		_aim_right,
+		_settle,
+		func(): _set_focus(1.0),
+		_wait_for_empty_sky,
+		_check_sky_empty,
+		_fire_over_water,
+		func(): _wait_time = WATER_FLIGHT_SECONDS,
+		func(): _shoot("85_bullet_over_water"),
+		_check_bullet_crossed_water,
+		_walk_into_the_sea,
+		_check_stopped_on_land,
 	]
 
 
@@ -174,7 +205,8 @@ func _check_core() -> void:
 	_check_step_smaller_than_tile()
 	_check_not_hitscan()
 	_check_range()
-	_check_blocked_terrain()
+	_check_water_does_not_block()
+	_check_blocker_seam()
 	_check_raw_angle()
 	_check_focus()
 	_check_spread()
@@ -194,7 +226,7 @@ func _check_step_smaller_than_tile() -> void:
 
 ## 1) **즉시판정이 아니다** — 쏜 순간에는 총구에 있고, 틱마다 정해진 만큼만 간다.
 func _check_not_hitscan() -> void:
-	var bullets := Bullets.new(WallWorld.new())
+	var bullets := Bullets.new()
 	var origin := Vector2(1000.0, 1000.0)
 	var entry := bullets.fire(origin, 0.0)
 	if bullets.size() != 1:
@@ -218,7 +250,7 @@ func _check_not_hitscan() -> void:
 
 ## 2) 사거리를 다 날아가면 그 자리에서 사라진다.
 func _check_range() -> void:
-	var bullets := Bullets.new(WallWorld.new())
+	var bullets := Bullets.new()
 	var origin := Vector2(1000.0, 1000.0)
 	var entry := bullets.fire(origin, 0.0)
 	var ticks := 0
@@ -236,11 +268,49 @@ func _check_range() -> void:
 		_fails.append("코어: 사거리를 %d틱에 갔다 — %d틱이어야 한다" % [ticks, expected])
 
 
-## 3-2) 막힌 지형(바다/벽)에 닿으면 사라진다. **한 칸짜리 벽을 통째로 건너뛰지 않는다.**
-func _check_blocked_terrain() -> void:
-	var world := WallWorld.new()
-	world.wall_tile = 10
-	var bullets := Bullets.new(world)
+## 3-1) **물은 총알을 막지 않는다** (docs/DESIGN.md 「전투」 2026-09-07 사람 결정 —
+## *"한 칸 물이 있다고 해서 거기에 막히면 안 되잖아"*). **같은 지도 · 같은 칸**에 둘을
+## 나란히 물어본다: 사람은 못 들어가고 총알은 지나간다. 두 판정이 도로 하나로 붙으면
+## 둘 중 하나가 반드시 어긋난다.
+func _check_water_does_not_block() -> void:
+	var world := SeaWorld.new()
+	world.sea_tile = 10
+	var sea := WorldGen.tile_center(Vector2i(world.sea_tile, 5))
+
+	# 사람 — 이동 판정은 이번 바퀴가 건드리지 않았다.
+	var motion := PlayerMotion.new(world)
+	if not motion.blocked_at(sea):
+		_fails.append("코어: 바다 칸 %d 인데 사람이 걸어 들어갈 수 있다 — 이동 판정이 바뀌었다"
+				% world.sea_tile)
+
+	# 총알 — 같은 칸을 지나가고, 사거리를 다 쓰고 나서야 사라진다.
+	var bullets := Bullets.new()
+	var origin := WorldGen.tile_center(Vector2i(2, 5))
+	var entry := bullets.fire(origin, 0.0)
+	var ticks := 0
+	while bullets.size() > 0 and ticks < 1000:
+		bullets.tick()
+		ticks += 1
+	var at: Vector2 = entry[Bullets.KEY_POSITION]
+	if at.x <= sea.x:
+		_fails.append("코어: 총알이 바다 칸(x=%.0f) 앞 %.0f 에서 멈췄다 — 물에 막혔다"
+				% [sea.x, at.x])
+	if absf(float(entry[Bullets.KEY_TRAVELLED]) - Bullets.RANGE) > 0.01:
+		_fails.append("코어: 막는 것이 없는데 총알이 %.1f 만에 사라졌다 — 사거리(%.0f)를 다 써야 한다"
+				% [entry[Bullets.KEY_TRAVELLED], Bullets.RANGE])
+
+
+## 3-2) **총알을 막는 것이 들어올 자리**(`blocks_bullet`)가 실제로 동작하고, 막는 것이
+## **한 칸짜리여도 통째로 건너뛰지 않는다.**
+##
+## **지금 게임 안에는 총알을 막는 것이 하나도 없다** — 벽도 나무도 아직 없기 때문이다
+## (docs/DESIGN.md 「전투」). 그래서 검사가 벽을 직접 꽂아 넣는다. 나무·벽을 만드는
+## 바퀴는 여기에 그 오브젝트를 꽂아 같은 검사를 다시 쓰면 된다.
+func _check_blocker_seam() -> void:
+	var wall := 10
+	var bullets := Bullets.new()
+	bullets.blocks_bullet = func(point: Vector2) -> bool:
+		return WorldGen.world_to_tile(point).x == wall
 	# 벽에서 8칸 앞에서 벽을 향해 쏜다.
 	var origin := WorldGen.tile_center(Vector2i(2, 5))
 	var entry := bullets.fire(origin, 0.0)
@@ -251,28 +321,26 @@ func _check_blocked_terrain() -> void:
 	if bullets.size() != 0:
 		_fails.append("코어: 벽에 닿았는데 총알이 안 사라졌다")
 		return
-	var at: Vector2 = entry[Bullets.KEY_POSITION]
-	var tile := WorldGen.world_to_tile(at)
-	if tile.x != world.wall_tile:
+	var tile := WorldGen.world_to_tile(entry[Bullets.KEY_POSITION] as Vector2)
+	if tile.x != wall:
 		_fails.append("코어: 총알이 벽 칸(%d)이 아니라 %d 칸에서 사라졌다 — 벽을 건너뛰었다"
-				% [world.wall_tile, tile.x])
+				% [wall, tile.x])
 	if float(entry[Bullets.KEY_TRAVELLED]) >= Bullets.RANGE:
 		_fails.append("코어: 벽에 안 막히고 사거리를 다 썼다")
-	# 검사에 이가 있는지 — 벽을 치우면 같은 총알이 사거리까지 간다.
-	var open_world := WallWorld.new()
-	var open_bullets := Bullets.new(open_world)
+	# 검사에 이가 있는지 — 아무것도 안 꽂으면 같은 총알이 사거리까지 간다.
+	var open_bullets := Bullets.new()
 	var open_entry := open_bullets.fire(origin, 0.0)
 	for i in 1000:
 		if open_bullets.size() == 0:
 			break
 		open_bullets.tick()
 	if absf(float(open_entry[Bullets.KEY_TRAVELLED]) - Bullets.RANGE) > 0.01:
-		_fails.append("코어: 벽이 없는데도 총알이 사거리 전에 사라졌다")
+		_fails.append("코어: 막는 것을 안 꽂았는데도 총알이 사거리 전에 사라졌다")
 
 
 ## 4) 각도는 스냅된 4방향이 아니라 **원본 조준 각도**다 (docs/DESIGN.md 「조작」).
 func _check_raw_angle() -> void:
-	var world := WallWorld.new()
+	var world := SeaWorld.new()
 	var motion := PlayerMotion.new(world)
 	var raw := 0.35  # 오른쪽으로 스냅되지만 정확히 오른쪽은 아닌 각도
 	motion.tick(PlayerInput.new(Vector2i.ZERO, raw))
@@ -280,7 +348,7 @@ func _check_raw_angle() -> void:
 		_fails.append("코어: %.2f 라디안이 오른쪽으로 안 스냅됐다" % raw)
 	if absf(motion.aim_angle - raw) > 0.0001:
 		_fails.append("코어: 조준 각도가 스냅돼 버렸다 (%.3f)" % motion.aim_angle)
-	var bullets := Bullets.new(world)
+	var bullets := Bullets.new()
 	var entry := bullets.fire(Vector2.ZERO, motion.aim_angle)
 	var fired := (entry[Bullets.KEY_DIRECTION] as Vector2).angle()
 	if absf(angle_difference(fired, raw)) > 0.0001:
@@ -290,7 +358,7 @@ func _check_raw_angle() -> void:
 
 ## 5) 정조준 — 서 있으면 모이고, 움직이면 흩어지고, 반동으로 깎이고, 0~1 을 안 넘는다.
 func _check_focus() -> void:
-	var motion := PlayerMotion.new(WallWorld.new())
+	var motion := PlayerMotion.new(SeaWorld.new())
 	var standing := PlayerInput.new(Vector2i.ZERO, 0.0)
 	var walking := PlayerInput.new(Vector2i(1, 0), 0.0)
 
@@ -344,7 +412,7 @@ func _check_focus() -> void:
 
 ## 6) **탄퍼짐은 정조준 하나에서 나온다** — 조준선 선명도와 같은 값이다.
 func _check_spread() -> void:
-	var motion := PlayerMotion.new(WallWorld.new())
+	var motion := PlayerMotion.new(SeaWorld.new())
 	motion.aim_focus = 1.0
 	if motion.spread_angle() != 0.0:
 		_fails.append("코어: 완전히 조준했는데 탄퍼짐이 %.4f 다" % motion.spread_angle())
@@ -358,7 +426,7 @@ func _check_spread() -> void:
 		_fails.append("코어: 탄퍼짐이 정조준에 비례하지 않는다")
 
 	# 실제로 굴려본다 — 전부 퍼짐 안이고, 한 각도에 몰려 있지 않다.
-	var bullets := Bullets.new(WallWorld.new())
+	var bullets := Bullets.new()
 	bullets.set_random_seed(12345)
 	var angles: Array[float] = []
 	for i in 40:
@@ -373,7 +441,7 @@ func _check_spread() -> void:
 	if spread_seen < full * 0.5:
 		_fails.append("코어: 40발이 전부 퍼짐의 절반 안에 몰렸다 — 퍼짐이 안 굴러갔다")
 	# 씨앗이 같으면 같은 결과 — 나중에 서버가 판정을 재현할 수 있어야 한다.
-	var again := Bullets.new(WallWorld.new())
+	var again := Bullets.new()
 	again.set_random_seed(12345)
 	for i in angles.size():
 		var entry := again.fire(Vector2.ZERO, 0.0, full)
@@ -381,7 +449,7 @@ func _check_spread() -> void:
 			_fails.append("코어: 같은 씨앗인데 탄퍼짐이 다르게 굴렀다")
 			break
 	# 탄퍼짐이 0 이면 조준 각도 그대로다.
-	var straight := Bullets.new(WallWorld.new())
+	var straight := Bullets.new()
 	var one := straight.fire(Vector2.ZERO, 0.0, 0.0)
 	if (one[Bullets.KEY_DIRECTION] as Vector2).angle() != 0.0:
 		_fails.append("코어: 퍼짐이 0 인데 총알이 빗나갔다")
@@ -390,7 +458,7 @@ func _check_spread() -> void:
 ## 7) 대상 명중 판정의 **자리**가 실제로 불린다 — 한 걸음짜리 선분으로.
 ## (지금은 맞을 대상이 없으므로 이 자리만 검증한다 — 동물이 오는 바퀴가 채운다.)
 func _check_hit_test_seam() -> void:
-	var bullets := Bullets.new(WallWorld.new())
+	var bullets := Bullets.new()
 	var hits: Array = []
 	var lengths: Array = []
 	# 람다는 바깥 지역변수를 값으로 캡처한다 — 배열에 담아 우회한다 (docs/GOTCHAS.md).
@@ -502,6 +570,44 @@ func _check_bullet_flew_further() -> void:
 		_fails.append("날아가는 총알이 화면에 안 보인다")
 
 
+## 13) 물가에서 물 건너로 쏜 총알이 **바다를 지나갔다.**
+func _check_bullet_crossed_water() -> void:
+	if _shore_sea_far <= 0:
+		return
+	var bullets := _bullets()
+	if bullets == null or bullets.size() != 1:
+		_fails.append("물 위로 쏜 총알이 %.2f초 만에 사라졌다 — 물에 막혔다"
+				% WATER_FLIGHT_SECONDS)
+		return
+	# 바다의 **먼 쪽 끝**까지의 거리. 총구는 물가 칸의 한가운데다.
+	var across := (float(_shore_sea_far) + 0.5) * float(WorldGen.TILE_SIZE)
+	var travelled := float((bullets.bullets[0] as Dictionary)[Bullets.KEY_TRAVELLED])
+	if travelled < across:
+		_fails.append("총알이 %.2f초 동안 %.0f 밖에 안 갔다 — 바다 끝(%.0f)을 지나가야 한다"
+				% [WATER_FLIGHT_SECONDS, travelled, across])
+		return
+	var at: Vector2 = (bullets.bullets[0] as Dictionary)[Bullets.KEY_POSITION]
+	print("[qa] 물가 %s 에서 바다 %d칸 너머로 총알이 지나갔다 (%.0f 단위, 지금 %s)"
+			% [_shore_tile, _shore_sea_far, travelled, at])
+
+
+## 13) **같은 자리에서 사람은 여전히 물에 못 들어간다** — 이동 판정을 안 건드렸다는
+## 확인이다(INBOX #39 의 *"`player_motion.gd` 의 이동 판정은 건드리지 말 것"*).
+func _check_stopped_on_land() -> void:
+	_release_all()
+	if _shore_sea_far <= 0:
+		return
+	var player := _player()
+	var tile: Vector2i = player.tile()
+	if not _world().is_land(tile.x, tile.y):
+		_fails.append("총알이 지나간 바다로 사람도 걸어 들어갔다 (칸 %s)" % tile)
+	elif player.motion.blocked_at(player.position):
+		_fails.append("몸통이 바다에 걸친 채로 멈췄다: %s" % player.position)
+	else:
+		print("[qa] 같은 물가에서 사람은 땅 칸 %s 에서 멈춘다" % tile)
+	_shoot("86_player_stopped_at_shore")
+
+
 # =============================================================================
 # 도우미
 # =============================================================================
@@ -533,6 +639,74 @@ func _stand_on_open_land() -> void:
 						_player().place_at(WorldGen.tile_center(tile))
 						return
 	_fails.append("사방이 육지인 자리를 못 찾았다")
+
+
+## 물 건너로 쏠 수 있는 물가에 세운다 — **동쪽에 바다가 이어진 땅 칸**이다.
+## 못 찾으면 뒤따르는 검사들을 통째로 건너뛴다(시드가 그런 자리를 안 만들 수도 있다).
+func _stand_on_shore() -> void:
+	var world := _world()
+	var spawn: Vector2i = world.spawn_tile
+	for radius in range(0, 60):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var tile := spawn + Vector2i(dx, dy)
+				var far := _sea_run_east(world, tile)
+				if far > 0:
+					_shore_tile = tile
+					_shore_sea_far = far
+					_player().place_at(WorldGen.tile_center(tile))
+					return
+	print("[qa] 동쪽에 바다가 이어진 물가를 못 찾아 물 통과 검사를 건너뛴다")
+
+
+## `tile` 이 땅이고 그 **동쪽**으로 `SEA_MIN_TILES` 칸 이상 바다가 이어지면, 그 바다의
+## 마지막 칸까지의 거리(타일 수)를 돌려준다. 아니면 0.
+func _sea_run_east(world: RefCounted, tile: Vector2i) -> int:
+	if not world.is_land(tile.x, tile.y):
+		return 0
+	var first := 1
+	while first <= SEA_SCAN_TILES and world.is_land(tile.x + first, tile.y):
+		first += 1
+	if first > SEA_SCAN_TILES:
+		return 0  # 앞이 전부 땅이다
+	var last := first
+	while last < SEA_SCAN_TILES and not world.is_land(tile.x + last + 1, tile.y):
+		last += 1
+	return last if last - first + 1 >= SEA_MIN_TILES else 0
+
+
+## 앞서 쏜 총알이 사거리를 다 쓰고 사라질 때까지 기다린다 — 다음 한 발만 남겨두려는
+## 것이다(사거리 0.89초보다 넉넉히 길게 잡는다).
+func _wait_for_empty_sky() -> void:
+	_wait_time = 1.2
+
+
+## 그 기다림이 실제로 비웠는가 — **사거리를 다 쓰면 사라진다**를 화면 쪽에서도 본다.
+func _check_sky_empty() -> void:
+	var bullets := _bullets()
+	if bullets != null and bullets.size() != 0:
+		_fails.append("사거리를 다 쓰고도 총알 %d개가 남아 있다" % bullets.size())
+
+
+func _fire_over_water() -> void:
+	if _shore_sea_far <= 0:
+		return
+	_send_action("use_tool")
+
+
+## 총알이 지나간 그 바다로 **걸어서** 들어가 본다 — 초당 5칸이라 2초면 바다까지
+## 한참 남는다.
+func _walk_into_the_sea() -> void:
+	if _shore_sea_far <= 0:
+		return
+	_release_all()
+	Input.action_press("move_right")
+	_wait_time = 2.0
+
+
+func _release_all() -> void:
+	for action: String in ["move_up", "move_down", "move_left", "move_right"]:
+		Input.action_release(action)
 
 
 func _land_around(world: RefCounted, tile: Vector2i, radius: int) -> bool:

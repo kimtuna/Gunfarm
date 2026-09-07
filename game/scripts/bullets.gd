@@ -14,8 +14,6 @@ extends RefCounted
 ## **저장하지 않는다.** 날아가는 중인 총알은 0.9초면 사라지는 것이라, 월드를 나갔다
 ## 들어왔을 때 되살릴 값이 아니다(바닥 아이템과 다른 점이다).
 
-const WorldGen := preload("res://scripts/world_gen.gd")
-
 ## 초당 틱 수. `player_motion.gd` 와 같은 값이어야 한다 — 총알과 사람이 서로 다른
 ## 시간 위에서 돌면 "피할 수 있다"가 성립하지 않는다.
 const TICK_RATE := 60
@@ -46,8 +44,8 @@ const KEY_TRAVELLED := "travelled"
 var bullets: Array[Dictionary] = []
 
 ## **대상 명중 판정이 들어올 자리다.** 지금은 비어 있다 — 동물이 아직 없고 이 서버는
-## PvE 라 사람도 안 맞는다 (docs/DESIGN.md 「전투」의 2026-09-07 결정). 그래서 이번
-## 단계의 명중은 **지형에 막히는 것과 사거리 소진**뿐이다.
+## PvE 라 사람도 안 맞는다 (docs/DESIGN.md 「전투」의 2026-09-07 결정). 아래
+## `blocks_bullet` 도 비어 있으므로, 지금 총알이 사라지는 길은 **사거리 소진뿐**이다.
 ##
 ## 동물을 만드는 바퀴가 여기에 `func(from: Vector2, to: Vector2) -> Variant` 를 꽂으면
 ## 된다 — 그 선분에 맞은 대상을 돌려주는 순간 총알이 사라진다. 데미지(「총기 스탯」의
@@ -55,15 +53,23 @@ var bullets: Array[Dictionary] = []
 ## 위와 같다: 한 틱 이동량을 통째로 넘기면 빠른 총알이 얇은 대상을 지나쳐버린다.
 var hit_test := Callable()
 
-var _world: RefCounted = null
+## **총알을 막는 것이 들어올 자리다.** 지금은 비어 있고, 그래서 **총알을 막는 것이
+## 하나도 없다** — 벽도 나무도 아직 없기 때문이다 (docs/DESIGN.md 「전투」). 그러니
+## 지금 총알은 **사거리를 다 날아가야만 사라진다. 고장이 아니다.**
+##
+## **「걸을 수 있는가」와는 다른 물음이다** (2026-09-07 사람 결정) — 물은 걸어서 못
+## 건너지만 총알은 통과한다. 그래서 이 클래스는 지형을 아예 모른다: `world` 를 들고
+## 있지도 않고 `is_land()` 를 묻지도 않는다. 이동 판정(`player_motion.gd` 의
+## `blocked_at()`)을 여기서 다시 부르면 그 순간 둘이 도로 붙는다.
+##
+## 키가 있는 오브젝트(벽·나무·바위)를 만드는 바퀴가 여기에
+## `func(point: Vector2) -> bool` 을 꽂으면 그 순간부터 막힌다 — "이건 키가 있으니
+## 막는다"를 그 오브젝트 쪽에 한 줄 적는 것이 전부다.
+var blocks_bullet := Callable()
 
 ## 탄퍼짐을 굴리는 난수. **씨앗을 정할 수 있다** — 자체 QA 가 같은 결과를 재현해야
 ## 하고, 나중에 서버가 판정할 때도 굴림이 서버 것이어야 하기 때문이다.
 var _rng := RandomNumberGenerator.new()
-
-
-func _init(world: RefCounted) -> void:
-	_world = world
 
 
 ## 한 발 쏜다. `origin` 은 지면 평면의 월드 좌표, `angle` 은 **스냅되지 않은 조준
@@ -134,11 +140,8 @@ func _advance(bullet: Dictionary) -> bool:
 	return false
 
 
-## 그 자리가 총알을 막는가. **막힌 지형은 플레이어 이동과 같은 판정을 쓴다** —
-## 지금은 바다뿐이고, 나무·벽은 그것들을 만드는 바퀴가 `world_gen` 의 같은 자리에
-## 덧붙인다 (docs/DESIGN.md 「플레이어 이동」). 총알은 점이라 몸통 상자가 없다.
+## 그 자리가 총알을 막는가. 총알은 점이라 몸통 상자가 없다 — 걸어다니는 몸을 재는
+## `player_motion.gd` 의 같은 이름 함수와 **묻는 것 자체가 다르다**(위 `blocks_bullet`).
+## 꽂아준 것이 없으면 **아무것도 막지 않는다.**
 func blocked_at(point: Vector2) -> bool:
-	if _world == null:
-		return false
-	var tile := WorldGen.world_to_tile(point)
-	return not _world.is_land(tile.x, tile.y)
+	return blocks_bullet.is_valid() and bool(blocks_bullet.call(point))
