@@ -40,8 +40,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#47</span> [DESIGN] **32px idle 을 제대로 다시 그린다 — 지금은 크기만 커지고 그림이 그대로다.** 사람 피드백(2026-09-08): *&quot;크기만 커졌지 디테일이 하나도 없는데? 스타듀벨리랑 같은 32픽셀이라며&quot;* 그리고 스타듀 농부 스프라이트를 주며 *&quot;이거 똑같이 만들어봐.&quot;*</li></ul></section>
-<section><h2>마지막 커밋</h2><code>122bd00  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 00:41</p></section>
+<section><h2>마지막 커밋</h2><code>531596b  design: 치비 비율을 놓고 스타듀 쪽으로 — 32px idle 을 다시 그린다(#47)</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 00:52</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — **INBOX #46 [DESIGN] 32px idle 을 실제 게임에 넣었다. 샘플이다.**
 `player_idle_&lt;머리모양&gt;.png` **4장만** 32px 이 됐고 **걷기·도구 시트 18장은 17px 그대로**다.
 **끝나면 큐가 빈다**고 지시에 적혀 있었고, 실제로 `INBOX.md` 에 미완료 항목이 0개다.
@@ -74,7 +74,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908005234";
+  var STAMP = "20260908005245";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
