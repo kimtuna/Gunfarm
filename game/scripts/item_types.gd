@@ -66,7 +66,7 @@ const ITEMS := {
 	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE, "icon": "item_sickle"},
 	"hoe": {"name": "괭이", "category": CAT_PRODUCT, "color": Color(0.55, 0.56, 0.47), "stack": MAX_STACK_UNIQUE, "icon": "item_hoe"},
 	"watering_can": {"name": "물뿌리개", "category": CAT_PRODUCT, "color": Color(0.42, 0.58, 0.57), "stack": MAX_STACK_UNIQUE, "icon": "item_watering_can"},
-	"fishing_rod": {"name": "낚싯대", "category": CAT_PRODUCT, "color": Color(0.69, 0.55, 0.33), "stack": MAX_STACK_UNIQUE},
+	"fishing_rod": {"name": "낚싯대", "category": CAT_PRODUCT, "color": Color(0.69, 0.55, 0.33), "stack": MAX_STACK_UNIQUE, "icon": "item_fishing_rod"},
 
 	# 원재료
 	"wood": {"name": "목재", "category": CAT_RAW, "color": Color(0.54, 0.36, 0.20)},

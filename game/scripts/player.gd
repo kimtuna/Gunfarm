@@ -195,13 +195,19 @@ func _update_animation() -> void:
 	var tool := held_tool()
 	var suffix := "" if tool.is_empty() else "_%s" % tool
 	var wanted := ""
-	if not tool.is_empty() and motion.is_using():
+	# **사용 모션이 없는 도구는 좌클릭해도 자세가 안 바뀐다**(낚싯대 — INBOX #31).
+	# `PlayerFrames.has_use()` 를 안 보면 없는 `use_` 를 원하게 되고, 아래 물러나기가
+	# **빈손 idle** 까지 내려가서 0.5초 동안 손에 든 낚싯대가 사라진다.
+	if not tool.is_empty() and motion.is_using() and PlayerFrames.has_use(tool):
 		wanted = "use%s_%s" % [suffix, dir]
 	elif motion.is_moving:
 		wanted = "walk%s_%s" % [suffix, dir]
 	else:
 		wanted = ("hold%s_%s" % [suffix, dir]) if not tool.is_empty() else "idle_%s" % dir
+	# 물러나는 순서에 **`hold_<도구>`** 가 먼저 온다 — 시트가 한 장 빠졌을 때 손에
+	# 든 것까지 같이 사라지는 것보다 자세만 굳는 쪽이 덜 어긋난다.
 	for fallback: String in [wanted,
+			("hold%s_%s" % [suffix, dir]) if not tool.is_empty() else "idle_%s" % dir,
 			"walk_%s" % dir if motion.is_moving else "idle_%s" % dir, "idle_%s" % dir]:
 		if _sprite.sprite_frames.has_animation(fallback):
 			wanted = fallback

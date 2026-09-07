@@ -190,6 +190,22 @@ func _initialize() -> void:
 			func(): _warp(CLICK_POINT),
 			_mouse_settle,
 			_click,
+		])
+		# **사용 모션이 없는 도구는 좌클릭해도 들고 있는 자세 그대로여야 한다**
+		# (낚싯대 — INBOX #31). 빈손 idle 로 물러나면 0.5초 동안 손에 든 것이
+		# 사라지는데, 그건 「캐릭터 애니메이션」의 "도구를 옆에 아이콘으로 띄우지
+		# 않는다"(= 든 것이 늘 보여야 한다)와 정면으로 어긋난다.
+		if not PlayerFrames.has_use(tool):
+			_steps.append_array([
+				func(): _check_animation("hold_%s" % tool,
+						"사용 모션이 없는 %s 로 좌클릭했는데" % tool),
+				func(): _shoot("76_use_%s" % tool),
+				_wait_out_use,
+				func(): _check_animation("hold_%s" % tool,
+						"사용 모션이 없는 %s 로 좌클릭하고 기다렸는데" % tool),
+			])
+			continue
+		_steps.append_array([
 			func(): _check_animation("use_%s" % tool, "%s 로 허공에 대고 좌클릭했는데" % tool),
 			func(): _shoot("76_use_%s" % tool),
 			_wait_out_use,
@@ -235,6 +251,8 @@ func _report() -> bool:
 func _check_use_length() -> void:
 	var style := PlayerFrames.DEFAULT_HAIRSTYLE
 	for tool: String in PlayerFrames.TOOLS:
+		if not PlayerFrames.has_use(tool):
+			continue  # 사용 모션이 없는 도구는 견줄 그림이 없다 (낚싯대 — INBOX #31).
 		var motion := "use_%s" % tool
 		var sheet: Texture2D = load(PlayerFrames.sheet_path(motion, style))
 		if sheet == null:

@@ -1144,8 +1144,56 @@ WATERING_CAN = dict(
     head="can",
 )
 
+# 낚싯대 (INBOX #31). **머리가 없는 유일한 도구**다 — 앞의 여섯은 전부 "자루 +
+# 그 끝의 쇳덩이(또는 통)"인데 낚싯대는 **자루가 그대로 도구 전체**다. 그래서
+# 갈리는 자리가 머리 모양이 아니라 **길이와 굵기의 변화**다.
+#
+# **사용 모션(`use_fishing_rod`)을 만들지 않는다**(2026-09-07 사람 결정, INBOX #31 (가)) —
+# 낚시의 피드백은 캐릭터 자세가 아니라 찌가 날아가 물에 떨어지는 것이고, 그건
+# 그림이 아니라 던지기 로직이라 2단계다. `use=False` 한 줄이 그 뜻이고, 시트도
+# 검사도 그 한 줄을 보고 두 모션(`hold`/`walk`)만 만든다.
+ROD = dict(
+    AXE,
+    # 손잡이 — 낚싯대에서 **굵은 곳은 여기뿐이다.** 짧고 뭉툭하게 두어야 위로
+    # 길게 뻗는 대가 그만큼 가늘어 보인다(가는 것은 옆에 굵은 것이 있어야 가늘다).
+    helve=1.55, helve_r=(0.66, 0.58),
+    # 손 아래로 남는 손잡이 끝(고무 마개). 도끼(0.55)보다 길게 남긴다 — 손 위가
+    # 전부 가는 대라, 손 아래에 한 칸이 없으면 대가 손을 뚫고 지나간 것처럼 보인다.
+    back=0.95,
+    # 릴 — **손 옆에서 바깥으로 튀어나온 쇠 두 칸.** 이 두 칸이 낚싯대를 낚싯대로
+    # 만든다(총의 탄창 한 칸과 같은 성격이다): 없으면 그냥 휜 막대라 지팡이·활과
+    # 구별이 안 된다. **쇠가 자루 끝이 아니라 손 옆에 있는 유일한 도구**이기도 하다.
+    # 한 칸으로 뽑은 후보는 축소하면서 대의 밑동에 먹혀 사라졌다 — 두 칸이라야
+    # 실제 배율(3배)에서 은색 덩어리로 남는다.
+    reel_a=(0.10, 0.30), reel_b=(1.55, -0.55), reel_r=(0.62, 0.70),
+    reel_dome=1.05,
+    # 대 — 손잡이 끝에서 **휘며 가늘어지는** 나무. 곧게 세우면 옆선이 그 길이만큼
+    # 곧아져 「각짐」에 걸리고(INBOX #31 (나)), 무엇보다 도끼 자루를 길게 뽑은 것과
+    # 구별이 안 된다. 뿌리 → 제어점 → 끝의 2차 베지에인데, **제어점을 밑동 가까이
+    # (along 2.4) 안쪽으로 두어** 아래는 곧고 **끝만 바깥으로 휘게** 한다 — 전체를
+    # 고르게 휘리면 활이 된다(실제로 그렇게 나왔다).
+    blank_a=(0.00, -0.10), blank_c=(-0.10, 2.40), blank_b=(1.55, 6.00),
+    blank_r=(0.46, 0.34), blank_dome=0.80,
+    # **비스듬히 세워 든다(74도).** 다른 도구(84~86도)보다 눕히는데, 그래야 휜 끝이
+    # 머리 옆을 지나 **칸의 오른쪽 위 모서리**까지 간다 — 대가 길다는 것이 실루엣에서
+    # 읽히는 자리가 거기뿐이다. 세우면(82도) 끝이 머리 바로 옆에 붙어 대의 길이가
+    # 안 보이고, 더 눕히면 끝이 칸 밖으로 나간다(「잘림」).
+    hold=74.0,
+    # 손은 몸 밖으로 한 칸(다른 도구와 같다). **도끼(0.25)보다 내려 잡는다** —
+    # 대가 길어서, 안 내리면 끝이 칸 위 테두리에 닿는다(「잘림」).
+    reach=1.05, drop=0.85,
+    # 걷는 동안 도구를 든 팔은 덜 흔든다. 도끼(0.35)보다 더 죽인 것은 **대가 길어서
+    # 손이 조금만 움직여도 끝이 크게 돌기 때문이다** — 0.30 이상이면 옆모습 걷기가
+    # 「이어짐」 상한(0.30)을 넘는다.
+    arm_damp=0.26,
+    # **사용 모션이 없다**(위 참고). 시트·검사·`player_frames.gd` 가 이 한 줄을 본다.
+    use=False,
+    head="rod",
+)
+
 TOOLS = {"axe": AXE, "pickaxe": PICKAXE, "sickle": SICKLE, "gun": GUN,
-         "hoe": HOE, "watering_can": WATERING_CAN}
+         "hoe": HOE, "watering_can": WATERING_CAN,
+         "fishing_rod": ROD}
 
 ## 도구를 쥔 손. 앞/뒷모습은 **화면 오른쪽 손**(팔 두 개 중 1번), 옆모습은 보이는
 ## 손 하나뿐이다. 방향이 바뀌어도 도구가 화면 같은 쪽에 있어야 덜 어지럽다.
@@ -1262,22 +1310,24 @@ def _bez(pts, t):
             u * u * y0 + 2 * u * t * y1 + t * t * y2)
 
 
-def _curve(b, at, pts, radii, dome, lift, part=None):
-    """2차 베지에를 따라가는 **굵기가 변하는 곡선 쇠붙이** 한 덩어리.
+def _curve(b, at, pts, radii, dome, lift, part=None, mat="blade"):
+    """2차 베지에를 따라가는 **굵기가 변하는 곡선 덩어리** 하나.
 
     `wedge` 는 곧아서 갈고리·초승달이 안 되고, `capsule` 하나는 직선이다 —
     토막을 이어 붙이는 수밖에 없다. **`part` 를 하나로 묶어서** 토막 경계마다
     내부선이 그어지지 않게 하는 것이 이 함수의 핵심이다(2026-09-07, INBOX #26).
 
     곡괭이 갈래와 낫날이 같은 코드다 — 휜 쇠붙이가 도구마다 다른 방식으로
-    그려지면 같은 손에서 나온 도구로 안 보인다.
+    그려지면 같은 손에서 나온 도구로 안 보인다. **낚싯대의 대(나무)도 같은
+    코드로 그린다**(2026-09-07, INBOX #31) — 휜 것을 그리는 방법이 재질마다
+    달라지면 같은 손에서 나온 도구로 안 보인다. 그래서 재질만 인자로 뺐다.
     """
     r0, r1 = radii
     for i in range(CURVE_STEPS):
         t0, t1 = i / CURVE_STEPS, (i + 1) / CURVE_STEPS
         part = b.add(capsule(*at(*_bez(pts, t0)), *at(*_bez(pts, t1)),
                              r0 + (r1 - r0) * t0, r0 + (r1 - r0) * t1, dome=dome),
-                     "blade", part=part, lift=lift)
+                     mat, part=part, lift=lift)
     return part
 
 
@@ -1417,8 +1467,38 @@ def _head_can(b, at, tool, lift):
           "blade", part=part, lift=lift + 0.04)
 
 
+def _head_rod(b, at, tool, lift):
+    """낚싯대 — **릴**(`capsule` 한 칸의 쇠) + **대**(휘며 가늘어지는 나무) 둘뿐이다.
+
+    앞의 여섯 도구와 갈리는 자리(INBOX #31):
+
+    - **머리가 없다.** 도끼·괭이의 `wedge`, 낫의 `crescent`, 곡괭이의 갈고리,
+      물뿌리개의 통은 전부 "자루 끝에 붙은 덩어리"인데, 낚싯대는 **자루가 그대로
+      끝까지 간다.** 그래서 이 함수가 그리는 것은 머리가 아니라 **자루의 윗동강**
+      이다 — 손잡이(`draw_tool` 이 그리는 `helve`)에서 이어져 가늘어진다.
+    - **쇠가 위가 아니라 아래에 있다.** 다섯 도구는 손 위에, 물뿌리개는 손 아래에
+      쇳덩이를 두는데 둘 다 **자루 끝**이다. 낚싯대의 쇠(릴)는 **손 옆**이다 —
+      17px 에서 그 자리 하나가 나머지 여섯 전부와 낚싯대를 가른다.
+    - **릴 한 칸이 낚싯대를 낚싯대로 만든다.** 대만 그리면 그냥 긴 막대라 도끼
+      자루를 길게 뽑은 것과 구별이 안 된다 — 총의 탄창 한 칸과 같은 성격이다.
+    - **대는 곧으면 안 된다.** 1px 굵기로 6px 을 곧게 세우면 (1) 실루엣 옆선이
+      그만큼 곧아져 「각짐」에 걸리고 (2) 끝까지 굵기가 같아 낚싯대가 아니라
+      **막대기**로 읽힌다. 곡괭이 갈래·낫날과 **같은 `_curve`** 로 그린다 —
+      휜 것을 그리는 방법이 재질마다 달라지면 같은 손에서 나온 도구로 안 보인다.
+
+    릴과 대는 **재질이 달라서** 각각 자기 부위다 — 곡괭이 갈래·괭이 목처럼 묶을
+    이유가 없다(`inner_lines()` 는 같은 재질끼리만 경계를 긋는다).
+    """
+    b.add(capsule(*at(*tool["reel_a"]), *at(*tool["reel_b"]),
+                  *tool["reel_r"], dome=tool["reel_dome"]),
+          "blade", lift=lift + 0.04)
+    _curve(b, at, [tool["blank_a"], tool["blank_c"], tool["blank_b"]],
+           tool["blank_r"], tool["blank_dome"], lift + 0.02, mat="helve")
+
+
 HEADS = {"axe": _head_axe, "pick": _head_pick, "sickle": _head_sickle,
-         "gun": _head_gun, "hoe": _head_hoe, "can": _head_can}
+         "gun": _head_gun, "hoe": _head_hoe, "can": _head_can,
+         "rod": _head_rod}
 
 
 def draw_tool(b, gx, gy, angle_deg, sx, tool, lift=0.16):
@@ -1922,11 +2002,26 @@ def tool_walk_sheet(tool, pal=None, **over):
                             for ph in walk_phases()])
 
 
+def has_use(tool):
+    """이 도구에 **사용 모션(`use_<도구>`)이 있는가.**
+
+    낚싯대만 없다(2026-09-07 사람 결정, INBOX #31) — 낚시의 피드백은 캐릭터
+    자세가 아니라 **찌가 날아가 물에 떨어지는 것**이고 그건 2단계다. 도구 표에서
+    낚싯대만 "대상 없이 휘두르기 X" 인 것과 같은 자리다(DESIGN.md 「채집 계열」).
+    `player_frames.gd` 의 같은 이름 함수와 짝이다.
+    """
+    return TOOLS[tool].get("use", True)
+
+
 def tool_motions(tool):
-    """도구 하나가 만드는 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 1)."""
-    return (("hold_%s" % tool, lambda **kw: hold_sheet(tool, **kw)),
-            ("use_%s" % tool, lambda **kw: use_sheet(tool, **kw)),
-            ("walk_%s" % tool, lambda **kw: tool_walk_sheet(tool, **kw)))
+    """도구 하나가 만드는 모션 (DESIGN.md 「새 도구를 추가하는 절차」 1).
+
+    보통은 3종(`hold`/`use`/`walk`)이고, **사용 모션이 없는 도구는 2종**이다.
+    """
+    out = (("hold_%s" % tool, lambda **kw: hold_sheet(tool, **kw)),)
+    if has_use(tool):
+        out += (("use_%s" % tool, lambda **kw: use_sheet(tool, **kw)),)
+    return out + (("walk_%s" % tool, lambda **kw: tool_walk_sheet(tool, **kw)),)
 
 
 # 아이콘은 같은 도끼를 **캔버스 가득** 그린 것이다 — 손에 쥔 것(자루 5.3px)을 그대로
@@ -1999,6 +2094,20 @@ ICON_WATERING_CAN = dict(WATERING_CAN, helve=3.60, helve_r=(1.20, 1.00), back=1.
                          can_a=(0.0, 0.35), can_b=(0.0, 4.30), can_r=(2.35, 3.15),
                          spout_a=(-2.15, 4.10), spout_b=(-6.60, 3.20),
                          spout_r=(0.45, 1.65))
+# 낚싯대 아이콘 (INBOX #31). 자루 굵기·여백은 앞의 여섯 아이콘 그대로다. 다른 것은
+# **칸의 대각선을 통째로 쓴다는 것** — 낚싯대는 도구 중 유일하게 "길이가 곧 형태"라,
+# 세워서 칸 높이(17px)에 맞추면 앞의 여섯과 같은 길이가 되어 낚싯대로 안 읽힌다.
+# 총(33도)도 같은 이유로 눕지만 총은 굵기가 일정한 관이고, 낚싯대는 **밑동에서
+# 끝으로 절반 이하까지 가늘어진다**(0.95 → 0.42) — 그 테이퍼가 낚싯대의 정체다.
+# **릴은 손에 쥔 것보다 훨씬 굵게 뽑는다**(곡괭이·낫·괭이 아이콘과 같은 이유 —
+# 가는 쇠붙이는 윗면이 좁아 광원을 못 받아서 옆 칸의 도끼날보다 탁해 보인다).
+# 릴이 없으면 아이콘이 통째로 **휜 나뭇가지**가 된다: 칸 하나에 도구 하나뿐이라
+# 실루엣이 전부이고, 그 실루엣에서 낚싯대와 막대기를 가르는 것이 이 은색 덩어리다.
+ICON_ROD = dict(ROD, helve=4.20, helve_r=(1.25, 1.05), back=1.10,
+                reel_a=(0.30, 0.20), reel_b=(2.40, -1.05), reel_r=(1.00, 1.30),
+                reel_dome=1.05,
+                blank_a=(0.0, -0.2), blank_c=(-0.40, 5.20), blank_b=(2.80, 12.40),
+                blank_r=(0.95, 0.42), blank_dome=0.85)
 ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0),
          # 물뿌리개만 **자루가 아래를 본다**(-84도) — 손잡이가 위, 통이 아래다.
          # 손에 쥔 모습과 같은 방향이라야 칸 안의 그림과 캐릭터가 든 그림이 같은
@@ -2017,7 +2126,12 @@ ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0),
          # 크로스바가 기울어 한쪽 갈래만 내려간다.
          "pickaxe": dict(kit=ICON_PICKAXE, grip=(8.2, 14.2), angle=84.0),
          # 총만 눕는다 — 칸의 대각선이 곧 총의 길이다.
-         "gun": dict(kit=ICON_GUN, grip=(6.2, 10.6), angle=33.0)}
+         "gun": dict(kit=ICON_GUN, grip=(6.2, 10.6), angle=33.0),
+         # 낚싯대도 눕는다(58도) — 총과 같은 이유이지만 총보다 세운다. 총은
+         # 굵기가 일정한 관이라 완전히 눕혀도 실루엣이 안 무너지는데, 낚싯대는
+         # **끝이 위로 휘는 것**이 형태라 밑동이 칸 아래쪽에 서 있어야 그 휨이
+         # "쳐든 대"로 읽힌다. 손잡이는 칸 왼쪽 아래, 끝은 오른쪽 위 모서리다.
+         "fishing_rod": dict(kit=ICON_ROD, grip=(4.2, 13.6), angle=58.0)}
 
 
 def tool_icon(tool="axe", pal=None):
@@ -2185,7 +2299,10 @@ if __name__ == "__main__":
                 # 맨 앞 두 칸이 **맨손 idle · 그 도구를 들고 서 있기**다 — 도구를
                 # 들었다고 다른 캐릭터가 됐는지, 그리고 들고 있기에서 그 모션으로
                 # 자연스럽게 넘어가는지는 나란히 놓아야 보인다.
-                for name, phases in (("use", use_phases()), ("walk", walk_phases())):
+                # **사용 모션이 없는 도구는 걷기만 뽑는다**(낚싯대 — INBOX #31).
+                sets = ((("use", use_phases()),) if has_use(tool) else ()) \
+                    + (("walk", walk_phases()),)
+                for name, phases in sets:
                     stack([strip([to_img(character(d), scale),
                                   to_img(character(d, tool=tool, motion="hold"), scale)]
                                  + [to_img(character(d, tool=tool, motion=name, phase=ph), scale)

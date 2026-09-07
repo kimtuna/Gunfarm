@@ -87,6 +87,15 @@ def _player_palette():
     return gen.palette(), gen.INK, gen.GLINT
 
 
+def _gen():
+    """캐릭터 생성기 모듈. **도구가 무슨 모션을 만드는가는 생성기가 원본이다** —
+    이쪽에 목록을 다시 박아두면 한쪽만 고쳤을 때 조용히 어긋난다."""
+    if TOOLS not in sys.path:
+        sys.path.insert(0, TOOLS)
+    import gen_character as gen
+    return gen
+
+
 def _cloth_accents():
     """생성기가 지금 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리)."""
     if TOOLS not in sys.path:
@@ -325,7 +334,15 @@ TERRAIN_SPEC = dict(
 
 # 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
 # 손에 쥔 세 모션 시트 12장과 아이템 아이콘 한 장이 함께 등록된다.
-TOOL_NAMES = ("axe", "pickaxe", "sickle", "gun", "hoe", "watering_can")
+TOOL_NAMES = ("axe", "pickaxe", "sickle", "gun", "hoe", "watering_can",
+              "fishing_rod")
+
+# 그 도구가 실제로 만드는 모션. **낚싯대만 사용 모션이 없다**(2026-09-07 사람 결정,
+# INBOX #31) — 없는 시트를 검사에 등록하면 그 파일이 없어서 통째로 불합격이 된다.
+# 목록은 생성기(`gen_character.has_use()`)가 원본이다 — 여기에 도구 이름을 다시
+# 박아두면 한쪽만 고쳤을 때 조용히 어긋난다.
+def _tool_motions(tool):
+    return ("hold", "use", "walk") if _gen().has_use(tool) else ("hold", "walk")
 
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
 for _tool in TOOL_NAMES:
@@ -336,7 +353,7 @@ for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STY
     # 도구별 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 4 — 안 넓히면 새 모션은
     # 아무도 검사하지 않는다). 도구가 늘면 이 줄의 목록만 늘린다.
     for _tool in TOOL_NAMES:
-        for _motion in ("hold", "use", "walk"):
+        for _motion in _tool_motions(_tool):
             SPECS["player_%s_%s_%s.png" % (_motion, _tool, _style)] = \
                 _tool_spec(_motion, _tool, _style)
 

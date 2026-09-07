@@ -53,7 +53,22 @@ const USE_FPS := 12.0
 ## (`docs/DESIGN.md` 「새 도구를 추가하는 절차」 1). **도구가 늘면 아래 `TOOLS` 에
 ## 이름 한 줄만 늘린다** — 시트가 같이 실리고 색 바꿔치기도 따라온다.
 ## 생성기(`gen_character.py` 의 `TOOLS`)와 같은 목록이어야 한다.
-const TOOLS := ["axe", "pickaxe", "sickle", "gun", "hoe", "watering_can"]
+## **사용 모션이 없는 도구는 2종이다** — 아래 `NO_USE_TOOLS`.
+const TOOLS := ["axe", "pickaxe", "sickle", "gun", "hoe", "watering_can",
+	"fishing_rod"]
+
+## **사용 모션(`use_<도구>`)이 없는 도구.** 낚싯대뿐이다 (2026-09-07 사람 결정,
+## INBOX #31): 낚시의 피드백은 캐릭터 자세가 아니라 **찌가 날아가 물에 떨어지는
+## 것**이라, 던지기 로직이 붙는 2단계까지는 그릴 자세가 없다. `DESIGN.md`
+## 「생활 스킬 — 채집 계열」의 도구 표에서 낚싯대만 "대상 없이 휘두르기 X" 인 것과
+## 같은 자리다. **생성기(`gen_character.py` 의 `has_use()`)와 같은 목록이어야 한다** —
+## 여기만 늘리면 없는 시트를 읽으려 하고, 저기만 늘리면 시트가 안 구워진다.
+const NO_USE_TOOLS := ["fishing_rod"]
+
+
+## 이 도구에 사용 모션이 있는가 (위 `NO_USE_TOOLS`).
+static func has_use(tool: String) -> bool:
+	return not NO_USE_TOOLS.has(tool)
 
 
 ## 한 캐릭터가 가진 모션과 그 재생 속도. **여기 한 줄을 늘리면** 시트가 자동으로
@@ -62,7 +77,8 @@ static func motions() -> Dictionary:
 	var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
 	for tool in TOOLS:
 		out["hold_%s" % tool] = IDLE_FPS
-		out["use_%s" % tool] = USE_FPS
+		if has_use(tool):
+			out["use_%s" % tool] = USE_FPS
 		out["walk_%s" % tool] = WALK_FPS
 	return out
 
