@@ -471,9 +471,29 @@ func _arrange_inventory() -> void:
 	var bare := _no_sheet_tool()
 	if bare != "":
 		_move_to(inv, bare, NO_SHEET_SLOT)
-	inv.take_out(Inventory.AREA_GENERAL, EMPTY_SLOT)
-	if inv.at(Inventory.AREA_GENERAL, MOVED_SLOT) != null:
-		inv.take_out(Inventory.AREA_GENERAL, MOVED_SLOT)
+	_empty_slot(inv, EMPTY_SLOT)
+	_empty_slot(inv, MOVED_SLOT)
+
+
+## 그 칸을 비운다 — **도구는 버리지 않는다.** 인벤토리 18칸이 처음부터 꽉 차 있어서
+## (`world.gd` 의 `STARTER_ITEMS`) 그냥 버리면 그 자리에 밀려 온 것이 사라지는데,
+## 도구가 밀려 오면 아래 「도구 훑기」가 그 도구를 못 찾는다. 도구가 걸리면
+## **도구가 아닌 칸과 자리를 바꿔서** 버릴 것을 도구가 아닌 것으로 만든다.
+## (2026-09-07, INBOX #28 — 총에 그림이 생기면서 `_no_sheet_tool()` 이 고르는 도구가
+## 바뀌자 곡괭이가 이 자리에서 조용히 사라졌다.)
+func _empty_slot(inv: RefCounted, slot: int) -> void:
+	var stack: RefCounted = inv.at(Inventory.AREA_GENERAL, slot)
+	if stack == null:
+		return
+	if ItemTypes.max_stack(stack.id) == ItemTypes.MAX_STACK_UNIQUE:
+		for index in inv.slot_count(Inventory.AREA_GENERAL):
+			var other: RefCounted = inv.at(Inventory.AREA_GENERAL, index)
+			if index == slot or other == null \
+					or ItemTypes.max_stack(other.id) == ItemTypes.MAX_STACK_UNIQUE:
+				continue
+			inv.move(Inventory.AREA_GENERAL, slot, Inventory.AREA_GENERAL, index)
+			break
+	inv.take_out(Inventory.AREA_GENERAL, slot)
 
 
 ## 아직 그림이 없는 도구 하나(없으면 빈 문자열). **도구**는 한 칸에 하나만 들어가고

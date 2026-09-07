@@ -25,6 +25,8 @@ extends SceneTree
 ##
 ## 눈으로 볼 몫은 `user://qa_shots/` 에 캡처로 남긴다.
 
+const _Inventory := preload("res://scripts/inventory.gd")
+
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
@@ -102,6 +104,7 @@ func _initialize() -> void:
 
 	# --- B. 월드 화면 ---
 	_steps = [
+		_free_hand,
 		_check_spawned,
 		_check_feet_on_origin,
 		func(): _shoot("50_player_spawn"),
@@ -123,6 +126,19 @@ func _initialize() -> void:
 		_check_stopped_on_land,
 	]
 
+
+
+## **맨손으로 만든다** — 이 검사가 보는 것은 맨손 idle/걷기 시트인데, 처음 들어온
+## 캐릭터는 **든 칸(1번)에 도구가 들어 있다**(`world.gd` 의 `STARTER_ITEMS`).
+## 그 도구에 그림이 생기는 순간 `hold_<도구>` 가 나오므로, 도구 이름에 기대지 않게
+## 그 칸을 비운다. (2026-09-07, INBOX #28 — 총에 그림이 생기면서 걸렸다.)
+func _free_hand() -> void:
+	if current_scene == null:
+		return
+	var inv: RefCounted = current_scene.get("inventory")
+	if inv == null:
+		return
+	inv.take_out(_Inventory.AREA_GENERAL, 0)
 
 func _process(delta: float) -> bool:
 	if current_scene == null:

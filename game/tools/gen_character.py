@@ -823,6 +823,13 @@ def _body(b, d, cfg, pose):
     return limbs + far, hands
 
 
+## 패기 한 바퀴 프레임 수. 걷기와 같은 6장이다 — `qa_sprite_check.py` 의 「이어짐」이
+## 한 프레임에 바뀌는 몸 픽셀을 0.30 으로 자르는데, 도끼가 도는 각도(82도)를 넉 장에
+## 나누면 그 상한을 넘는다. **4장으로 줄이면 올라갈 때와 내려올 때가 같은 그림이
+## 되기도 한다**(cos 이 0 인 두 자리) — 걷기에서 위상을 반 칸 밀었을 때와 같은 실패다.
+USE_FRAMES = 6
+
+
 # ── 도구 (DESIGN.md 「새 도구를 추가하는 절차」) ────────────────────────────
 # **도구는 캐릭터 옆에 아이콘으로 띄우지 않는다 — 프레임 자체에 그려 넣는다**
 # (DESIGN.md 「캐릭터 애니메이션」의 못박힌 규칙). 그러면서도 **형태를 다시 정의하지
@@ -973,12 +980,86 @@ SICKLE = dict(
     head="sickle",
 )
 
-TOOLS = {"axe": AXE, "pickaxe": PICKAXE, "sickle": SICKLE}
+# 총 (INBOX #28). **양손으로 잡는 유일한 도구**라 지금까지의 셋과 갈리는 자리가
+# 자루 모양이 아니라 **자세**다 — 도끼·곡괭이·낫은 한 손으로 자루를 세워 들지만,
+# 총은 두 손이 몸 앞에서 만나고 총이 **거의 눕는다**. 17px 에서 그 가로 실루엣
+# 하나가 나머지 셋 전부와 총을 가른다(셋은 세로 막대 + 위쪽의 쇳덩이다).
+#
+# 값을 치르고 알아낸 것:
+#  - **자루(나무)는 개머리판, 머리(쇠)는 총열이다.** 재질 두 종을 그대로 쓰되
+#    **앞뒤가 뒤집힌다** — 다른 셋은 손 앞쪽 끝에 쇳덩이가 뭉쳐 있고, 총은 손
+#    뒤쪽에 나무가 뭉치고 앞으로 갈수록 가늘어진다. 「대비 helve|blade」도
+#    그대로 통과한다(같은 두 램프다).
+#  - **탄창 한 칸이 총을 총으로 만든다.** 총열만 그리면 그냥 가로 막대라
+#    낚싯대와 구별이 안 된다 — 총열 아래로 한 칸 내려 붙인 탄창이 L 자를
+#    만들어서, 17px 에서 "총"으로 읽히는 것은 그 한 칸이다.
+#  - **쥐는 손은 뒤쪽(화면 왼쪽) 손이다.** 총구가 화면 오른쪽을 보므로 방아쇠
+#    손이 뒤(왼쪽), 받치는 손이 앞(오른쪽)이라야 팔이 꼬이지 않는다 — 다른
+#    도구는 오른손 하나로 든다(`hand`).
+#  - **받치는 손은 제자리에서 조금만 움직인다**(`support`). 어깨는 그대로 두고
+#    손만 총열 아래로 보내는 정도다. 크게 옮기면 팔이 몸을 가로지르는 대각선
+#    막대가 되어 「각짐」에 걸린다.
+GUN = dict(
+    AXE,
+    # 개머리판 — **손 뒤로 길게 뺀 자루**(`back`)가 그대로 개머리판이다. 다른
+    # 셋은 반 칸만 남기지만, 총은 여기가 없으면 "손에서 앞으로만 뻗은 쇠막대"라
+    # 무엇을 들었는지 안 읽힌다. 뒤가 굵고 앞이 가늘다(도끼는 반대다).
+    back=1.55, helve=2.40, helve_r=(1.02, 0.68),
+    # 총열 — 자루 끝에서 앞으로 뻗는 쇠막대. 뿌리(약실)가 두 줄, 총구로 가면서
+    # 한 줄로 가늘어진다. 볼록함은 굵기에서 떼어낸다(「대비 helve|blade」 —
+    # 가는 원기둥은 윗면이 좁아 광원을 거의 못 받아 나무 자루와 명도가 붙는다).
+    barrel=4.20, barrel_r=(0.72, 0.46), barrel_dome=0.95,
+    # 탄창 — 총열 뿌리에서 **아래로** 한 칸. (바깥, 자루 방향) 좌표라 `out` 이
+    # 양수면 총열 아래쪽이다. 뒤로 조금 눕혀야 총열과 T 자가 아니라 L 자가 된다.
+    mag_a=(0.30, -0.20), mag_b=(1.50, -0.55), mag_r=(0.55, 0.45), mag_dome=0.80,
+    # **거의 눕혀 든다(4도).** 세우면 나머지 셋과 실루엣이 겹친다. 완전한 0 도가
+    # 아닌 것은 총구 쪽을 한 줄 올려 약실이 두꺼워 보이게 하려는 것이다.
+    hold=4.0,
+    # 쥐는 손이 **몸 가운데**로 온다 — 총이 몸 앞을 가로지르므로 다른 도구처럼
+    # 몸 밖(1.05)으로 내보내면 총구가 칸 밖으로 나간다(「잘림」).
+    # **`drop` 은 통과 구간 -0.7~-1.45 의 가운데다.** 위로 벗어나면 총이 허리띠
+    # 줄 위로 올라가 **몸의 오른쪽 옆선이 6줄 곧아진다**(「각짐」) — 도구가 그
+    # 줄의 바깥 끝을 차지하고 있으면 그 줄은 판정에서 빠지는데, 총이 위로
+    # 올라가면 허리띠 줄이 도로 몸으로 세어지기 때문이다. 아래로 벗어나면
+    # 개머리판이 바지와 같은 갈색으로 붙는다.
+    hand=0, reach=1.55, drop=-1.25,
+    # **옆모습은 몸이 좁아 그대로 두면 총이 허리띠 줄을 통째로 덮는다**
+    # (「비율」이 몸통/다리를 가르는 줄을 잃는다). 한 칸 위로, 조금 뒤로 든다.
+    reach_side=-1.15, drop_side=-1.70,
+    # 받치는 손 — **자기 어깨에서 조금만** 움직인다. 총열 아래로 한 칸 내려가
+    # 손끝이 총 아래로 비어져 나온다(그 한 칸이 "받치고 있다"로 읽힌다).
+    support=(0.60, -0.55),
+    # **발사 = 되튐.** 손이 **뒤로** 밀리고(`swing_fwd` 음수) 총구가 살짝 들린다.
+    # 캐릭터를 통째로 밀지 않는다 — 「자리」에 걸리고 실제로도 미끄러져 보인다
+    # (INBOX #28 (가)). 움직이는 것은 팔과 총뿐이다.
+    # **통과 구간을 표로 뽑아 가운데를 골랐다**: `swing_fwd` 는 -2.0 부터 통과하고
+    # (그보다 얕으면 프레임이 죽는다 — 「이어짐」 하한 0.05) -2.8 까지 통과한다.
+    # `swing_amp` 는 4도다 — 8도부터 총구가 들려서 몸의 오른쪽 옆선이 드러나
+    # 「각짐」에 걸린다(STYLE_GUIDE 「손에 쥔 도구」의 "가로로 긴 도구"). `swing_lift` 는
+    # 0 이다(손을 들면 같은 벽이다).
+    swing_mid=4.0, swing_amp=4.0,
+    use_rise=0.0, swing_lift=0.0, swing_fwd=-2.10, swing_loop=0.0,
+    swing_sag=0.0, swing_tuck=0.0,
+    # **되튐은 한쪽으로만 간다**(`swing_bias`) — 쉬는 자세(=`hold`)에서 뒤로
+    # 밀렸다 돌아올 뿐이다. 그래서 `swing_mid` 가 곧 `hold` 각도다.
+    swing_bias=1.0,
+    # 되튐이 **5번 프레임에서 0, 2번에서 꼭대기**가 되도록 위상을 민다 —
+    # 0번이 쉬는 자세여야 `hold` 에서 넘어오는 순간 총이 튀어 있지 않고,
+    # 마지막 프레임이 쉬는 자세여야 다시 `hold` 로 돌아갈 때 안 튄다.
+    swing_phase=(USE_FRAMES - 1.0) / USE_FRAMES,
+    head="gun",
+)
+
+TOOLS = {"axe": AXE, "pickaxe": PICKAXE, "sickle": SICKLE, "gun": GUN}
 
 ## 도구를 쥔 손. 앞/뒷모습은 **화면 오른쪽 손**(팔 두 개 중 1번), 옆모습은 보이는
 ## 손 하나뿐이다. 방향이 바뀌어도 도구가 화면 같은 쪽에 있어야 덜 어지럽다.
-def tool_hand(direction):
-    return 0 if direction in ("left", "right") else 1
+## **양손 도구(총)만 뒤쪽 손으로 쥔다**(`hand`) — 총구가 화면 오른쪽을 보므로
+## 방아쇠 손은 왼쪽이고, 오른손은 총열을 받친다(`support`).
+def tool_hand(direction, tool=None):
+    if direction in ("left", "right"):
+        return 0
+    return 1 if tool is None else tool.get("hand", 1)
 
 
 def tool_sx(direction):
@@ -999,18 +1080,45 @@ def tool_pose(direction, motion, phase, cfg, tool):
     첫 후보가 그랬다). 바깥으로 한 칸 내보내면 자루가 빈 자리(x 12~15)에 선다.
     """
     pose = dict(walk_pose(direction, phase if motion == "walk" else None, cfg))
-    hand = tool_hand(direction)
+    hand = tool_hand(direction, tool)
     sx = tool_sx(direction)
     angle = tool["hold"]
     arm_dx, arm_dy = list(pose["arm_dx"]), list(pose["arm_dy"])
+    # **양손 도구(총)는 받치는 손도 같이 간다**(INBOX #28) — 앞/뒷모습에만 팔이
+    # 둘이라 옆모습에서는 없는 손이다. 걷는 동안 안 흔들리는 것도, 되튐에 같이
+    # 밀리는 것도 두 손이 같아야 총을 잡고 있는 것으로 보인다.
+    hands = [hand]
+    if tool.get("support") and direction in ("down", "up"):
+        hands.append(1 - hand)
     if motion == "walk":
-        arm_dx[hand] *= tool["arm_damp"]
-        arm_dy[hand] *= tool["arm_damp"]
-    arm_dx[hand] += tool["reach"] * sx
-    arm_dy[hand] += tool["drop"]
+        for h in hands:
+            arm_dx[h] *= tool["arm_damp"]
+            arm_dy[h] *= tool["arm_damp"]
+    # **옆모습은 도구를 몸 앞으로 내밀 자리가 다르다.** 앞/뒷모습은 어깨가 7px 라
+    # 손을 몸 밖으로 내보내야 자루가 팔에 안 묻히지만, 옆모습은 보이는 팔이 하나뿐
+    # 이라 이미 몸 앞이다 — 총처럼 **앞으로 긴** 도구는 여기서 그만큼 더 내밀면
+    # 총구가 칸 밖으로 나간다(「잘림」). 값이 없으면 `reach` 그대로다.
+    side = direction in ("left", "right")
+    arm_dx[hand] += (tool.get("reach_side", tool["reach"]) if side else tool["reach"]) * sx
+    # 옆모습은 몸이 좁아서 **가로로 긴 도구가 허리띠 줄을 통째로 덮는다** —
+    # 그러면 「비율」이 몸통과 다리를 가르는 줄을 잃는다. 총은 옆모습에서만
+    # 한 칸 위로 든다(`drop_side`).
+    arm_dy[hand] += tool.get("drop_side", tool["drop"]) if side else tool["drop"]
+    if len(hands) > 1:
+        # 받치는 손은 **자기 어깨에서** 조금만 움직인다(총열 아래 한 칸). 쥔 손처럼
+        # `reach` 를 주면 팔이 몸을 가로지르는 대각선 막대가 된다(「각짐」).
+        arm_dx[hands[1]] += tool["support"][0] * sx
+        arm_dy[hands[1]] += tool["support"][1]
     if motion == "use" and phase is not None:
-        t = 2.0 * np.pi * float(phase)
+        t = 2.0 * np.pi * (float(phase) - tool.get("swing_phase", 0.0))
         up, fwd = float(np.cos(t)), float(np.sin(t))
+        # **되튐은 한쪽으로만 간다**(`swing_bias`, INBOX #28 — 총). 도끼·곡괭이·낫은
+        # 자루가 `mid` 를 가운데 두고 위아래로 왕복하지만, 총은 **쉬는 자세에서
+        # 뒤로 밀렸다 돌아올 뿐** 앞으로 더 나가지 않는다 — 앞으로도 나가게 두면
+        # 총구가 칸 밖으로 나가고(「잘림」), 무엇보다 총이 앞뒤로 노 젓는 것처럼
+        # 보인다. 0 에서 1 로 갔다 돌아오므로 `hold` 자세가 그대로 쉬는 자세다.
+        if tool.get("swing_bias"):
+            up = (1.0 - up) * 0.5
         angle = tool["swing_mid"] + tool["swing_amp"] * up
         # 손은 **타원을 그린다** — 들 때 앞·위로, 칠 때 뒤·아래로(`up`), 거기에
         # 90도 어긋난 `fwd` 로 앞뒤를 한 번 더 준다. **드는 순간 손이 앞으로
@@ -1023,9 +1131,12 @@ def tool_pose(direction, motion, phase, cfg, tool):
         # 뻗은 채로 자루를 눕히면 날이 **칸 밖으로 잘려나간다**(「잘림」).
         # 실제로도 휘두르는 중간에는 팔꿈치가 접혀 손이 몸에 붙는다.
         tuck = tool["swing_tuck"] * abs(float(np.cos(np.radians(angle))))
-        arm_dx[hand] += (tool["swing_fwd"] * up + tool["swing_loop"] * fwd - tuck) * sx
-        arm_dy[hand] += (tool["use_rise"] - tool["swing_lift"] * up
-                         + tool["swing_sag"] * fwd)
+        # **두 손이 같이 움직인다**(양손 도구) — 총이 되튈 때 한 손만 밀리면
+        # 총이 손에서 빠진 것처럼 보인다.
+        for h in hands:
+            arm_dx[h] += (tool["swing_fwd"] * up + tool["swing_loop"] * fwd - tuck) * sx
+            arm_dy[h] += (tool["use_rise"] - tool["swing_lift"] * up
+                          + tool["swing_sag"] * fwd)
     pose["arm_dx"], pose["arm_dy"] = tuple(arm_dx), tuple(arm_dy)
     pose["tool_angle"] = angle
     return pose
@@ -1128,7 +1239,32 @@ def _head_sickle(b, at, tool, lift):
                    dome=tool["moon_dome"]), "blade", lift=lift + 0.05)
 
 
-HEADS = {"axe": _head_axe, "pick": _head_pick, "sickle": _head_sickle}
+def _head_gun(b, at, tool, lift):
+    """총 — 개머리판(자루) 앞으로 뻗는 **총열** + 그 아래 한 칸의 **탄창**.
+
+    다른 셋과 갈리는 자리가 둘이다(INBOX #28):
+
+    - **쇠가 앞으로 길게 뻗는다.** 도끼·곡괭이·낫은 자루 끝에 쇳덩이가 뭉쳐
+      있어서 실루엣이 "막대 + 머리"인데, 총은 나무에서 쇠로 **가늘어지며**
+      이어진다. 그래서 머리를 굵게 만들면 오히려 망치로 읽힌다.
+    - **탄창 한 칸이 총을 총으로 만든다.** 총열만 있으면 낚싯대와 구별이 안
+      되는 가로 막대다. 총열 아래로 한 칸 내리고 **뒤로 조금 눕혀** 붙이면
+      L 자가 되어, 17px 에서도 "총"으로 읽힌다.
+
+    총열과 탄창은 **한 덩어리(`part`)로 묶는다** — 따로 두면 `inner_lines()` 가
+    경계에 가장 어두운 단계를 그어서 가는 총열이 통째로 검어진다
+    (2026-09-07, INBOX #26 의 곡괭이 갈래와 같은 실패다).
+    """
+    part = b.add(capsule(*at(0.0, -0.30), *at(0.0, tool["barrel"]),
+                         *tool["barrel_r"], dome=tool["barrel_dome"]),
+                 "blade", lift=lift + 0.05)
+    b.add(capsule(*at(*tool["mag_a"]), *at(*tool["mag_b"]),
+                  *tool["mag_r"], dome=tool["mag_dome"]),
+          "blade", part=part, lift=lift + 0.04)
+
+
+HEADS = {"axe": _head_axe, "pick": _head_pick, "sickle": _head_sickle,
+         "gun": _head_gun}
 
 
 def draw_tool(b, gx, gy, angle_deg, sx, tool, lift=0.16):
@@ -1145,7 +1281,11 @@ def draw_tool(b, gx, gy, angle_deg, sx, tool, lift=0.16):
     ux, uy = np.cos(a) * sx, -np.sin(a)          # 자루 방향(손 → 머리)
     nx, ny = np.sin(a) * sx, np.cos(a)           # 머리가 벌어지는 쪽(자루의 바깥)
     L = tool["helve"]
-    x0, y0 = gx - ux * 0.55, gy - uy * 0.55      # 손 아래로 조금 삐져나온 자루 끝
+    # 손 뒤로 삐져나온 자루 끝. **총만 이걸 길게 쓴다**(`back`) — 그 뒤쪽 나무가
+    # 그대로 개머리판이라, 반 칸만 남기면 총이 "손에서 앞으로만 뻗은 쇠막대"가
+    # 되어 무엇을 들었는지 안 읽힌다.
+    back = tool.get("back", 0.55)
+    x0, y0 = gx - ux * back, gy - uy * back
     hx, hy = gx + ux * L, gy + uy * L
     b.add(capsule(x0, y0, hx, hy, *tool["helve_r"]), "helve", lift=lift)
 
@@ -1417,7 +1557,7 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
 
     # 도구는 **맨 나중에** 얹는다 — 손에 쥔 것이므로 몸/머리보다 앞이다.
     if kit:
-        gx, gy = hands[tool_hand(direction)]
+        gx, gy = hands[tool_hand(direction, kit)]
         draw_tool(b, gx, gy, pose["tool_angle"], -1.0 if direction == "left" else 1.0, kit)
 
     lum = light(b.hgt, b.mat, key=cfg["key"], amb=cfg["amb"], rim=cfg["rim"])
@@ -1609,13 +1749,6 @@ def walk_sheet(pal=None, **over):
     return sheet(lambda d: [character(d, phase=ph, pal=pal, **over) for ph in phases])
 
 
-## 패기 한 바퀴 프레임 수. 걷기와 같은 6장이다 — `qa_sprite_check.py` 의 「이어짐」이
-## 한 프레임에 바뀌는 몸 픽셀을 0.30 으로 자르는데, 도끼가 도는 각도(82도)를 넉 장에
-## 나누면 그 상한을 넘는다. **4장으로 줄이면 올라갈 때와 내려올 때가 같은 그림이
-## 되기도 한다**(cos 이 0 인 두 자리) — 걷기에서 위상을 반 칸 밀었을 때와 같은 실패다.
-USE_FRAMES = 6
-
-
 def use_phases(frames=USE_FRAMES):
     return [i / frames for i in range(frames)]
 
@@ -1676,6 +1809,19 @@ ICON_PICKAXE = dict(PICKAXE, helve=8.2, helve_r=(0.95, 0.75),
 ICON_SICKLE = dict(SICKLE, helve=4.8, helve_r=(0.95, 0.78),
                    moon_c=(1.2, 3.0), moon_r=5.6, moon_cut=(-1.39, -0.98), moon_r2=4.6,
                    moon_dome=0.85)
+# 총 아이콘 (INBOX #28). 자루 굵기·여백은 도끼/곡괭이/낫 아이콘 그대로다. 다른 것은
+# **비스듬히 눕는다** — 총은 칸의 대각선을 다 써야 길이가 나온다(세우면 손에 쥔
+# 것과 달라 보이고, 눕히면 칸에 안 들어간다). 손에 쥔 것과 같은 비율이라야 칸 안의
+# 그림과 캐릭터가 든 그림이 같은 도구로 보인다.
+# **총열은 굵기가 일정해야 한다** — 손에 쥔 것처럼 총구로 가면서 가늘게 뽑았더니
+# 아이콘이 통째로 **나무 손잡이가 달린 칼**로 읽혔다(칸 하나에 도구 하나뿐이라
+# 실루엣이 전부다). 총신은 관이지 날이 아니다.
+# **탄창은 손에 쥔 것보다 길게 뺀다** — 그게 없으면 곧은 막대라 낚싯대와 갈리지
+# 않는다. 총열에서 아래로 두 칸 내려와야 "탄창"으로 읽힌다.
+ICON_GUN = dict(GUN, back=3.60, helve=3.00, helve_r=(1.60, 1.05),
+                barrel=7.60, barrel_r=(0.85, 0.85), barrel_dome=0.95,
+                mag_a=(0.70, -0.30), mag_b=(3.00, -0.90), mag_r=(0.95, 0.75),
+                mag_dome=0.85)
 ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0),
          # 낫은 자루가 짧고 날이 위로 크게 감기므로 손잡이를 **칸 아래쪽**에
          # 둔다. 자루를 세우는 것은 도끼/곡괭이와 같다 — 눕히면 날의 감긴 축이
@@ -1684,7 +1830,9 @@ ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0),
          # 곡괭이는 머리가 좌우 대칭이라 **자루를 칸 한가운데 세운다**(도끼는 날이
          # 한쪽으로만 나가서 자루를 왼쪽에 붙였다). 84도 — 여기서 더 눕히면
          # 크로스바가 기울어 한쪽 갈래만 내려간다.
-         "pickaxe": dict(kit=ICON_PICKAXE, grip=(8.2, 14.2), angle=84.0)}
+         "pickaxe": dict(kit=ICON_PICKAXE, grip=(8.2, 14.2), angle=84.0),
+         # 총만 눕는다 — 칸의 대각선이 곧 총의 길이다.
+         "gun": dict(kit=ICON_GUN, grip=(6.2, 10.6), angle=33.0)}
 
 
 def tool_icon(tool="axe", pal=None):

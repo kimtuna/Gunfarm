@@ -60,7 +60,7 @@ const EQUIP_NAMES := {
 const ITEMS := {
 	# 도구 7종 (docs/DESIGN.md 「생활 스킬 — 채집 계열」의 도구 표).
 	# 도구는 「카테고리」의 완성품이고, 한 칸에 하나씩만 들어간다.
-	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE},
+	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE, "icon": "item_gun"},
 	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE, "icon": "item_axe"},
 	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE, "icon": "item_pickaxe"},
 	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE, "icon": "item_sickle"},
