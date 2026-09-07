@@ -42,8 +42,9 @@ var _image: Image = null
 var _style := ""
 var _frames := 0
 var _board: ColorRect = null
-## 캡처 순서 — 0: 머리모양 판, 1: 도구 판. **불린이 아니라 단계 번호다**: 판을
-## 치웠는지로 판단하면 두 번째 판을 세운 순간 다시 첫 단계로 읽혀 무한히 돈다.
+## 캡처 순서 — 0: 머리모양 판, 그다음은 **도구 하나당 한 단계**다. **불린이 아니라
+## 단계 번호다**: 판을 치웠는지로 판단하면 다음 판을 세운 순간 다시 첫 단계로
+## 읽혀 무한히 돈다.
 var _stage := 0
 
 
@@ -205,16 +206,18 @@ func _process(_delta: float) -> bool:
 		return false
 	if _stage == 0:
 		_shoot("80_player_idle_hairstyles")
-		# 두 번째 판은 앞의 것을 치우고 새로 세운다 — 뷰포트를 통째로 찍으므로
-		# 겹쳐두면 둘이 한 장에 섞인다.
-		_board.queue_free()
-		_build_tool_board()
-		_stage = 1
-		_frames = 0
-		return false
-	_shoot("81_player_tools_on_grass")
-	_report()
-	return true
+	else:
+		_shoot("81_player_tools_on_grass_%s" % PlayerFrames.TOOLS[_stage - 1])
+	# 다음 판은 앞의 것을 치우고 새로 세운다 — 뷰포트를 통째로 찍으므로
+	# 겹쳐두면 둘이 한 장에 섞인다.
+	_board.queue_free()
+	if _stage >= PlayerFrames.TOOLS.size():
+		_report()
+		return true
+	_build_tool_board(PlayerFrames.TOOLS[_stage])
+	_stage += 1
+	_frames = 0
+	return false
 
 
 ## 눈으로 볼 몫. 실제 게임 배율(3배)로, 지형 색 위에 **머리모양 4종 × 방향 4개**를
@@ -245,23 +248,31 @@ func _build_board() -> void:
 ## **도구를 든 모습을 실제 지형 색 위에 실제 배율(3배)로** 늘어놓는다
 ## (2026-09-07, INBOX #24 — `docs/STYLE_GUIDE.md` 7번 6항: 기존 자산과 나란히
 ## 놓고 팔레트·도트 크기·외곽선이 어울리는지 보는 자리다).
-## 행 = 방향, 열 = 맨손 idle · 도구를 들고 서 있기 · 사용 모션 프레임들.
-## 도구 동작은 아직 안 붙었으므로(그건 [BUILD] 바퀴다) 시트에서 직접 떠다 그린다.
-func _build_tool_board() -> void:
+## 행 = 방향, 열 = 맨손 idle · **도구 전부의 들고 있기** · 이 도구의 사용 프레임들.
+##
+## **도구마다 한 장씩 찍는다**(2026-09-07, INBOX #32). 전에는 한 줄에 도구를 전부
+## 늘어놓아서 칸 수가 `1 + 도구수 × 7` 로 늘었고, 도구 3종이면 22칸 = 1410px 라
+## 뷰포트(1280)를 넘어 캡처가 잘렸다. 지금은 `1 + 도구수 + 6` 이라 7종이 다
+## 붙어도 14칸(906px)이다. **비교 대상(맨손 idle 과 이미 있는 도구)은 여전히
+## 한 장 안에 같이 있다** — 그게 이 판의 목적이다.
+func _build_tool_board(tool: String) -> void:
 	var step := CELL * SCALE + 12
-	var motions: Array[String] = ["idle", "hold", "use"]
+	var keys: Array[String] = ["idle"]
+	for other: String in PlayerFrames.TOOLS:
+		keys.append("hold_%s" % other)
+	keys.append("use_%s" % tool)
 	var sheets := {}
-	for tool: String in PlayerFrames.TOOLS:
-		for motion in motions:
-			var key := motion if motion == "idle" else "%s_%s" % [motion, tool]
-			var texture: Texture2D = load(PlayerFrames.sheet_path(key, STYLES[0]))
-			if texture == null:
-				continue
-			sheets[key] = texture
+	var order: Array[String] = []
+	for key in keys:
+		var texture: Texture2D = load(PlayerFrames.sheet_path(key, STYLES[0]))
+		if texture == null:
+			continue
+		sheets[key] = texture
+		order.append(key)
 	# 칸 수는 **실제로 그릴 것에서 센다** — 도구 하나를 전제로 미리 더해두면
 	# (전에는 `2 + use 프레임 수` 였다) 도구가 늘 때마다 풀밭이 그림보다 좁아진다.
 	var columns := 0
-	for key: String in sheets:
+	for key in order:
 		columns += int(sheets[key].get_width() / CELL)
 	var board := ColorRect.new()
 	board.color = TerrainPalettes.color_of("grass", 1)
@@ -270,7 +281,7 @@ func _build_tool_board() -> void:
 	_board = board
 	for row in DIRS.size():
 		var column := 0
-		for key: String in sheets:
+		for key in order:
 			var texture: Texture2D = sheets[key]
 			for f in texture.get_width() / CELL:
 				var atlas := AtlasTexture.new()
