@@ -664,6 +664,21 @@ CFG = dict(
                         # (17px — 팔이 세 줄뿐이라 반팔로 갈라봐야 한 줄씩이다).
     leg_gap=0.35,       # 앞/뒷모습에서 두 다리 사이의 빈 폭(설계 단위)
     hair_lines=1,       # 앞모습 머리결(가르마) 경계 수 — `HAIR_STYLES` 의 `strand`
+    hair_cuts=None,     # 앞머리 결 경계 [(안쪽 오프셋, 기울기), ...]. `None` 이면
+                        # 17px 기본값. **기울기는 `ry` 로 나뉜다** — 머리가 커지면
+                        # 같은 숫자가 더 수직이 되어 결이 금으로 보인다
+    hair_cuts_up=None,  # 뒷모습(뒤통수)의 같은 것
+    hair_over={},       # 머리모양별 `HAIR_STYLES` 덮어쓰기. **캔버스가 바뀌면 여기가
+                        # 필요해진다**(2026-09-08, INBOX #49): `HAIR_STYLES` 의 길이는
+                        # 설계 단위라 캔버스를 따라 커지는데, **머리가 몸에서 차지하는
+                        # 비율이 바뀌면** 그 길이가 얼굴 위에서 다른 자리에 떨어진다 —
+                        # 32px idle 에서 머리를 12줄 → 15줄로 키우자 단발 머리단이
+                        # 눈을 덮었다(STYLE_GUIDE 「넓은 머리단이 눈을 덮으면 안 된다」)
+    side_hair_w=0.42,   # 관자놀이 머리(구레나룻)의 두께. **얼굴을 얼마나 감싸는가**다 —
+                        # 17px 에서는 이게 곧 1px 이라 더 줄일 자리가 없다
+    straps=0.0,         # 멜빵 한 짝의 반폭(설계 단위). 0 이면 없다 — 아래 `straps` 참고
+    strap_dx=1.30,      # 멜빵 두 짝이 몸 가운데에서 떨어진 거리
+    bib=0.0,            # 멜빵 아래 앞판(가슴받이)이 덮는 상의 높이의 비율. 0 이면 없다
     belt=True, limb_shade=0.16, contact=0.18, cuff=0.0, collar=0.0,
     torso_r=0.7, ears=0, arm_in=0.55, shoe_lip=0.34,
     fringe=3.7, fringe_tilt=0.0, side_hair=5.6,
@@ -717,15 +732,17 @@ CFG_KIND = {
         "toe", "heel", "foot_out", "side_arm", "torso_r", "ears",
         "fringe", "side_hair", "eye_dx", "eye_y",
         "nose_y", "nose_r", "nose_in",
-        "leg_top", "foot_y", "boot_h", "leg_gap",
+        "leg_top", "foot_y", "boot_h", "leg_gap", "side_hair_w", "straps", "strap_dx",
+        "hair_over",
         "bob", "lift", "stride", "stride_f", "arm_swing", "arm_swing_f",
         "stance_drag", "arm_slant")},
     **{k: "ratio" for k in (
         "head_p", "head_pb", "arm_taper", "leg_taper", "fringe_tilt", "sleeve",
         "belt", "limb_shade", "contact", "cuff", "collar", "shoe_lip",
-        "hair_shine", "dither", "key", "amb", "rim")},
+        "bib", "hair_shine", "dither", "key", "amb", "rim")},
     **{k: "grid" for k in ("eye_style", "eye_side", "glint", "blush", "blush_w",
-                           "brow", "buttons", "button_lum", "hair_lines")},
+                           "brow", "buttons", "button_lum", "hair_lines",
+                           "hair_cuts", "hair_cuts_up")},
 }
 assert set(CFG_KIND) == set(CFG), set(CFG_KIND) ^ set(CFG)
 
@@ -735,7 +752,7 @@ assert set(CFG_KIND) == set(CFG), set(CFG_KIND) ^ set(CFG)
 # 남긴 하나는 **허리띠**다 — 허리선이 곧 "다리가 시작하는 줄"이라 비율 검사
 # (`qa_sprite_check.py` 「비율」)가 몸통과 다리를 여기서 가른다.
 # `qa_sprite_check.py` 「옷포인트」가 이 함수로 개수를 센다.
-CLOTH_ACCENTS = ("belt", "collar", "cuff")
+CLOTH_ACCENTS = ("belt", "collar", "cuff", "straps")
 
 
 def cloth_accents(cfg=None):
@@ -1736,7 +1753,8 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
     묶은 꼬리)은 예외인데, 그때는 반드시 껍데기와 겹치게 시작해야 실루엣이 한
     덩어리로 남는다(`qa_sprite_check.py` 「실루엣」).
     """
-    st = HAIR_STYLES.get(style, HAIR_STYLES["short"])
+    st = dict(HAIR_STYLES.get(style, HAIR_STYLES["short"]))
+    st.update(cfg.get("hair_over", {}).get(style, {}))
     grow = 0.12 if d == "up" else 0.16  # 뒷모습은 얼굴이 없어 껍데기가 곧 실루엣이다
     shell = head_shape(hx, hy, rx + grow, ry, p_top=cfg["head_p"], p_bot=cfg["head_pb"])
     side = d in ("left", "right")
@@ -1808,8 +1826,9 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         #    9칸짜리 뒤통수에서 그건 오른쪽 1/3 이 통째로 어두워지는 것이다 →
         #    **실루엣 오른쪽 끝까지 가는 반평면**으로 잘라 경계를 하나만 만든다.
         #  - 그 경계를 수직선으로 두면 34px 때와 같은 **빗자루**가 된다 → 기울인다.
-        b.add(base_up(shell, nape), "hair",
-              mask=(GX - hx) > 0.55 + 0.42 * (GY - hy) / ry, lift=LIFT)
+        for off, slope in (cfg["hair_cuts_up"] or [(0.55, 0.42)]):
+            b.add(base_up(shell, nape), "hair",
+                  mask=(GX - hx) > off + slope * (GY - hy) / ry, lift=LIFT)
         return
 
     # 앞머리를 비스듬히 자른다 — 수평으로 자르면 바가지머리가 된다
@@ -1823,7 +1842,8 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         if side and s == sx:
             continue                          # 옆모습에서 얼굴 쪽 옆머리는 없다
         b.add(shell, "hair",
-              mask=(np.abs(GX - hx) > rx - 0.42) & (GY <= down) & (GX * s > hx * s),
+              mask=(np.abs(GX - hx) > rx - cfg["side_hair_w"])
+              & (GY <= down) & (GX * s > hx * s),
               part=cap, lift=LIFT)
 
     if side:
@@ -1883,11 +1903,16 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
         # 이 결이 하나뿐이어서였다. 두 줄은 **반대 방향으로 기울여야** 한다:
         # 같은 방향으로 나란히 두면 폭 일정한 세로 띠 두 개가 되어 빗자루가 된다.
         tip = 1.0 if not side else sx
-        cuts = [(tip, 0.9, 0.35)]
+        # **경계의 기울기는 캔버스마다 다시 잡는다**(2026-09-08, INBOX #49).
+        # `slope` 는 `ry` 로 나눈 값이라 머리가 커질수록 같은 숫자가 **더
+        # 수직**이 된다 — 32px 에서 17px 값을 그대로 쓰자 정수리에 5px 짜리
+        # 곧은 세로줄이 나서 결이 아니라 **금이 간 것**으로 보였다.
+        base_cuts = cfg["hair_cuts"] or [(0.9, 0.35), (0.35, -0.75)]
+        cuts = [(tip, base_cuts[0][0], base_cuts[0][1])]
         if cfg["hair_lines"] >= 2 and not side:
             # 가르마 — 반대쪽으로 더 안쪽에서, 반대로 기운다. 정수리 근처에서
             # 시작해 관자놀이로 벌어져야 "가른 자리"로 읽힌다.
-            cuts.append((-tip, 0.35, -0.75))
+            cuts += [(-tip, off, slope) for off, slope in base_cuts[1:]]
         for s, off, slope in cuts:
             b.add(shell, "hair", mask=sm & below(edge)
                   & ((GX - hx) * s > off + slope * (GY - hy) / ry), lift=LIFT)
@@ -2055,6 +2080,44 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
         chest = (m == SHIRT) & ~np.isin(pm, limbs)
         first = chest & ~np.pad(chest, ((1, 0), (0, 0)))[:-1]
         l[first] += cfg["collar"]
+
+    # 멜빵(+가슴받이) — **상의 위에 바지 재질을 세로로 얹는다**(2026-09-08, INBOX #49).
+    # 사람이 고른 참고 자료(`docs/design_reference/ref_farmer_ai.png`)에서 옷이
+    # "색칠한 사각형"이 아닌 이유가 이것이다: 어깨에서 허리까지 **재질이 둘로
+    # 갈려 있다.** 재질을 새로 늘리지 않고 **바지 램프를 그대로 쓴다** — 옷색
+    # 하나에서 셔츠/바지/신발이 나오는 규칙(DESIGN.md 「캐릭터 커스터마이징」)이
+    # 그대로 지켜지고, 팔레트 교체도 저절로 따라온다.
+    #
+    # **허리띠보다 먼저 칠한다** — 허리띠는 상의의 맨 아랫줄이라 멜빵이 그 줄까지
+    # 내려오면 두 줄이 붙어 허리가 두꺼워진다. 아래 `belt` 가 그 줄을 덮어쓴다.
+    # **소매(팔)에는 안 칠한다** — 허리띠와 같은 이유다(멜빵은 몸통을 지나간다).
+    if cfg["straps"]:
+        chest = (m == SHIRT) & ~np.isin(pm, limbs)
+        rows_ = np.nonzero(chest.any(1))[0]
+        if rows_.size:
+            r0, r1 = int(rows_[0]), int(rows_[-1])
+            PANTS = MATS.index("pants")
+            # 멜빵 두 짝. 옆모습은 몸 가운데 한 짝만 보인다 — 두 짝을 그리면
+            # 어깨 폭이 4px 인 옆모습에서 상의가 통째로 멜빵이 된다.
+            offs = [0.0] if side else [-cfg["strap_dx"], cfg["strap_dx"]]
+            band = np.zeros(N, dtype=bool)
+            for off in offs:
+                lo = int(round(px(cx + off - cfg["straps"])))
+                hi = int(round(px(cx + off + cfg["straps"])))
+                band[max(lo, 0):max(hi, 0)] = True
+            sel = chest & band[None, :]
+            # 가슴받이(앞판) — 멜빵 사이를 아래쪽부터 채운다. 두 줄만 남겨도
+            # "멜빵 + 앞판"이라는 것이 읽힌다.
+            if cfg["bib"]:
+                bib_top = r1 - int(round((r1 - r0) * cfg["bib"]))
+                inner = np.zeros(N, dtype=bool)
+                lo = int(round(px(cx - cfg["strap_dx"])))
+                hi = int(round(px(cx + cfg["strap_dx"])))
+                inner[max(lo, 0):max(hi, 0)] = True
+                sel |= chest & inner[None, :] & (np.arange(N)[:, None] >= bib_top)
+            m[sel] = PANTS
+            # 상의보다 한 단계 어둡게 — 앞에 얹힌 천이라 그늘이 진다.
+            l[sel] -= 0.10
 
     # 허리띠 — 상의 맨 아랫줄을 **바지 재질의 가장 어두운 단계**로 찍는다.
     # 재질을 바지로 두는 이유가 둘이다: (1) 색상이 옮겨진 바지색이라 상의와 확실히
@@ -2510,51 +2573,88 @@ def _p(px):
     return px / _K32
 
 
-# **2026-09-08 (INBOX #47) 에 통째로 다시 잡았다.** 사람 피드백: *"크기만 커졌지
-# 디테일이 하나도 없는데? 스타듀벨리랑 같은 32픽셀이라며"* — `#46` 까지는 여기에
-# `CFG_KIND` 의 "grid" 값만 있었다(= 같은 그림을 더 촘촘한 격자에 찍은 것뿐이라
-# 실루엣이 17px 과 한 칸도 다르지 않았다). 이제 **설계 길이("design")도 함께** 잡는다.
+# **2026-09-08 (INBOX #49) 에 다시 잡았다.** 사람이 ComfyUI 로 뽑은 농부 시안
+# (`docs/design_reference/ref_farmer_ai.png`)을 고르고 *"엄청 잘 나왔는데? 내가
+# 원했던 거긴 해"* 라고 하면서 **가로:세로 1:2 제약을 풀었다.** 그전(`#47`)은
+# 스타듀 농부를 목표로 **머리 40% / 1 : 2** 였는데, 이 참고 자료는 그것과 두 군데가
+# 정반대다 — **머리가 50% 이고, 머리가 어깨보다 넓다.**
 #
-# 가장 큰 값은 **세로비**다: 옛 32px idle 은 외곽선까지 **가로 18 × 세로 28 = 1:1.56**
-# 으로 32칸 중 28칸만 썼는데, 스타듀 농부는 **16 × 32 = 1:2** 다(참고 이미지를 실측).
-# 캔버스가 정사각이라고 캐릭터까지 정사각에 가깝게 그린 것이 "밋밋함"의 뿌리였다.
-# 검사도 그 자리를 안 보고 있었다 — `qa_sprite_check.py` 에 「세로비」를 넣었다.
+# 참고 자료를 32px 로 줄여 실측한 값(줄별 폭, 위→아래):
+#   `8 11 13 14 15 15 15 15 14 14 14 12 11 8 | 6 | 9 10 11 11 11 10 9 9 9 8 9 8 7`
+#   = 머리 14줄(50%) / **목 6px(가장 잘록)** / 몸통·다리 13줄, 전체 **15 × 28 = 1 : 1.87**.
+# **세로 32칸은 다 쓴다**(「캐릭터는 타일 두 칸」, DESIGN.md 「크기 표준」)이므로
+# 28줄짜리 실측을 30줄(알맹이)로 늘려 잡았다 — 폭도 같은 배로 늘려야 참고 자료의
+# 비가 유지된다(15 → 17, 어깨 11 → 12).
 IDLE_OVER = dict(
-    # ── 세로로 길게 · 가로로 좁게 (칸을 위아래로 다 쓴다) ──────────────────
-    # 실측 결과: 외곽선까지 **16 × 32**, 알맹이 14 × 30, 머리 40% /
-    # 몸통 6 / 다리 8 / 신발 4px.
-    head_rx=3.55, head_ry=2.95, head_cy=3.35, head_pb=2.4,
+    # ── 참고 자료의 비율 (알맹이 30줄 기준) ────────────────────────────────
+    #   머리+목 16줄(53%) / 상의 5 / 다리 6 / 신발 3, 외곽선까지 **18 × 32 = 1 : 1.78**
+    # `head_ry` 를 2.95 → 3.90 으로 키운 것이 이 항목의 가장 큰 값이다 —
+    # 머리가 12줄에서 15줄이 되면서 몸이 그만큼 짧아진다.
+    head_rx=3.90, head_ry=3.90, head_cy=4.34, head_p=2.00, head_pb=2.4,
     torso_w=4.80, side_torso_w=4.10, torso_r=1.30,
-    torso_top=6.90, torso_bot=10.625,
-    leg_top=10.00, foot_y=16.40, boot_h=2.06,
+    torso_top=_p(17), torso_bot=_p(23),
+    leg_top=_p(19), foot_y=16.40, boot_h=_p(3),
     arm_w=1.45, arm_in=0.50,
     # 두 다리 사이를 2px 벌린다 — 17px 의 0.35(=1px)를 그대로 두면 어두운 바지·신발
     # 사이에서 외곽선 한 줄이 묻혀 다리가 덩어리 하나로 보인다.
     leg_gap=0.60,
     # **반팔** — 몸통 옆에 살색 팔뚝이 보여야 팔이 있는 것으로 읽힌다.
     sleeve=0.48,
-    fringe=3.06, side_hair=4.94,
+    # 앞머리를 내리고(3.06 → 4.05) 관자놀이 머리를 **두 칸으로 두껍게**(0.42 → 1.15)
+    # 한다. 참고 자료에서 머리가 커 보이는 것은 얼굴이 커서가 아니라 **머리카락이
+    # 얼굴을 감싸서**다 — 얇은 한 칸으로 두면 커진 머리가 통째로 이마가 된다.
+    fringe=4.05, side_hair=7.30, side_hair_w=1.15,
 
     # ── 격자값(축소가 끝난 32px 격자에 칸을 세어 찍는 것들) ────────────────
     # 눈 — **2×2 이고 바깥 칸이 흰자다**(`sclera2`). `#45`/`#46` 의 3×2 통짜 잉크
-    # (`bead3`)는 좁아진 얼굴에서 검은 안경이 된다. 참고 이미지의 눈도 아트 2칸
+    # (`bead3`)는 좁아진 얼굴에서 검은 안경이 된다. 참고 자료의 눈도 아트 2칸
     # 폭에 바깥이 흰자·안쪽이 눈동자였다.
     eye_style="sclera2", eye_side="sclera2", glint=True,
-    eye_dx=_p(2.6), eye_y=_p(8),
-    # **눈썹은 뺐다**(`#45` 가 넣었던 것). 얼굴이 다섯 줄로 줄면서 눈썹 한 줄이
-    # 눈 바로 위에 붙어 **눈이 위아래로 두 배가 되어 째려본다** — STYLE_GUIDE
-    # 「자연스러움」이 금지한 인상이다. 후보를 나란히 놓고 확인했다.
+    eye_dx=_p(2.9), eye_y=_p(11),
+    # **눈썹은 뺐다**(`#45` 가 넣었던 것). 눈썹 한 줄이 눈 바로 위에 붙으면
+    # **눈이 위아래로 두 배가 되어 째려본다** — STYLE_GUIDE 「자연스러움」이
+    # 금지한 인상이다. 머리가 커져 얼굴이 여덟 줄이 된 지금도 그대로다.
     brow=None,
     blush_w=2,
-    nose_y=1.55, nose_r=(0.55, 0.52), nose_in=0.25,
-    # 옷깃 — 허리띠와 함께 옷 포인트 둘이다(상의가 여섯 줄이라 들어간다).
-    # **음수 = 어둡게**다. 17px 때처럼 어깨선을 밝게 하면 그 줄이 바로 위의 목
-    # 피부 쪽으로 붙어 「대비 skin|shirt」가 41 → 30 으로 떨어진다(하한과 같다) —
-    # 턱 아래는 원래 그늘이라 어두운 옷깃이 그림으로도 맞다.
+    # 코는 **눈보다 아래**여야 한다(STYLE_GUIDE 「음영과 형태」) — 눈을 세 줄
+    # 내렸으므로 코도 같이 내린다.
+    nose_y=2.55, nose_r=(0.55, 0.52), nose_in=-0.15,
+    # 옷깃 — **음수 = 어둡게**다. 17px 때처럼 어깨선을 밝게 하면 그 줄이 바로 위의
+    # 목 피부 쪽으로 붙어 「대비 skin|shirt」가 하한까지 떨어진다 — 턱 아래는 원래
+    # 그늘이라 어두운 옷깃이 그림으로도 맞다.
     collar=-0.35,
-    buttons=0,              # 앞섶 단추는 뺐다 — 상의 한가운데가 여섯 줄뿐이라
-                            # 단추 셋을 넣으면 옷이 아니라 자수가 된다
+    buttons=0,              # 앞섶 단추는 뺐다 — 멜빵이 이미 앞섶을 지나간다
     hair_lines=2,           # 앞머리 결(가르마) 경계 수
+    # **결 경계를 더 눕힌다**(2026-09-08, INBOX #49). `slope` 는 `ry` 로 나뉘는데
+    # 머리를 12줄 → 15줄로 키우자 17px 값(0.35 / -0.75)이 그대로 **곧은 세로줄**이
+    # 되어 정수리에 금이 간 것처럼 보였다. 뒷모습은 갈래를 **둘**로 늘렸다 —
+    # 15줄짜리 뒤통수에서 경계가 하나뿐이면 검은 판때기가 된다(STYLE_GUIDE 6번의
+    # "매끈한 타원 하나면 회색 달걀"이 커진 머리에서 되풀이된 것이다).
+    hair_cuts=[(0.9, 0.75), (0.30, -1.35)],
+    hair_cuts_up=[(0.40, 1.30), (-1.35, -1.10)],
+    # **멜빵**(2026-09-08, INBOX #49) — 참고 자료에서 옷이 "색칠한 사각형"이 아닌
+    # 이유다. 어깨에서 허리까지 바지 재질 두 줄이 지나가서 **상의가 재질 둘로
+    # 갈린다.** 가슴받이(`bib`)까지 채운 후보도 구워봤는데, 상의 다섯 줄에서는
+    # 앞판이 옷깃 한 줄만 남기고 상의를 통째로 먹어서 "바지를 목까지 입은" 모습이
+    # 됐다 — 멜빵 두 줄까지가 이 칸에 들어가는 양이다.
+    straps=0.30, strap_dx=1.30, bib=0.0,
+    # **머리모양 3종을 다시 잡았다**(2026-09-08, INBOX #49). `HAIR_STYLES` 의 길이는
+    # 설계 단위라 캔버스를 따라 커지지만, **머리가 12줄에서 15줄이 되면서 같은 길이가
+    # 얼굴 위의 다른 자리에 떨어졌다** — 단발 머리단이 눈높이에서 시작해 얼굴을 덮었고
+    # (STYLE_GUIDE 「넓은 머리단이 눈을 덮으면 안 된다」), 긴머리는 어깨를 통째로 덮어
+    # 뒷모습에서 상의가 사라졌다. 셋 다 **후보를 나란히 놓고** 골랐다.
+    hair_over={
+        # 단발 — 머리단을 눈보다 **세 줄 아래**(광대)에서 시작하게 내리고, 대신
+        # 폭을 넓혀 얼굴 옆을 감싼다. 옆머리(`sides`)는 이제 껍데기가 알아서
+        # 턱까지 내려오므로 덜 준다.
+        "bob": dict(ftop=3.1, sides=0.4, fw=1.5, fall=0.9, back=1.0),
+        # 긴머리 — 어깨 밖으로 흘리되 **폭을 좁힌다.** 넓게 두면 상의가 통째로
+        # 가려지고(「비율」이 재질 없음으로 잡는다) 검은 넓이가 늘어 「채도」가
+        # 하한 아래로 떨어진다.
+        "long": dict(ftop=1.2, fall=3.0, fw=0.85, back=2.8, bw=2.1),
+        # 묶은머리 — 머리가 커진 만큼 꼬리도 길어야 뒤로 나온 것이 보인다.
+        "ponytail": dict(tail=2.8, sides=-0.9),
+    },
 )
 
 # 모션별 캔버스/설정. **여기 없는 모션은 네이티브 17px 그대로**다.

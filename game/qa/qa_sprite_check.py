@@ -222,46 +222,48 @@ def _player_spec(**over):
 
 
 def _idle_spec(**over):
-    """**32px idle 시트**(2026-09-08, INBOX #47 — 사람이 스타듀 농부를 보여주며
-    "이거 똑같이 만들어봐").
+    """**32px idle 시트** — 2026-09-08, INBOX #49 에 **참고 자료가 바뀌면서** 다시 잡았다.
 
-    `_player_spec()`(17px)에서 **캔버스가 커진 몫만큼** 다시 잡은 값들이다. 그냥
-    비례해서 곱한 게 아니라 32px 격자에 실제로 그려서 나온 실측이다 — 17px 때
-    34px 값을 반으로 나누지 않은 것과 같다.
+    사람이 ComfyUI 로 뽑은 농부 시안(`docs/design_reference/ref_farmer_ai.png`)을
+    고르고 *"엄청 잘 나왔는데? 내가 원했던 거긴 해"*, **1:2 제약도 풀었다.**
+    `#47` 이 스타듀 농부를 보고 잡았던 값 중 **두 개가 뒤집혔다.**
 
-    | | 17px | 32px idle |
+    | | #47 (스타듀) | #49 (지금 참고 자료) |
     |---|---|---|
-    | 캐릭터(외곽선 포함) | 11 × 16 | **16 × 32 — 1 : 2** |
-    | 머리 | 43% | **40%** |
-    | 몸통 / 다리 / 신발 | 3 / 3 / 2 | **6 / 8 / 4** |
-    | 눈 | 가로 2 × 세로 1, 흰자 없음 | **2 × 2, 바깥 칸이 흰자** |
-    | 옷 포인트 | 1개(허리띠) | **2개(허리띠 + 옷깃)** |
+    | 세로비 | 1 : 2 (16 × 32) | **1 : 1.78 (18 × 32)** — 참고 자료가 15 × 28 = 1:1.87 |
+    | 머리(목 포함) | 40% | **53%** — 참고 자료의 머리 14줄 = 50% + 목 한 줄 |
+    | 머리 폭 > 어깨 폭 | 놓았다 | **다시 요구한다** — 참고 자료는 15 vs 11 이다 |
+    | 몸통 / 다리 / 신발 | 6 / 8 / 4 | **5 / 6 / 3** (머리가 커진 만큼 몸이 짧다) |
+    | 옷 포인트 | 2개(허리띠 + 옷깃) | **3개(+ 멜빵)** |
 
-    **비율 밴드는 스타듀 농부를 실측해서 잡았다**(`docs/design_reference/
-    ref_stardew_farmer.png` — 아트 32줄에 머리 42% / 상의 22% / 바지 26% / 신발 10%).
-    INBOX #47 은 「머리 37% / 상의 13% / 바지+신발 51%」로 적었지만 그 값은 참고
-    이미지에서 재현되지 않았다 — 자세한 것은 `docs/STYLE_GUIDE.md` 3번.
+    17px 시트(걷기·도구 18장)는 `_player_spec()` 그대로다 — 이 항목은 idle 만이다.
     """
     _gen()
     import gen_character as gen
     return _player_spec(
         cell=gen.IDLE_N,
         # **캔버스가 두 배가 되면 곧은 구간도 두 배로 잡힌다.** 다리 한 짝이
-        # 7줄이라 17px 의 5px 로는 어떤 그림도 통과할 수 없다(17px 에서 다리가
-        # 세 줄이던 것과 같은 자리다). 실측: 짧은머리 8 / 단발 9.
+        # 여러 줄이라 17px 의 5px 로는 어떤 그림도 통과할 수 없다. 실측: 9.
         straight_max=9,
-        head_frac=(0.36, 0.44),
-        bands=dict(torso=(5, 8), legs=(7, 10), shoes=(3, 5)),
-        # **1 : 2** — 스타듀 농부와 같은 비다. 아래로는 "정사각에 가깝다",
-        # 위로는 "막대기"가 벽이다.
-        aspect=(1.85, 2.25),
-        # **놓았다** — 스타듀 농부는 머리가 어깨보다 넓지 않다(INBOX #47).
-        head_wider=False,
+        # 머리 14줄(50%) + 목 한 줄. **아래는 "머리를 안 키운 것", 위는 "몸이
+        # 사라진 것"이 벽이다** — 참고 자료 실측이 53% 다.
+        head_frac=(0.50, 0.57),
+        bands=dict(torso=(4, 6), legs=(5, 8), shoes=(3, 4)),
+        # 참고 자료가 **15 × 28 = 1 : 1.87** 이라 1 : 2 를 놓았다(사람 결정).
+        # 실측은 앞/뒷모습 18 × 32 = 1 : 1.78, 옆모습 17 × 32 = 1 : 1.88 이고
+        # **묶은머리 옆모습만 1 : 1.68** 이다(꼬리가 뒤로 나와 한 칸 넓다) —
+        # 아래 벽은 그 한 칸을 받아주는 자리에 둔다. #47 이 잡았던 1 : 1.56 은
+        # 여전히 걸린다.
+        aspect=(1.65, 2.00),
+        # **되살렸다** — 참고 자료는 머리 폭 15, 어깨 폭 11 이다(2026-09-08, INBOX #49).
+        # `#47` 이 스타듀 농부를 보고 놓았던 것을 사람이 다시 뒤집었다.
+        head_wider=True,
         # 눈 2×2. 바깥 칸이 흰자라 하이라이트(흰색)가 **있어야** 한다.
         eye_size=dict(w=(2, 2), h=(2, 2)),
         eye_glint=True,
-        # 상의가 여섯 줄이라 허리띠와 옷깃이 둘 다 들어간다.
-        accents_max=2,
+        # 허리띠 + 옷깃 + **멜빵**. 멜빵은 참고 자료에서 옷이 "색칠한 사각형"이
+        # 아닌 이유라, 셋째 포인트를 여는 값을 한다.
+        accents_max=3,
         accents_over=gen.IDLE_OVER,
         **over)
 
@@ -446,8 +448,17 @@ SPECS = {"terrain_tiles.png": TERRAIN_SPEC, "death_box.png": _box_spec()}
 for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
     SPECS["ground_%s.png" % _tool] = _ground_spec()
+# **긴머리 idle 만 「채도」를 늦춘다**(2026-09-08, INBOX #49). 기준색 머리가 검정
+# (무채색)이라 머리가 길수록 시트가 탁해지는데, `#49` 로 머리가 캐릭터의 절반이
+# 되면서 그 차이가 다시 벌어졌다 — 실측 short 40 / bob 34 / ponytail 37 / **long 32**.
+# 34px 때 같은 자리에서 같은 완화를 썼다(STYLE_GUIDE 6번 「머리 길이가 다른 시트는
+# 평균명도/어두운비율/채도가 실제로 다르다 — 그 셋만 시트마다 따로 잡는다」).
+# **그 셋 말고는 한 줄도 늦추지 않는다.**
+_IDLE_CHROMA = {"long": 31.0}
+
 for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STYLES
-    SPECS["player_idle_%s.png" % _style] = _idle_spec()
+    SPECS["player_idle_%s.png" % _style] = _idle_spec(
+        **({"chroma_mean": _IDLE_CHROMA[_style]} if _style in _IDLE_CHROMA else {}))
     SPECS["player_walk_%s.png" % _style] = _walk_spec(_style)
     # 도구별 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 4 — 안 넓히면 새 모션은
     # 아무도 검사하지 않는다). 도구가 늘면 이 줄의 목록만 늘린다.
@@ -1030,8 +1041,9 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
             # 기준이다(외곽선은 위아래로 1px 씩 더 붙는다). **손에 쥔 도구는
             # 몸이 아니라 뺀다**(2026-09-07, INBOX #24) — 머리 옆에 든 도끼날이
             # 머리로, 자루가 어깨폭으로 세어지면 비율이 통째로 뒤틀린다.
+            tool_mats = tuple(spec.get("tool_mats", ()))
             fill = mm != ""
-            for mat in spec.get("tool_mats", ()):
+            for mat in tool_mats:
                 fill &= mm != mat
             ys = np.nonzero(fill.any(1))[0]
             top, bot = int(ys[0]), int(ys[-1])
@@ -1040,7 +1052,30 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
                 got = np.nonzero((mm == mat).any(1))[0]
                 return None if got.size == 0 else int(got[0])
 
-            shirt, pants, boot = first("shirt"), first("pants"), first("boot")
+            def band_start(mat):
+                """그 재질이 **그 줄에서 가장 넓은 재질이 되는 첫 줄**.
+
+                전에는 그냥 `first(mat)`(그 재질이 처음 보이는 줄)이었는데,
+                2026-09-08(INBOX #49)에 32px idle 에 **멜빵**이 붙으면서 그게
+                깨졌다 — 멜빵은 상의 위에 얹힌 **바지 재질**이라 첫 바지 줄이
+                허리가 아니라 어깨를 가리킨다. 「가장 넓은 재질」로 바꾸면
+                한 짝에 한 칸뿐인 멜빵은 안 잡히고 몸통을 가로지르는 허리띠만
+                잡힌다. **도구 재질은 빼고 센다** — 도구가 다리를 가리는 사용
+                프레임에서 바지가 두세 칸까지 줄어들기 때문이다.
+                """
+                names = [x for x in set(mm.ravel()) if x and x not in tool_mats]
+                if mat not in names:
+                    return None
+                cnts = {x: (mm == x).sum(1) for x in names}
+                best = np.max(np.stack([cnts[x] for x in names]), axis=0)
+                got = np.nonzero((cnts[mat] > 0) & (cnts[mat] >= best))[0]
+                return None if got.size == 0 else int(got[0])
+
+            # **허리선만 「가장 넓은 재질」로 찾는다** — 어깨선(상의)과 신발은
+            # 예전대로 첫 줄이다. 상의는 도구를 든 프레임에서 어깨 맨 윗줄이
+            # 한두 칸뿐이라 「가장 넓은 재질」로 재면 한 줄 밀린다(곡괭이 시트가
+            # 실제로 그랬다) — 거기는 애초에 재질이 겹칠 일이 없다.
+            shirt, pants, boot = first("shirt"), band_start("pants"), first("boot")
             if None in (shirt, pants, boot):
                 prop.append("%s 재질 없음" % tag)
                 continue
