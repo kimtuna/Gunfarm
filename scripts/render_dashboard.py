@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """docs/index.html 을 다시 그린다. loop.sh 가 매 바퀴 호출한다.
 
-README.md "대시보드는 최소한으로 유지한다" — 남은/완료 개수, 다음 항목,
+README.md "대시보드는 최소한으로 유지한다" — 남은/완료 개수, 대기 중인 항목,
 마지막 커밋, 경고 배너. 그 이상은 넣지 않는다.
 """
 import html
@@ -71,7 +71,6 @@ def git(*args):
 def main():
     done, todo = read_inbox()
     later = read_later()
-    nxt = todo[0] if todo else None
     warning = WARN.read_text(encoding="utf-8").strip() if WARN.exists() else ""
     # 예산 상한을 없앴으므로(env.sh) 누적 사용량은 항상 보이게 둔다.
     # 주의: claude 가 주는 total_cost_usd 는 'API 요금제였다면 얼마' 하는 **환산값**이다.
@@ -98,10 +97,19 @@ def main():
     e = html.escape
     banner = (f'<div class="warn"><strong>루프 멈춤</strong><pre>{e(warning)}</pre></div>'
               if warning else "")
-    next_html = (f'<span class="num">#{nxt[0]}</span> {e(nxt[1])}' if nxt
-                 else '<span class="idle">큐가 비었습니다 — 루프는 세션을 열지 않고 종료합니다.</span>')
-    todo_rows = "\n".join(
-        f'<li><span class="num">#{n}</span> {e(t)}</li>' for n, t in todo[:15]) or '<li class="idle">없음</li>'
+    # 「다음 항목」을 따로 두지 않는다 — 그 값이 곧 todo[0] 이라 아래 목록 첫 줄과 항상
+    # 똑같은 내용이 두 번 나왔다(2026-09-07 사람이 버그로 지적). 목록 하나로 합치고
+    # 맨 위 줄에만 표시를 단다.
+    if todo:
+        rows = []
+        for i, (n, t) in enumerate(todo[:15]):
+            lead = '<span class="lead">다음</span>' if i == 0 else ""
+            cls = ' class="first"' if i == 0 else ""
+            rows.append(f'<li{cls}>{lead}<span class="num">#{n}</span> {e(t)}</li>')
+        todo_rows = "\n".join(rows)
+    else:
+        todo_rows = ('<li class="idle">큐가 비었습니다 — 루프는 세션을 열지 않고 '
+                     '종료합니다.</li>')
 
     # LATER.md 는 사람이 쓰는 마크다운이라 **강조**가 섞인다. 이스케이프를 **먼저**
     # 하고(태그 주입 방지) 그 다음에 별표만 <strong> 으로 바꾼다 — 순서를 뒤집으면
@@ -135,6 +143,11 @@ h2 {{ font-size:.78rem; letter-spacing:.08em; text-transform:uppercase; color:va
 ul {{ margin:0; padding-left:1.1rem; }} li {{ margin:.15rem 0; }}
 .num {{ color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums; }}
 .idle {{ color:var(--dim); }}
+.queue li.first {{ color:var(--fg); font-weight:600; }}
+.queue li {{ color:var(--dim); }}
+.lead {{ display:inline-block; background:var(--accent); color:var(--bg); border-radius:4px;
+  padding:.05rem .32rem; font-size:.7rem; font-weight:700; margin-right:.35rem;
+  vertical-align:.08em; }}
 .later li {{ color:var(--dim); }} .later strong {{ color:var(--fg); font-weight:600; }}
 pre {{ margin:.4rem 0 0; white-space:pre-wrap; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
 code {{ font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
@@ -148,8 +161,7 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
   <div class="card"><b>{len(done)}</b><span>완료</span></div>
   <div class="card"><b>{len(todo)}</b><span>남음</span></div>
 </div>
-<section><h2>다음 항목</h2>{next_html}</section>
-<section><h2>대기 중인 항목</h2><ul>{todo_rows}</ul></section>
+<section><h2>대기 중인 항목</h2><ul class="queue">{todo_rows}</ul></section>
 <section><h2>마지막 커밋</h2><code>{e(last_commit) or '(없음)'}</code>
   <p class="sub" style="margin:.3rem 0 0">{e(last_commit_when)}</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
