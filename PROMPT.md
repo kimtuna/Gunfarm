@@ -19,7 +19,8 @@
    PNG를 저장했다면, 확인하기 전에 항상 `godot --headless --path . --import`로
    재임포트한다(안 하면 옛 이미지가 그대로 로드된다).
 3. **자체 QA**: 실제로 실행해서 확인한다. 화면에 보이는 게 있으면 스크린샷을 찍어서
-   Read 도구로 직접 본다("코드가 호출된다"와 "의도대로 보인다"는 다른 문제). **실행
+   Read 도구로 직접 본다("코드가 호출된다"와 "의도대로 보인다"는 다른 문제).
+   **전부 돌리지 않는다 — 아래 「어떤 QA 를 돌릴 것인가」를 따른다.** **실행
    결과가 예상과 다르거나 에러가 나면, 원인을 스스로 추측/조사하기 전에 먼저
    `docs/GOTCHAS.md`를 검색해서 비슷한 사례가 이미 있는지 확인한다** — 있으면 그 대응법을
    바로 쓰고, 처음부터 다시 삽질하지 않는다. 통과하면 4번으로. **통과 못 하면
@@ -27,6 +28,45 @@
    끝낸다.
 4. **커밋 + push**: `git add` → 커밋(아래 형식) → **`git push origin HEAD:main`까지
    이 세션이 직접 한다** (별도 스크립트가 대신 push하지 않는다).
+
+---
+
+## 어떤 QA 를 돌릴 것인가
+
+`game/qa/` 에 **22벌(1만 줄)** 이 쌓였다. 매 바퀴 전부 돌리면 시간과 비용이 계속 늘고,
+대부분은 이번에 건드리지도 않은 것을 확인한다. **바꾼 것을 덮는 것만 돌린다.**
+
+**A. 항상 돌린다 (둘 다 싸다)**
+- **`qa_uid_files`** — 새 스크립트나 자산을 만들었으면 `.uid`/`.import` 짝이 맞는지.
+  헤드리스로 순식간이다.
+- **`qa_sprite_check.py`** — **PNG 를 하나라도 바꿨으면.** `.venv/bin/python` 으로 돈다.
+
+**B. 바꾼 자리에 해당하는 묶음만 돌린다**
+
+| 무엇을 건드렸나 | 돌릴 것 |
+|---|---|
+| 메인 메뉴 · 슬롯 · 커스터마이징 · 설정 화면 | `qa_main_menu` `qa_character_slots` `qa_character_customize` `qa_settings` `qa_world_entry` |
+| 슬롯 저장 데이터(`slot_store.gd`) | `qa_slot_store` + 그 데이터를 쓰는 것(인벤토리/지도/외형) |
+| 월드 생성 · 지형 | `qa_world_gen` `qa_terrain_view` `qa_world_entry` |
+| 플레이어 이동 · 충돌 · 카메라 | `qa_player_world` `qa_player_walk` |
+| 캐릭터 그림 · 팔레트 · 시트 | `qa_player_sprite` `qa_character_sprite` `qa_player_appearance` `qa_player_walk` |
+| 인벤토리 · 핫바 · 바닥 아이템 | `qa_inventory` `qa_hotbar` `qa_ground_items` |
+| 총알 · 탄창 · 체력 · 죽음 | `qa_bullets` `qa_gun_ammo` `qa_health` `qa_death_box` |
+| 지도 | `qa_map` |
+
+**C. 전부 돌려야 하는 때 — 여러 화면이 공유하는 것을 건드렸을 때만**
+`player_frames.gd` 의 `CELL`/`SCALE`, `terrain_tiles.gd` 의 `TILE_ART`, `project.godot`
+의 논리 해상도, 팔레트(`character_palettes.gd`), 캔버스 크기 — 이런 **전역 상수**는
+어디에 영향을 줄지 미리 알 수 없다. 그때만 22벌을 다 돌린다. 사람이 요청할 때도 마찬가지.
+
+**D. 어느 쪽인지 애매하면 B 를 넓게 잡는다.** 묶음 하나를 더 돌리는 비용은 작지만,
+안 돌려서 놓친 고장은 다음 바퀴가 엉뚱한 데서 헤매게 만든다. **"전부 돌린다"의 반대는
+"하나만 돌린다"가 아니다.**
+
+- **`--headless` 없이 돌린다** (`docs/GOTCHAS.md`) — 붙이면 캡처와 마우스 검증이 헛돈다.
+  단 `qa_world_gen` `qa_slot_store` `qa_uid_files` 는 화면이 필요 없어 헤드리스로 돈다.
+- **돌린 것과 그 이유를 `docs/STATUS.md` 에 적는다** — "22벌 전부"가 아니라 "무엇을
+  건드려서 무엇을 돌렸는지". 다음 바퀴가 그 판단을 이어받는다.
 
 ---
 
