@@ -65,6 +65,10 @@ const SORT_OFFSET := 10.0
 ## Y정렬 검사가 "겹쳤다"고 인정하는 최소 픽셀 수 — 이보다 적으면 검사가 헛돈 것이다.
 const SORT_MIN_PIXELS := 100
 
+## 조준을 밀어놓을 때 커서를 기준점에서 화면 짧은 변의 몇 배만큼 떼어놓는가
+## (`qa_player_world.gd` 와 같은 값·같은 방식).
+const AIM_REACH := 0.3
+
 var _steps: Array[Callable] = []
 var _step := 0
 var _wait := 0
@@ -90,6 +94,13 @@ func _initialize() -> void:
 	_steps = [
 		_settle,
 		_stand_on_open_land,
+		_settle,
+		# 커서를 **일부러 반대쪽(위)** 에 먼저 둔다 — 바로 아래에서 아래를 겨눌 때,
+		# 방향이 정말 이 warp 에서 오는 것이지 이 기계의 커서가 우연히 아래에 있어서가
+		# 아님이 확인된다.
+		func(): _aim_at(-PI / 2.0),
+		_settle,
+		func(): _aim_at(PI / 2.0),
 		_settle,
 		# 10) 버리면 그려진다 — **옮기지 않고** 놓인 그 자리에서 본다
 		func(): _remember_shot("empty"),
@@ -707,6 +718,22 @@ func _stand_on_open_land() -> void:
 	_fails.append("사방이 육지인 자리를 못 찾았다")
 
 
+## 실제 마우스를 조준 기준점에서 `angle` 쪽으로 밀어놓는다.
+##
+## **바라보는 방향은 마우스가 정한다**(`player.gd` 의 `aim_angle_for`) — 그래서
+## 커서를 안 옮기면 「버린 것이 앞 한 칸에 놓이는가」가 **그 기계의 커서가 어디
+## 있었는지**에 따라 통과하거나 실패한다. 각도를 코어에 직접 넣지 않고
+## `Input.warp_mouse()` 로 미는 이유는 노드의 "마우스 → 각도" 변환까지 함께
+## 지나가야 하기 때문이다 (docs/GOTCHAS.md).
+##
+## 카메라가 플레이어의 자식이라 **발밑이 화면 한가운데**고, 조준 기준점은 거기서
+## 몸 절반만큼 위다(`player.gd` 의 `aim_origin()`).
+func _aim_at(angle: float) -> void:
+	var size := Vector2(DisplayServer.window_get_size())
+	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	Input.warp_mouse(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH)
+
+
 func _land_around(world: RefCounted, tile: Vector2i, radius: int) -> bool:
 	for dy in range(-radius, radius + 1):
 		for dx in range(-radius, radius + 1):
@@ -734,7 +761,7 @@ func _read_drop_spot() -> void:
 	var gap := _shown_position.distance_to(_drop_position)
 	if gap <= GroundItems.PICKUP_RADIUS:
 		_fails.append("버린 것이 발밑에서 %.1f px 밖에 안 떨어졌다 — 캐릭터에 가린다" % gap)
-	# 바라보는 쪽(기본은 아래)이라 Y정렬상 캐릭터 앞이다.
+	# 바로 앞 단계에서 마우스로 **아래**를 겨눠뒀다(`_aim_at`) — 그래서 앞은 아래쪽이다.
 	if _shown_position.y <= _drop_position.y:
 		_fails.append("아래를 보고 버렸는데 아이템이 캐릭터 앞으로 안 갔다")
 

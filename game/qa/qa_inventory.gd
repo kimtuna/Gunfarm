@@ -38,6 +38,7 @@ const ItemStack := preload("res://scripts/item_stack.gd")
 const ItemTypes := preload("res://scripts/item_types.gd")
 const InventoryPanel := preload("res://scripts/inventory_panel.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
+const PlayerFrames := preload("res://scripts/player_frames.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
@@ -56,6 +57,10 @@ const MOUSE_SETTLE_SECONDS := 0.12
 const HOLD_SECONDS := 0.25
 
 const COLOR_EPSILON := 0.03
+
+## 조준을 밀어놓을 때 커서를 기준점에서 화면 짧은 변의 몇 배만큼 떼어놓는가
+## (`qa_player_world.gd` 와 같은 값·같은 방식).
+const AIM_REACH := 0.3
 
 const PAUSE := "HUD/PauseMenu"
 const PAUSE_BOX := "HUD/PauseMenu/Box/BoxLayout"
@@ -91,6 +96,14 @@ func _initialize() -> void:
 		_check_closed_at_start,
 		_check_starter_items,
 		_stand_on_open_land,
+		_settle,
+		# **버리기가 어디에 놓이는지는 바라보는 방향이 정한다**(「바닥 드롭」) — 그리고
+		# 그 방향은 마우스가 정한다. 창이 열려 있는 동안 조준은 얼어붙으므로
+		# (`player.gd` 의 `input_enabled`), **창을 열기 전에** 여기서 못 박아둔다.
+		# 안 하면 이 기계의 커서가 어디 있었는지가 버려지는 자리를 정해버린다.
+		func(): _aim_at(-PI / 2.0),
+		_settle,
+		func(): _aim_at(PI / 2.0),
 		_settle,
 		_press_inventory_key,
 		_settle,
@@ -548,6 +561,15 @@ func _check_dropped_outside() -> void:
 			_fails.append("버린 아이템이 플레이어에게서 한 칸보다 멀리 놓였다")
 	if inv.count_of(stack.id) != 0:
 		_fails.append("버렸는데 인벤토리에 %s 가 남아 있다" % stack.id)
+
+
+## 실제 마우스를 조준 기준점에서 `angle` 쪽으로 밀어놓는다
+## (`qa_player_world.gd` / `qa_ground_items.gd` 와 같은 방식 — 각도를 코어에 직접
+## 넣으면 노드의 "마우스 → 각도" 변환을 안 지나간다, docs/GOTCHAS.md).
+func _aim_at(angle: float) -> void:
+	var size := Vector2(DisplayServer.window_get_size())
+	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	Input.warp_mouse(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH)
 
 
 # --- 12) 창이 열린 동안 안 움직인다 --------------------------------------------
