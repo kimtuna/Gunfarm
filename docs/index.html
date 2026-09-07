@@ -40,8 +40,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#45</span> [DESIGN] **캐릭터 32px 을 이미지로만 시험한다 — 채택이 아니다.** 사람 요청(2026-09-07 저녁): 사람 그림이 제일 중요하니 **먼저 눈으로 보고** 정하겠다. **#44 와 똑같은 방식이다** — 게임 자산을 한 바이트도 바꾸지 않고 비교 이미지와 사실만 남긴다. 도구는 `game/tools/try_canvas.py` 와 `gen_character.py` 의 `canvas_scale(n)` 이 이미 있다(#44 가 만들었다).</li></ul></section>
-<section><h2>마지막 커밋</h2><code>3e77093  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 21:13</p></section>
+<section><h2>마지막 커밋</h2><code>6ed2239  inbox: #45 를 이미지 시험으로 되돌리고, 이사 계획은 LATER.md 로</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 21:17</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — **INBOX #44 [DESIGN] 캔버스 26px 시험.** 판단 재료만 만들었다.
 **아무것도 채택하지 않았고, 게임 자산은 한 바이트도 안 바뀌었다.**
 
@@ -74,7 +74,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907211719";
+  var STAMP = "20260907211730";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
