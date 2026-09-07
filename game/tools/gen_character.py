@@ -2442,6 +2442,51 @@ def walk_path(style):
     return motion_path("walk", style)
 
 
+# ── idle 만 32px 로 굽는다 — **샘플이다** (2026-09-07 사람 결정, INBOX #46) ──────
+# `#45` 가 시험만 하고 남긴 32px 안(`try_canvas32.py` 의 `TUNED32`)을 **idle 4장에
+# 한해** 실제 게임 자산으로 굽는다. 나머지 모션(걷기·도구 3종×7)은 **17px 인 채로
+# 남는다** — 사람이 게임에서 직접 보고 이사 여부를 정하기 위한 상태이지 이사가
+# 아니다. 그래서 걸으면 캐릭터가 51px 에서 96px 로 튄다(의도된 어긋남).
+#
+# 왜 32px 인가: 아트 32px × 씬 3배 = 96px = **지형 타일(16px × 3배 = 48px) 정확히
+# 두 칸**이다(`docs/DESIGN.md` 「크기 표준」). 배율도 타일도 안 건드린다.
+IDLE_N = 32
+
+# 32px 격자에서 다시 잡은 `CFG_KIND` 의 "grid" 값들 + 눈을 내리느라 같이 밀린 코.
+# **설계 길이("design")와 무차원 비율("ratio")은 한 줄도 안 바꾼다** — 그래서 머리가
+# 전체에서 차지하는 비율이 17px 과 같고(43% → 42%), 늘어난 칸이 전부 디테일로 간다.
+# 어떻게 골랐는지는 `try_canvas32.py` 와 `#45` 의 커밋 메시지에 있다.
+IDLE_OVER = dict(
+    # 눈 — 얼굴이 세 줄에서 **일곱 줄**이 되면서 3×2 잉크 + 하이라이트 한 칸이 든다.
+    eye_style="bead3", glint=True,
+    eye_dx=3.5 / (IDLE_N / float(DESIGN_N)),
+    eye_y=9 / (IDLE_N / float(DESIGN_N)),
+    # **옆모습만 2×2 로 줄인다** — 앞모습은 눈 양옆에 얼굴이 남지만 옆모습은 눈 앞이
+    # 곧 얼굴 앞선이라, 같은 3칸이면 얼굴 앞이 통째로 검은 사각형이 된다.
+    eye_side="bead",
+    brow=(2, 4, 0.85),      # 눈썹 — **머리색으로 옅게**. 잉크로 찍으면 째려본다
+    fringe=3.3,             # 앞머리를 한 줄 올려야 눈썹이 앞머리에 안 붙는다
+    blush_w=2,
+    nose_y=1.9, nose_r=(0.58, 0.55), nose_in=0.3,
+    collar=0.45,            # 상의가 일곱 줄이라 허리띠와 옷깃이 둘 다 들어간다
+    buttons=3, button_lum=-0.55,    # 앞섶 단추 — 어두운 쪽이라야 보인다
+)
+
+# 모션별 캔버스/설정. **여기 없는 모션은 네이티브 17px 그대로**다.
+MOTION_CANVAS = {"idle": IDLE_N}
+MOTION_OVER = {"idle": IDLE_OVER}
+
+
+@contextlib.contextmanager
+def motion_canvas(motion):
+    """그 모션을 굽는 캔버스로 들어간다. 반환값은 같이 넣을 `character()` 설정이다.
+
+    `canvas_scale(17)` 은 지금 격자와 완전히 같으므로 17px 모션에도 그냥 쓴다.
+    """
+    with canvas_scale(MOTION_CANVAS.get(motion, N)):
+        yield MOTION_OVER.get(motion, {})
+
+
 # ── Godot 쪽 팔레트 표 ─────────────────────────────────────────────────────
 # 게임은 **기준색으로 구운 시트 한 장의 색을 바꿔치기해서** 나머지 색을 만든다
 # (STYLE_GUIDE 2번 — 형태를 다시 그리지 않는다). 그러려면 Godot 이 램프 색을
@@ -2541,7 +2586,8 @@ if __name__ == "__main__":
     for style in HAIR_STYLES:
         for motion, make in MOTIONS_NOW:
             p = motion_path(motion, style)
-            make(hair=style).save(p)
+            with motion_canvas(motion) as over:
+                make(hair=style, **over).save(p)
             print("saved", p)
     for tool in ICONS:
         to_img(tool_icon(tool)).save(icon_path(tool))
@@ -2550,12 +2596,15 @@ if __name__ == "__main__":
         print("saved", ground_path(tool))
     print("saved", export_palettes())
     if os.environ.get("GEN_OUT"):     # 후보 비교용 — 저장소를 더럽히지 않는다
-        strip([to_img(character(d), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
-        strip([to_img(character(d), 3) for d in DIRS]).save(f"{OUT}/idle_x3.png")
-        stack([strip([to_img(character(d, hair=s), 6) for d in DIRS])
-               for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x6.png")
-        stack([strip([to_img(character(d, hair=s), 3) for d in DIRS])
-               for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x3.png")
+        # idle 계열은 **굽는 것과 같은 캔버스**로 뽑는다 — 안 그러면 비교 이미지가
+        # 게임에 실제로 들어간 그림이 아니게 된다(INBOX #46 로 idle 만 32px 이다).
+        with motion_canvas("idle") as over:
+            strip([to_img(character(d, **over), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
+            strip([to_img(character(d, **over), 3) for d in DIRS]).save(f"{OUT}/idle_x3.png")
+            stack([strip([to_img(character(d, hair=s, **over), 6) for d in DIRS])
+                   for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x6.png")
+            stack([strip([to_img(character(d, hair=s, **over), 3) for d in DIRS])
+                   for s in HAIR_STYLES]).save(f"{OUT}/hairstyles_x3.png")
         # 걷기는 **idle 을 맨 앞에 붙여서** 본다 — 프레임끼리 이어지는지만이 아니라
         # idle 에서 걷기로 넘어갈 때 자세가 뚝 끊기지 않는지도 같이 봐야 한다
         # (DESIGN.md 「캐릭터 애니메이션」).

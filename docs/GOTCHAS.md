@@ -121,3 +121,8 @@
 - **파싱/컴파일 에러가 나도 `--script` 실행은 끝나지 않고 계속 돈다**(에러만 찍고 SceneTree가
   멈추지 않음). 출력을 `| tail` 같은 파이프로 받으면 그 에러조차 안 보여서 그냥 멈춘 것처럼
   보인다 — 로그는 파일로 남기고(`> log 2>&1`), 안 끝나면 로그에서 `Parse Error`부터 찾을 것.
+- **Godot 이 `game/project.godot` 을 주석 없이 통째로 다시 쓰는 일이 있다** — 그때
+  `[rendering]` 절(`gl_compatibility` · `default_texture_filter=0`)과
+  `window/stretch/aspect="keep"` 처럼 **기본값과 다른 설정이 함께 사라진다**(도트가
+  흐려지고 창 비율 규칙이 깨진다). 무엇이 방아쇠인지는 재현되지 않았다 —
+  **커밋 전에 `git status game/project.godot` 을 보고, 떠 있으면 `git checkout` 한다.**

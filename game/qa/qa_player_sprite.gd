@@ -61,6 +61,7 @@ func _initialize() -> void:
 		_check_sheet_size()
 		_check_frames()
 		_check_pixels()
+	_check_mixed_cells()
 	_check_filter()
 	_build_board()
 	# 캡처는 `_process` 에서 몇 프레임 지난 뒤에 한다 — `_initialize()` 안에서
@@ -192,6 +193,69 @@ func _check_pixels() -> void:
 		_fail("잉크색(%s)이 한 픽셀도 없다 — 외곽선이 빠졌다" % INK.to_html(false))
 
 
+## **칸이 다른 시트가 한 `SpriteFrames` 에 섞여도** 각자 제 칸으로 잘리고 발밑 줄이
+## 맞는가 (2026-09-07, INBOX #46 — idle 만 32px 이고 걷기·도구는 17px 인 샘플 상태).
+##
+## 이 검사가 값을 하는 이유: 칸 크기를 상수 하나로 믿으면 칸이 다른 시트는 조각나거나
+## (칸이 작으면) 빈 칸이 되는데(칸이 크면), **그래도 게임은 안 죽는다** — 화면을
+## 눈으로 보기 전엔 모른다. 그리고 발밑 보정(`feet_offset()`)도 칸마다 달라야 해서,
+## 한 번만 넣어두면 칸이 다른 모션으로 넘어가는 순간 캐릭터가 땅에 묻히거나 뜬다.
+##
+## **모든 시트의 칸이 다시 같아져도(= 이사가 끝나도) 이 검사는 그대로 값을 한다** —
+## 그때는 "시트마다 칸을 읽는다"가 "전부 같은 칸이 나온다"로 통과할 뿐이다.
+func _check_mixed_cells() -> void:
+	_style = "섞인 칸"
+	var frames := PlayerFrames.build(STYLES[0])
+	if frames == null:
+		_fail("모든 모션을 담은 SpriteFrames 를 못 만들었다")
+		return
+	var seen := {}
+	for motion: String in PlayerFrames.motions():
+		var sheet: Texture2D = load(PlayerFrames.sheet_path(motion, STYLES[0]))
+		if sheet == null:
+			_fail("%s 시트를 못 읽었다" % motion)
+			continue
+		var cell := PlayerFrames.cell_of(sheet)
+		seen[cell] = true
+		var columns := maxi(1, sheet.get_width() / cell)
+		if cell * columns != sheet.get_width():
+			_fail("%s: 폭 %d 가 칸 %d 로 안 나눠떨어진다" % [motion, sheet.get_width(), cell])
+		for dir: String in DIRS:
+			var anim := "%s_%s" % [motion, dir]
+			var got := PlayerFrames.anim_cell(frames, anim)
+			if got != cell:
+				_fail("%s 를 칸 %d 로 잘랐다 — 그 시트의 칸은 %d 다" % [anim, got, cell])
+			if frames.get_frame_count(anim) != columns:
+				_fail("%s 가 %d프레임인데 시트는 %d열이다"
+						% [anim, frames.get_frame_count(anim), columns])
+		_check_feet_line(sheet.get_image(), motion, cell, columns)
+	var cells: Array = seen.keys()
+	cells.sort()
+	print("[qa] 한 SpriteFrames 안의 칸 크기: %s" % [cells])
+
+
+## 그 시트의 **발밑 줄이 `feet_offset()` 과 맞는가.** 그림의 맨 아랫줄이 발이 닿는
+## 줄 바로 위에 와야 노드 원점이 발밑이 된다 — 칸이 달라도 이 관계는 같아야 한다.
+## 한 줄 아래까지는 봐준다(낫의 날처럼 발보다 조금 내려오는 프레임이 있다).
+func _check_feet_line(image: Image, motion: String, cell: int, columns: int) -> void:
+	var feet := PlayerFrames.feet_y(cell)
+	for row in DIRS.size():
+		for column in columns:
+			var bottom := -1
+			for y in range(cell - 1, -1, -1):
+				for x in cell:
+					if image.get_pixel(column * cell + x, row * cell + y).a > 0.0:
+						bottom = y
+						break
+				if bottom >= 0:
+					break
+			if bottom < 0:
+				_fail("%s_%s #%d: 빈 칸이다" % [motion, DIRS[row], column])
+			elif bottom < feet - 2 or bottom > feet:
+				_fail("%s_%s #%d: 그림이 %d줄까지인데 발밑 줄은 %d 다 (칸 %d) — 땅에서 뜨거나 묻힌다"
+						% [motion, DIRS[row], column, bottom, feet, cell])
+
+
 func _check_filter() -> void:
 	var filter: int = ProjectSettings.get_setting(
 			"rendering/textures/canvas_textures/default_texture_filter", -1)
@@ -309,7 +373,7 @@ func _shoot(shot_name: String) -> void:
 
 func _report() -> void:
 	if _fails.is_empty():
-		print("[qa] PASS — 시트 규격 / 방향 간 크기 / 팔레트 / 텍스처 필터 정상")
+		print("[qa] PASS — 시트 규격 / 방향 간 크기 / 섞인 칸 크기 + 발밑 / 팔레트 / 텍스처 필터 정상")
 		quit()
 	else:
 		for f in _fails:

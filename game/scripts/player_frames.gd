@@ -3,7 +3,8 @@ extends RefCounted
 ## 플레이어 스프라이트 시트 → `SpriteFrames` (docs/DESIGN.md 「캐릭터 애니메이션」).
 ##
 ## **시트의 배치 규칙을 아는 유일한 곳**이다 — 행 = 방향(down/left/right/up),
-## 열 = 프레임, 칸 17px. 걷기(INBOX #15)처럼 프레임이 늘어나는 시트가 생겨도
+## 열 = 프레임이고, **칸 크기는 시트마다 텍스처에서 읽는다**(`cell_of()`).
+## 걷기(INBOX #15)처럼 프레임이 늘어나는 시트가 생겨도
 ## 여기만 고치면 되고 플레이어 노드는 손대지 않는다.
 
 ## 시트는 **머리모양마다 한 장**이다 — 색은 팔레트 교체로 만들 수 있지만
@@ -14,18 +15,26 @@ const SHEET_DIR := "res://assets/sprites"
 ## 기본 머리모양 — `character_appearance.gd` 의 첫 번째 선택지와 같아야 한다.
 const DEFAULT_HAIRSTYLE := "short"
 
-## 아트 한 칸(px). 아트 17px × 씬 스케일 3 = 화면 51px
+## 아트 한 칸(px) — **이름값이고, 시트마다 다를 수 있다**(아래 `cell_of()`).
+## 아트 32px × 씬 스케일 3 = 화면 96px = 지형 타일(아트 16px × 3배 = 48px) **두 칸**
 ## (docs/DESIGN.md 「아이템/오브젝트 크기 표준」).
-## **2026-09-07 (INBOX #19) 에 칸이 34 → 17 로 절반이 됐다. 스케일은 그대로 3이다** —
-## 스케일을 낮추면 캐릭터의 아트 픽셀만 타일(아트 16px × 3배)의 절반이 되어 도트
-## 크기 단위가 어긋난다.
-const CELL := 17
+##
+## **2026-09-07 (INBOX #46) 에 17 → 32 가 됐다. 스케일은 그대로 3이다** — 스케일을
+## 건드리면 캐릭터의 아트 픽셀만 타일과 달라져 도트 크기 단위가 어긋난다.
+## (그전 이력: 34 → 17 은 INBOX #19.)
+##
+## **지금은 idle 만 32px 이고 걷기·도구 시트는 17px 그대로다** — 사람이 게임에서
+## 직접 보고 이사 여부를 정하는 **샘플 상태**이지 이사가 아니다(INBOX #46). 그래서
+## 이 파일은 칸 크기를 상수 하나로 믿지 않고 **시트마다 텍스처에서 읽는다.**
+const CELL := 32
 const SCALE := 3
 
-## 칸 안에서 발이 닿는 y(아트 픽셀, 아래 경계). 이 줄이 노드 원점에 오게 스프라이트를
-## 올린다 — **원점 = 발밑**이라야 타일 점유와 앞뒤(Y) 정렬이 자연스럽다.
-## 그림은 y 15 줄까지 찬다(외곽선 포함) — 그 아래 한 줄은 비어 있다.
-const FEET_Y := 16
+## 발이 닿는 줄 — **설계 공간(17칸)에서 15.6번째**다. 이 줄이 노드 원점에 오게
+## 스프라이트를 올린다 — **원점 = 발밑**이라야 타일 점유와 앞뒤(Y) 정렬이 자연스럽다.
+## 칸 크기가 시트마다 다르므로 픽셀값 상수로는 못 적는다(`feet_y()`).
+## 생성기(`gen_character.py` 의 `CFG["foot_y"]` + 신발 외곽선)와 같은 줄이다.
+const DESIGN_N := 17.0
+const DESIGN_FEET_Y := 15.6
 
 ## 시트의 행 순서. `player_motion.gd` 의 방향 enum 과 같은 순서여야 한다.
 const DIR_NAMES := ["down", "left", "right", "up"]
@@ -104,9 +113,33 @@ static func build(hairstyle: String = DEFAULT_HAIRSTYLE) -> SpriteFrames:
 	return frames
 
 
+## 시트 한 장의 칸 크기(px). **행이 방향 4개로 고정**이라 높이만 보면 알 수 있다 —
+## 그래서 17px 시트와 32px 시트가 한 `SpriteFrames` 에 섞여도 각자 제 칸으로 잘린다
+## (2026-09-07, INBOX #46). 상수 하나로 자르면 안 맞는 시트가 조각나거나 빈 칸이 된다.
+static func cell_of(texture: Texture2D) -> int:
+	return maxi(1, texture.get_height() / DIR_NAMES.size())
+
+
+## 그 칸 크기에서 발이 닿는 줄(아트 픽셀). 정수로 떨어뜨린다 — 반 픽셀이 남으면
+## 스프라이트가 도트 격자에서 밀려 아트 픽셀 크기가 균일하지 않게 보인다.
+static func feet_y(cell: int) -> int:
+	return roundi(cell * DESIGN_FEET_Y / DESIGN_N)
+
+
 ## 스프라이트를 발밑 기준으로 올리기 위한 `AnimatedSprite2D.offset` (아트 픽셀 단위).
-static func feet_offset() -> Vector2:
-	return Vector2(0.0, -(float(FEET_Y) - CELL * 0.5))
+## **칸 크기마다 값이 다르다** — 섞인 시트를 쓰면 애니메이션이 바뀔 때마다 다시 넣어야
+## 캐릭터가 땅에 묻히거나 뜨지 않는다(`player.gd` 의 `_update_animation()`).
+static func feet_offset(cell: int = CELL) -> Vector2:
+	return Vector2(0.0, -(float(feet_y(cell)) - cell * 0.5))
+
+
+## 이 애니메이션의 칸 크기. 첫 프레임이 시트에서 잘라온 자리(`AtlasTexture.region`)를
+## 그대로 읽는다 — 어느 시트에서 왔는지 따로 기억해 둘 필요가 없다.
+static func anim_cell(frames: SpriteFrames, anim: String) -> int:
+	if frames == null or not frames.has_animation(anim) or frames.get_frame_count(anim) == 0:
+		return CELL
+	var atlas := frames.get_frame_texture(anim, 0) as AtlasTexture
+	return CELL if atlas == null else maxi(1, int(atlas.region.size.y))
 
 
 ## 아무 애니메이션도 없는 빈 `SpriteFrames`. Godot 이 기본으로 넣어주는
@@ -130,7 +163,9 @@ static func plays_once(motion: String) -> bool:
 ## 않으므로 칸 배치가 그대로다 (`character_sprite.gd` 의 `sprite_frames()`).
 static func add_motion(frames: SpriteFrames, texture: Texture2D, motion: String,
 		fps: float) -> void:
-	var columns := maxi(1, texture.get_width() / CELL)
+	# **칸 크기는 이 시트에서 읽는다** — `CELL` 을 쓰면 다른 칸의 시트가 조각난다.
+	var cell := cell_of(texture)
+	var columns := maxi(1, texture.get_width() / cell)
 	for row in DIR_NAMES.size():
 		var anim := "%s_%s" % [motion, DIR_NAMES[row]]
 		frames.add_animation(anim)
@@ -139,7 +174,7 @@ static func add_motion(frames: SpriteFrames, texture: Texture2D, motion: String,
 		for column in columns:
 			var atlas := AtlasTexture.new()
 			atlas.atlas = texture
-			atlas.region = Rect2(column * CELL, row * CELL, CELL, CELL)
+			atlas.region = Rect2(column * cell, row * cell, cell, cell)
 			frames.add_frame(anim, atlas)
 
 

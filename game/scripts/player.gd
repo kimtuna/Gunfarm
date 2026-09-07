@@ -80,6 +80,8 @@ var _switch_pressed := false
 
 
 func _ready() -> void:
+	# 이름값 칸의 보정으로 시작한다 — 실제 값은 애니메이션이 정해지는 대로
+	# `_update_animation()` 이 그 시트의 칸으로 다시 넣는다.
 	_sprite.offset = PlayerFrames.feet_offset()
 	_sprite.scale = Vector2.ONE * PlayerFrames.SCALE
 	if _sprite.sprite_frames == null:
@@ -295,3 +297,8 @@ func _update_animation() -> void:
 			break
 	if _sprite.animation != wanted:
 		_sprite.play(wanted)
+	# **발밑 보정은 애니메이션마다 다시 넣는다** — 시트마다 칸 크기가 다를 수 있어서다
+	# (2026-09-07, INBOX #46: idle 만 32px 이고 걷기·도구는 17px 이다). 한 번만 넣어
+	# 두면 칸이 다른 모션으로 넘어가는 순간 캐릭터가 땅에 묻히거나 공중에 뜬다.
+	_sprite.offset = PlayerFrames.feet_offset(
+		PlayerFrames.anim_cell(_sprite.sprite_frames, wanted))

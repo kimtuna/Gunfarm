@@ -16,11 +16,12 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 
 const BACKDROP := Color(0.164706, 0.192157, 0.14902)
 
-## 아트 픽셀이 화면에서 균일하려면 **배율이 정수여야 한다**(STYLE_GUIDE 1번).
-## **2026-09-07 (INBOX #19) 에 캔버스가 34 → 17px 로 절반이 되면서 두 배가 됐다** —
-## 미리보기가 화면에서 차지하는 크기(204px / 68px)는 그대로 두고 배율만 올린다.
-const MAIN_SCALE := 12
-const SIDE_SCALE := 4
+## 미리보기가 화면에서 차지할 크기(px). **배율이 아니라 이 크기를 적어둔다** —
+## 아트 픽셀이 화면에서 균일하려면 배율이 정수여야 하는데(STYLE_GUIDE 1번), 캔버스가
+## 바뀔 때마다(34 → 17px 은 INBOX #19, idle 17 → 32px 은 INBOX #46) 사람이 배율을
+## 다시 계산해 적으면 반드시 어긋난다. 크기를 고정하고 **배율은 칸에서 고른다**.
+const MAIN_PX := 204.0
+const SIDE_PX := 68.0
 const ROW_GAP := 10.0
 
 ## 아래 작은 줄에 늘어놓는 방향. 앞모습은 위에 크게 있으므로 뺀다.
@@ -49,9 +50,10 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), BACKDROP)
 	if _texture == null:
 		return
-	var cell := float(PlayerFrames.CELL)
-	var main := cell * MAIN_SCALE
-	var small := cell * SIDE_SCALE
+	# **칸은 텍스처에서 읽는다** — 시트마다 칸이 다를 수 있다(INBOX #46).
+	var cell := float(PlayerFrames.cell_of(_texture))
+	var main := cell * _scale_for(cell, MAIN_PX)
+	var small := cell * _scale_for(cell, SIDE_PX)
 	var total := main + ROW_GAP + small
 	var top := (size.y - total) * 0.5
 
@@ -69,5 +71,10 @@ func _frame(dir: String, into: Rect2) -> void:
 	var row := PlayerFrames.DIR_NAMES.find(dir)
 	if row < 0:
 		return
-	var cell := float(PlayerFrames.CELL)
+	var cell := float(PlayerFrames.cell_of(_texture))
 	draw_texture_rect_region(_texture, into, Rect2(0.0, row * cell, cell, cell))
+
+
+## 그 칸을 원하는 크기에 가장 가깝게 담는 **정수** 배율. 1보다 작아지지 않게 한다.
+static func _scale_for(cell: float, want: float) -> int:
+	return maxi(1, roundi(want / cell))
