@@ -33,19 +33,15 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </style></head><body><main>
 <h1>Gunfarm</h1>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
-<div class="warn"><strong>루프 멈춤</strong><pre>INBOX #39 이 3회 연속 미완료입니다 — 사람이 확인해 주세요.
-  항목: [BUILD] **총알이 바닷물에 막힌다 — 이게 맞는지 사람이 정해줄 것.** (2026-09-07, INBOX #34 바퀴에서 나온 것이다. 고장이 아니라 **지시대로 만든 결과**다.)
-  docs/STATUS.md 의 &#x27;막힌 것 / 보류&#x27;를 보세요.
 
-(2026-09-07 18:42:05)</pre></div>
 <div class="cards">
   <div class="card"><b>41</b><span>완료</span></div>
   <div class="card"><b>2</b><span>남음</span></div>
 </div>
-<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#39</span> [BUILD] **총알이 바닷물에 막힌다 — 이게 맞는지 사람이 정해줄 것.** (2026-09-07, INBOX #34 바퀴에서 나온 것이다. 고장이 아니라 **지시대로 만든 결과**다.)</li>
+<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#39</span> [BUILD] **총알이 물에 막히지 않게 한다 — 「총알을 막는가」를 「걸을 수 있는가」에서 떼어낸다.** 사람이 정했다(2026-09-07): *&quot;당연히 물에도 총알이 쏴지지. 한 칸 물이 있다고 해서 거기에 막히면 안 되잖아.&quot;* 근거는 `DESIGN.md` 「전투」에 적혀 있다.</li>
 <li><span class="num">#41</span> [BUILD] **여는 좌클릭이 도구를 쓰는 좌클릭과 겹치는 것 — 대상이 늘어나면 규칙을 한 곳으로 모을 것.** (2026-09-07, INBOX #37 바퀴에서 나온 것이다. 지금은 고장이 아니다.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>0e7ebdc  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-07 18:41</p></section>
+<section><h2>마지막 커밋</h2><code>e179827  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-07 18:42</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-07 — INBOX #43 (자체 QA 두 벌이 마우스 커서 위치에 따라 통과/실패하던 것) 완료.
 
 ## 시작할 때 이미 있던 것
@@ -62,7 +58,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><strong>월드 설정 화면</strong> — 지금 「설정」에는 그래픽 옵션만 있다. 월드(슬롯)에 저장되는 설정을 두는 자리이고, 첫 항목은 데스드롭 상자 타이머다. 데스드롭 상자를 만드는 바퀴가 같이 만드는 게 자연스럽다.</li>
 <li><strong>낚시 던지기(2단계)</strong> — 좌클릭으로 던지고, 거리는 마우스 커서까지로 조절하며(최소는 바로 앞, <strong>최대는 화면 안</strong>), <strong>찌가 떨어진 칸이 물이어야</strong> 낚시가 시작된다. 규칙은 `DESIGN.md` 「생활 스킬 — 채집 계열」의 낚시 항목에 다 있다. 정해야 할 것: 최대 거리 수치, 찌를 던지고 무는 것을 기다리는 시간, 무엇이 잡히는지.</li>
 <li><strong>물의 종류(서식지)</strong> — 지금 지형은 땅/바다 2종뿐이라 <strong>서식지를 나눌 기준이 없다.</strong> 민물·깊은 바다·동굴 물 같은 구분이 생겨야 &quot;서식지에 따라 잡히는 물고기가 다르다&quot;가 성립한다. <strong>물고기 종류를 먼저 만들지 말 것</strong> — 나눌 기준 없이 종류만 늘리면 전부 같은 물에서 나온다. 지형 확장 → 서식지 → 물고기 순이다.</li></ul></section>
-<footer>갱신: 2026-09-07 18:42 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-07 19:57 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -75,7 +71,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260907184205";
+  var STAMP = "20260907195712";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
