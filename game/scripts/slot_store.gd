@@ -17,6 +17,13 @@ const EXPLORED_KEY := "explored"
 ## **캐릭터마다 따로다** — 탐험 기록과 같은 이유로 월드가 아니라 캐릭터에 붙는다.
 const INVENTORY_KEY := "inventory"
 
+## 슬롯 안에서 **바닥에 놓인 아이템**이 앉는 자리 (docs/DESIGN.md 「아이템 획득 방식 —
+## 바닥 드롭」의 "바닥 아이템은 저장된다").
+## **월드에 속한 것이지 캐릭터에 속한 것이 아니지만**, 지금은 월드가 슬롯 하나에
+## 한 개(그 슬롯의 `world_seed`)라 여기 같이 둔다 — 한 월드에 여러 캐릭터가 들어오는
+## 날이 오면 이 키가 월드 쪽 저장으로 옮겨간다.
+const GROUND_KEY := "ground"
+
 ## 슬롯 화면에서 고른 슬롯 번호를 다음 화면(커스터마이징 / 월드)으로 넘기는 자리.
 ## 씬이 바뀌어도 스크립트 자체는 살아 있으므로 static 하나면 충분하다.
 static var selected_slot := -1
@@ -95,6 +102,27 @@ static func save_inventory(index: int, data: Dictionary) -> bool:
 static func inventory_of(slot: Dictionary) -> Variant:
 	var data: Variant = slot.get(INVENTORY_KEY, null)
 	return data if typeof(data) == TYPE_DICTIONARY else null
+
+
+## 슬롯 하나의 바닥 아이템(`ground_items.gd` 의 `to_data()`)을 저장한다.
+## 탐험 기록·인벤토리와 같은 규칙이다 — 빈 슬롯에는 붙을 자리가 없다.
+static func save_ground(index: int, data: Array) -> bool:
+	if index < 0 or index >= SLOT_COUNT:
+		return false
+	var slots := load_slots()
+	var slot: Dictionary = slots[index]
+	if slot.is_empty():
+		return false
+	slot[GROUND_KEY] = data
+	slots[index] = slot
+	return save_slots(slots)
+
+
+## 저장된 바닥 아이템. 없으면 **빈 배열**이다 — 인벤토리와 달리 "한 번도 저장한 적
+## 없음"과 "다 주워서 비어 있음"을 구별할 이유가 없다(처음 지급하는 것이 없다).
+static func ground_of(slot: Dictionary) -> Array:
+	var data: Variant = slot.get(GROUND_KEY, [])
+	return data if typeof(data) == TYPE_ARRAY else []
 
 
 static func load_slots() -> Array[Dictionary]:

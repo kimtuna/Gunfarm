@@ -1,10 +1,11 @@
-[gd_scene load_steps=9 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=10 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Theme" path="res://ui/menu_theme.tres" id="4_theme"]
 [ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="5_panel"]
+[ext_resource type="Script" path="res://scripts/ground_items_view.gd" id="6_ground"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hotbar"]
 content_margin_left = 10.0
@@ -37,10 +38,18 @@ script = ExtResource("1_world")
 unique_name_in_owner = true
 script = ExtResource("2_terrain")
 
-[node name="Player" parent="." instance=ExtResource("3_player")]
+[node name="Entities" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="GroundItemsView" type="Node2D" parent="Entities"]
+unique_name_in_owner = true
+y_sort_enabled = true
+script = ExtResource("6_ground")
+
+[node name="Player" parent="Entities" instance=ExtResource("3_player")]
 unique_name_in_owner = true
 
-[node name="Camera" type="Camera2D" parent="Player"]
+[node name="Camera" type="Camera2D" parent="Entities/Player"]
 unique_name_in_owner = true
 
 [node name="HUD" type="CanvasLayer" parent="."]

@@ -44,8 +44,9 @@ var explored: RefCounted = null
 ## 이 캐릭터의 인벤토리(`inventory.gd` — 순수 클래스). 탐험 기록과 같이 슬롯에 저장된다.
 var inventory: RefCounted = null
 
-## 바닥에 놓인 아이템(`ground_items.gd`). 지금은 **버린 것이 쌓이기만 한다** —
-## 그림과 줍기는 바닥 드롭을 만드는 다음 바퀴가 붙인다 (docs/DESIGN.md 「바닥 드롭」).
+## 바닥에 놓인 아이템(`ground_items.gd` — 순수 클래스). 버린 것이 여기 쌓이고,
+## 다가가면 자동으로 인벤토리로 간다. 그리는 것은 `%GroundItemsView` 가 한다
+## (docs/DESIGN.md 「아이템 획득 방식 — 바닥 드롭」).
 var ground_items: RefCounted = null
 
 ## 일시정지 메뉴에서 띄운 설정 화면. 씬을 바꾸지 않고 **월드 위에 겹쳐서** 띄운다 —
@@ -61,6 +62,7 @@ var _inventory_overlay: Control = null
 var _slot_index := -1
 var _explored_dirty := false
 var _inventory_dirty := false
+var _ground_dirty := false
 ## 마지막으로 슬롯에 적은 인벤토리 버전 — 바뀐 게 없으면 파일을 다시 쓰지 않는다.
 var _saved_inventory_version := -1
 var _explored_save_left := EXPLORED_SAVE_SECONDS
@@ -106,13 +108,18 @@ func _ready() -> void:
 	ground_items = GroundItems.new()
 	var stored_inventory: Variant = null
 	if index >= 0:
-		stored_inventory = SlotStore.inventory_of(SlotStore.load_slots()[index])
+		var slot := SlotStore.load_slots()[index]
+		stored_inventory = SlotStore.inventory_of(slot)
+		# 바닥에 놓인 것도 슬롯에서 되살린다 — 나갔다 들어와도 버린 자리에 그대로
+		# 있어야 한다 (docs/DESIGN.md 「바닥 드롭」의 "바닥 아이템은 저장된다").
+		ground_items.from_data(SlotStore.ground_of(slot))
 	if stored_inventory == null:
 		_give_starter_items()
 	else:
 		inventory.from_data(stored_inventory)
 
 	(%TerrainView as Node2D).set_world(world)
+	(%GroundItemsView as Node2D).setup(ground_items)
 	# 화면 아래 핫바는 **인벤토리 맨 위 9칸을 그대로 비추는 것**이지 별도 보관함이
 	# 아니다 (docs/DESIGN.md 「인벤토리 / 장비」) — 그래서 E 창과 **같은 코어**를 넘긴다.
 	# 그리는 코드도 창과 같은 스크립트다(`inventory_panel.gd` 의 `hotbar_only`).
@@ -153,6 +160,7 @@ func _give_starter_items() -> void:
 # 지도가 채워진다.
 
 func _process(delta: float) -> void:
+	_update_ground_items()
 	var tile: Vector2i = (%Player as Node2D).tile()
 	if tile != _marked_tile:
 		_marked_tile = tile
@@ -163,6 +171,18 @@ func _process(delta: float) -> void:
 		_explored_save_left = EXPLORED_SAVE_SECONDS
 		_save_explored()
 		_save_inventory()
+		_save_ground()
+
+
+## 바닥에 놓인 것 훑기 — 줍기 / 잠금 풀기 / 수명 다한 것 치우기.
+## **프레임 시간을 안 넘긴다** — 코어가 위치와 벽시계만 보므로 프레임 레이트와 무관하게
+## 결과가 같다 (`ground_items.gd` 의 `update` 주석).
+func _update_ground_items() -> void:
+	if ground_items == null:
+		return
+	if ground_items.update((%Player as Node2D).global_position, inventory) > 0:
+		_inventory_dirty = true
+		_ground_dirty = true
 
 
 ## 씬이 내려갈 때(메인 메뉴로 나가기, 종료) 마지막으로 한 번 더 적는다 —
@@ -170,6 +190,7 @@ func _process(delta: float) -> void:
 func _exit_tree() -> void:
 	_save_explored()
 	_save_inventory()
+	_save_ground()
 
 
 func _save_explored() -> void:
@@ -188,6 +209,14 @@ func _save_inventory() -> void:
 	if SlotStore.save_inventory(_slot_index, inventory.to_data()):
 		_inventory_dirty = false
 		_saved_inventory_version = inventory.version
+
+
+## 바닥에 놓인 것도 같은 규칙으로 슬롯에 적는다.
+func _save_ground() -> void:
+	if _slot_index < 0 or ground_items == null or not _ground_dirty:
+		return
+	if SlotStore.save_ground(_slot_index, ground_items.to_data()):
+		_ground_dirty = false
 
 
 # --- 일시정지 메뉴 (docs/DESIGN.md 「조작」의 Esc 항목) -------------------------
@@ -323,13 +352,15 @@ func _close_inventory() -> void:
 
 ## 인벤토리 창 **바깥**에 끌어다 놓았다 = 버리기 (docs/DESIGN.md 「인벤토리 / 장비」).
 ## 인벤토리에서 빠진 뭉치는 **그 자리에서 바닥으로 간다** — 중간에 아무 데도 안 들르므로
-## 「인벤토리 안전」대로 사라질 틈이 없다. 바닥 아이템의 그림/줍기는 다음 바퀴 몫이다.
+## 「인벤토리 안전」대로 사라질 틈이 없다. 놓인 것은 바로 보이고(`%GroundItemsView`),
+## **그 자리를 벗어났다 돌아오면** 다시 주워진다(`ground_items.gd` 의 잠금).
 func _on_drop_outside(area: String, index: int) -> void:
 	var stack: RefCounted = inventory.take_out(area, index)
 	if stack == null:
 		return
 	ground_items.drop(stack, (%Player as Node2D).global_position)
 	_inventory_dirty = true
+	_ground_dirty = true
 
 
 func _on_resume_pressed() -> void:
