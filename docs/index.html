@@ -36,17 +36,18 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 
 <div class="cards">
-  <div class="card"><b>47</b><span>완료</span></div>
+  <div class="card"><b>48</b><span>완료</span></div>
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
-<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#48</span> [BUILD] **논리 해상도를 1280×720 → 1440×810 으로 넓힌다.** 사람 결정(2026-09-08). `DESIGN.md` 「카메라 / 해상도」에 근거가 적혀 있다 — 캐릭터가 커 보인다는 이야기의 원인이 **캐릭터 크기가 아니라 좁은 카메라**였다(실측: 우리 26.5×15.0 타일 / 스타듀 약 30×17). 1440×810 이면 30.0×16.9 타일이 되어 스타듀와 같아진다.</li></ul></section>
-<section><h2>마지막 커밋</h2><code>52aae42  design: 논리 해상도를 1440×810 으로 — 캐릭터가 아니라 카메라가 좁았다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 01:49</p></section>
-<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #47 [DESIGN] 32px idle 을 비율부터 다시 그렸다.**
-바뀐 자산은 `player_idle_&lt;머리모양&gt;.png` **4장뿐**이고, 걷기·도구 시트 18장은 **17px
-그대로**다(바이트 단위로 확인했다). **자체 QA 는 전부 통과한다** — 그림 검사 104장 전부
-`ok`, Godot QA 22벌 전부 통과. 지난 바퀴의 실패 36건 + 2벌이 이번에 다 없어졌다.
-**큐가 비었다.**</pre></section>
+<section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead ask">사람 결정</span><span class="num">#49</span> [ASK] **논리 해상도를 1440×810 으로 넓히고 나니, 고를 수 있는 창 해상도 네 개가 전부 「소수 배율」이 됐습니다 — 어떻게 할까요.**</li></ul></section>
+<section><h2>마지막 커밋</h2><code>331fa7d  [INBOX #48] 논리 해상도를 1440×810 으로 넓혔다 — 카메라가 30.0×16.9 타일이 됐다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 02:36</p></section>
+<section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #48 [BUILD] 논리 해상도를 1440×810 으로 넓혔다.**
+**자체 QA 22벌 전부 통과**하고, **전체 스위트를 5바퀴 연달아 돌려 전부 통과**했다
+(불안정한 검사가 남지 않은 것을 확인하려고 반복했다). 시야는 창 크기 네 개 전부에서
+정확히 1440×810 이다. **큐에는 `[ASK] #49` 하나가 남아 있다** — 아래 「사람에게」.
+
+## 시작할 때 이미 있던 것</pre></section>
 <section><h2>나중에 할 것</h2>
   <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
   만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/feedback/LATER.md</code>)</p>
@@ -60,7 +61,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><strong>물의 종류(서식지)</strong> — 지금 지형은 땅/바다 2종뿐이라 <strong>서식지를 나눌 기준이 없다.</strong> 민물·깊은 바다·동굴 물 같은 구분이 생겨야 &quot;서식지에 따라 잡히는 물고기가 다르다&quot;가 성립한다. <strong>물고기 종류를 먼저 만들지 말 것</strong> — 나눌 기준 없이 종류만 늘리면 전부 같은 물에서 나온다. 지형 확장 → 서식지 → 물고기 순이다.</li>
 <li><strong>여는 좌클릭과 도구를 쓰는 좌클릭을 한 곳으로 모으기</strong> (원래 INBOX #41, 2026-09-07 에 여기로 옮김). 지금 열 수 있는 것은 데스드롭 상자 하나뿐이라 <strong>미리 만들면 껍데기만 늘어난다.</strong> 상자·제작대처럼 「여는 것」이 둘 이상이 되는 바퀴가 가져간다.</li>
 <li><strong>캐릭터 32px 이사 — 채택하기로 정한 뒤에 할 것</strong> (INBOX #45 가 이미지로 시험 중이다). 순서와 범위: ① 걷기 6프레임 ② 도구 7종(#44 추정으로 2~3바퀴 — `STYLE_GUIDE` 「손에 쥔 도구」의 통과 구간이 전부 17px 격자 실측값이라 다시 뽑아야 한다) ③ 아이콘 7종·바닥 그림 7종·데스드롭 상자(크기 하한이 16 → 32px 로 돌아왔다) ④ 엔진 상수(`player_frames.gd` 의 `CELL` 17→32, 충돌 상자, 미리보기 배율)와 자체 QA 22벌 재확인. <strong>타일 아트·씬 스케일·이동 속도·사거리·카메라 범위는 안 바뀐다</strong> — 캐릭터와 도구 그림만이다.</li></ul></section>
-<footer>갱신: 2026-09-08 01:49 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-08 02:37 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -73,7 +74,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908014912";
+  var STAMP = "20260908023732";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
