@@ -19,6 +19,13 @@ WAIT_BETWEEN_LAPS="${WAIT_BETWEEN_LAPS:-20}"              # 바퀴 사이 대기
 STUCK_REPEAT_LIMIT="${STUCK_REPEAT_LIMIT:-3}"  # 같은 INBOX 번호가 연속 N회 미완료면 멈춘다
 GOTCHAS_MAX_LINES="${GOTCHAS_MAX_LINES:-150}"  # docs/GOTCHAS.md 가 이 줄 수를 넘으면 경고(정리 필요)
 
+# --- 알림 (macOS 알림 센터) ---
+# 사람이 개입해야 할 때만 울린다: **큐가 빔** / **멈춤**(연속 실패, 리셋 시각을 못 읽은
+# 한도). 한도 대기는 저절로 풀려서 이어 돌기 때문에 알리지 않는다 — 알림이 흔해지면
+# 안 보게 된다. 0 이면 끈다.
+NOTIFY="${NOTIFY:-1}"
+NOTIFY_SOUND="${NOTIFY_SOUND:-Glass}"   # /System/Library/Sounds 의 이름 (Basso/Blow/Funk/Ping/Submarine 등)
+
 # --- 경로 ---
 GODOT_BIN="${GODOT_BIN:-/Applications/Godot.app/Contents/MacOS/Godot}"
 PYTHON_BIN="${PYTHON_BIN:-$ROOT/.venv/bin/python}"   # Pillow가 들어있는 venv

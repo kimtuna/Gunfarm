@@ -28,6 +28,17 @@ PROMPT="$ROOT/PROMPT.md"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
 
+# 사람이 개입해야 할 때만 알린다(큐가 빔 / 멈춤). **한도 대기는 알리지 않는다** —
+# 저절로 풀려서 이어 돌기 때문에 사람이 할 일이 없다. 알림이 흔해지면 안 보게 된다.
+# osascript 가 없거나 실패해도 루프는 그대로 간다 — 알림은 부가 기능이다.
+notify() {
+  [[ "${NOTIFY:-1}" == "1" ]] || return 0
+  command -v osascript >/dev/null 2>&1 || return 0
+  local title="Gunfarm" sub="$1" body="$2"
+  osascript -e "display notification \"${body//\"/}\" with title \"$title\" subtitle \"${sub//\"/}\" sound name \"${NOTIFY_SOUND:-Glass}\"" \
+    >/dev/null 2>&1 || true
+}
+
 render_and_push_dashboard() {
   /usr/bin/python3 "$ROOT/scripts/render_dashboard.py" >>"$LOG" 2>&1 || return 0
   git -C "$ROOT" add docs/index.html >/dev/null 2>&1
@@ -43,6 +54,9 @@ halt() {
   printf '%s\n\n(%s)\n' "$1" "$(date '+%Y-%m-%d %H:%M:%S')" > "$WARNING_FILE"
   log "== 멈춤: $1"
   render_and_push_dashboard
+  # 알림에는 첫 줄만 넣는다 — 멈춤 사유에 INBOX 항목 본문이 통째로 들어 있을 수 있고,
+  # 그대로 밀어넣으면 알림 창이 넘쳐서 정작 무슨 일인지가 안 보인다.
+  notify "루프가 멈췄습니다 — 확인이 필요합니다" "$(printf '%s' "$1" | head -1)"
   exit "${2:-1}"
 }
 
@@ -79,6 +93,8 @@ while true; do
   if [[ -z "$ITEM" ]]; then
     log "== 큐가 비었음 — 세션을 열지 않고 종료"
     render_and_push_dashboard
+    notify "할 일이 다 떨어졌습니다" \
+      "완료 $(grep -cE '^- \[[xX]\]' "$INBOX" 2>/dev/null || echo 0)개. docs/feedback/INBOX.md 에 새 항목을 넣고 ./ctl.sh start"
     exit 0
   fi
   NUM="${ITEM%%$'\t'*}"
