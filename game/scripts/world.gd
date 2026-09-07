@@ -636,11 +636,18 @@ func _close_inventory() -> void:
 ## 인벤토리에서 빠진 뭉치는 **그 자리에서 바닥으로 간다** — 중간에 아무 데도 안 들르므로
 ## 「인벤토리 안전」대로 사라질 틈이 없다. 놓인 것은 바로 보이고(`%GroundItemsView`),
 ## **그 자리를 벗어났다 돌아오면** 다시 주워진다(`ground_items.gd` 의 잠금).
+##
+## **놓이는 자리는 발밑이 아니라 바라보는 방향 앞 한 칸이다** (2026-09-07, INBOX #42 —
+## docs/DESIGN.md 「바닥 드롭」). 발밑에 놓으면 그림이 캐릭터에 통째로 가려서 버려졌는지
+## 확인할 방법이 그 자리를 벗어나는 것뿐이었다. 자리를 고르는 것은 코어이고
+## (`player_motion.gd` 의 `drop_position()` — 물 위를 피한다), 여기서는 **버린 사람이
+## 서 있던 자리**를 잠금 기준으로 같이 넘긴다.
 func _on_drop_outside(area: String, index: int) -> void:
 	var stack: RefCounted = inventory.take_out(area, index)
 	if stack == null:
 		return
-	ground_items.drop(stack, (%Player as Node2D).global_position)
+	var player := %Player as Node2D
+	ground_items.drop(stack, player.drop_position(), -1.0, player.global_position)
 	_inventory_dirty = true
 	_ground_dirty = true
 

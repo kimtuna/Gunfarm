@@ -14,6 +14,10 @@ extends RefCounted
 ##    **거리**로 잠근 이유는, 시간으로 하면 버려놓고 그 자리에 서 있을 때 몇 초 뒤에
 ##    도로 주워져서 "버릴 수가 없는" 상태가 되기 때문이다. 거리로 하면 그런 경우가
 ##    아예 생기지 않는다 — 한 번 걸어 나가면 그때부터 다시 주울 수 있다.
+##    **여기서 "그 자리"는 놓인 자리가 아니라 버린 사람이 서 있던 자리다**(`KEY_LOCK_ORIGIN`,
+##    2026-09-07 INBOX #42). 버린 것이 발밑에 놓이던 동안에는 둘이 같은 점이라 구별할
+##    필요가 없었는데, 앞 한 칸에 놓이면서 갈렸다 — DESIGN.md 「바닥 드롭」이 말하는
+##    쪽(사람이 서 있던 자리)이 이쪽이다.
 ## 3. **인벤토리에 다 못 들어가면 남은 몫은 바닥에 그대로 남는다** — 넣기는 언제나
 ##    `inventory.take_in(뭉치)` 를 지나가고, 그 함수가 못 넣은 몫을 뭉치에 남긴다
 ##    (DESIGN.md 「인벤토리 안전」). 여기서 뭉치를 지우는 것은 **빈 뭉치가 됐을 때뿐**이다.
@@ -30,11 +34,13 @@ const PICKUP_RADIUS := 36.0
 const LIFETIME_SECONDS := 24.0 * 60.0 * 60.0
 
 ## 항목 하나의 키. `stack` 은 `item_stack.gd`, `position` 은 월드 좌표,
-## `dropped` 는 놓인 시각(유닉스 초), `locked` 는 위 2번의 잠금이다.
+## `dropped` 는 놓인 시각(유닉스 초), `locked` 는 위 2번의 잠금이고
+## `lock_origin` 은 그 잠금이 풀리는 기준점(버린 사람이 서 있던 자리)이다.
 const KEY_STACK := "stack"
 const KEY_POSITION := "position"
 const KEY_DROPPED := "dropped"
 const KEY_LOCKED := "locked"
+const KEY_LOCK_ORIGIN := "lock_origin"
 
 ## 저장 파일에 들어가는 키(슬롯 JSON 이 길어지지 않게 짧게 쓴다 — `item_stack.gd` 와 같다).
 const SAVE_STACK := "s"
@@ -52,7 +58,12 @@ var version := 0
 
 ## 한 뭉치를 그 자리에 놓는다. 놓인 항목을 돌려준다(빈 뭉치면 null — 아무것도 안 놓는다).
 ## **놓자마자는 잠겨 있다** — 버린 사람이 그 자리를 벗어나야 다시 주울 수 있다.
-func drop(stack: RefCounted, world_position: Vector2, now_unix: float = -1.0) -> Variant:
+##
+## `dropped_from` 은 **버린 사람이 서 있던 자리**다(위 2번). 인벤토리 창 밖으로 끌어다
+## 버린 것은 놓인 자리가 사람 앞 한 칸이라 둘이 다르다. 안 주면 놓인 자리와 같다 —
+## 사람이 버린 게 아닌 것(나중의 자원 드롭 등)은 그쪽이 맞다.
+func drop(stack: RefCounted, world_position: Vector2, now_unix: float = -1.0,
+		dropped_from: Variant = null) -> Variant:
 	if stack == null or stack.is_empty():
 		return null
 	var entry := {
@@ -60,6 +71,7 @@ func drop(stack: RefCounted, world_position: Vector2, now_unix: float = -1.0) ->
 		KEY_POSITION: world_position,
 		KEY_DROPPED: _now(now_unix),
 		KEY_LOCKED: true,
+		KEY_LOCK_ORIGIN: dropped_from if dropped_from is Vector2 else world_position,
 	}
 	items.append(entry)
 	version += 1
@@ -104,8 +116,9 @@ func update(player_position: Vector2, inventory: RefCounted, now_unix: float = -
 			continue
 		var distance := (entry[KEY_POSITION] as Vector2).distance_to(player_position)
 		if bool(entry[KEY_LOCKED]):
-			# 버린 자리를 벗어났다 — 이제부터 다시 주울 수 있다(화면은 안 바뀐다).
-			if distance > PICKUP_RADIUS:
+			# **버린 사람이 서 있던 자리**를 벗어났다 — 이제부터 다시 주울 수 있다
+			# (화면은 안 바뀐다). 놓인 자리가 아니라 이 점을 보는 이유는 위 2번에 있다.
+			if (entry[KEY_LOCK_ORIGIN] as Vector2).distance_to(player_position) > PICKUP_RADIUS:
 				entry[KEY_LOCKED] = false
 			index += 1
 			continue
@@ -159,11 +172,15 @@ func from_data(data: Variant, now_unix: float = -1.0) -> int:
 		var stack := ItemStack.from_data(row.get(SAVE_STACK, null))
 		if stack == null:
 			continue
+		var at := Vector2(float(row.get(SAVE_X, 0.0)), float(row.get(SAVE_Y, 0.0)))
 		items.append({
 			KEY_STACK: stack,
-			KEY_POSITION: Vector2(float(row.get(SAVE_X, 0.0)), float(row.get(SAVE_Y, 0.0))),
+			KEY_POSITION: at,
 			KEY_DROPPED: float(row.get(SAVE_DROPPED, t)),
 			KEY_LOCKED: true,
+			# 누가 어디에 서서 버렸는지는 저장하지 않는다 — 불러온 것의 기준점은
+			# **놓인 자리**다(들어오자마자 그 위에 서 있으면 걸어 나가야 풀린다).
+			KEY_LOCK_ORIGIN: at,
 		})
 	return items.size()
 

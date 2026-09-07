@@ -37,6 +37,7 @@ const Inventory := preload("res://scripts/inventory.gd")
 const ItemStack := preload("res://scripts/item_stack.gd")
 const ItemTypes := preload("res://scripts/item_types.gd")
 const InventoryPanel := preload("res://scripts/inventory_panel.gd")
+const PlayerMotion := preload("res://scripts/player_motion.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
@@ -534,9 +535,17 @@ func _check_dropped_outside() -> void:
 	var stack: RefCounted = entry["stack"]
 	if stack.id != String(_before["general_8"]) or stack.count != int(_before["general_8_count"]):
 		_fails.append("버린 것과 바닥에 놓인 것이 다르다 (%s %d개)" % [stack.id, stack.count])
+	# **발밑이 아니라 바라보는 방향 앞 한 칸이다** (2026-09-07, INBOX #42 —
+	# docs/DESIGN.md 「바닥 드롭」). 자리를 고르는 규칙 자체는 `qa_ground_items.gd` 가
+	# 본다 — 여기서는 버리기가 그 자리로 갔는지만 확인한다.
 	var player := _player()
-	if player != null and (entry["position"] as Vector2).distance_to(player.global_position) > 1.0:
-		_fails.append("버린 아이템이 플레이어 근처에 안 놓였다")
+	if player != null:
+		var at: Vector2 = entry["position"]
+		var want: Vector2 = player.call("drop_position")
+		if at.distance_to(want) > 1.0:
+			_fails.append("버린 아이템이 코어가 고른 자리(%s)가 아니라 %s 에 놓였다" % [want, at])
+		if at.distance_to(player.global_position) > PlayerMotion.DROP_DISTANCE + 1.0:
+			_fails.append("버린 아이템이 플레이어에게서 한 칸보다 멀리 놓였다")
 	if inv.count_of(stack.id) != 0:
 		_fails.append("버렸는데 인벤토리에 %s 가 남아 있다" % stack.id)
 

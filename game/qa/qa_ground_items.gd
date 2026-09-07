@@ -15,13 +15,16 @@ extends SceneTree
 ##      6) 저장·불러오기 왕복 — 자리·수량·놓인 시각이 그대로고, 불러온 것은 잠겨 있다.
 ##      7) **도트 크기가 월드와 같다** (INBOX #38) — 배율이 캐릭터·타일과 같은 3배이고,
 ##         구워진 바닥 그림의 칸이 그 배율이 전제하는 크기다.
+##      8) **버린 것은 바라보는 방향 앞 한 칸에 놓이고, 물 위에는 안 놓인다** (INBOX #42).
+##      9) **잠금이 풀리는 기준은 놓인 자리가 아니라 버린 사람이 서 있던 자리다** (INBOX #42).
 ##   B. 화면(실제 월드 씬에서)
-##      8) 버리면 **그 자리에 실제로 그려진다** — 버리기 전 캡처에는 없던 아이템 색이 생긴다.
-##      9) **앞뒤(Y) 정렬이 플레이어와 맞는다** — 플레이어보다 위에 놓이면 뒤에, 아래면 앞에
+##     10) 버리면 **그 자리에 실제로 그려진다** — 버리기 전 캡처에는 없던 아이템 색이 생긴다.
+##         **아무 데도 안 옮기고 본다** — 버린 것이 캐릭터 앞에 놓이므로 그대로 보인다.
+##     11) **앞뒤(Y) 정렬이 플레이어와 맞는다** — 플레이어보다 위에 놓이면 뒤에, 아래면 앞에
 ##         그려진다. 겹치는 픽셀만 골라 네 장(빈 화면/아이템만/플레이어만/둘 다)을 견준다.
-##     10) 버린 자리에 서 있으면 안 주워지고, **걸어 나갔다 돌아오면** 주워진다.
-##     11) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어가고 나머지는 바닥에 그대로 보인다.
-##     12) 메인 메뉴로 나갔다 같은 슬롯으로 다시 들어와도 그 자리에 그대로 있고 보인다.
+##     12) 버린 자리에 서 있으면 안 주워지고, **걸어 나갔다 돌아오면** 주워진다.
+##     13) 꽉 찬 인벤토리로 밟으면 들어갈 만큼만 들어가고 나머지는 바닥에 그대로 보인다.
+##     14) 메인 메뉴로 나갔다 같은 슬롯으로 다시 들어와도 그 자리에 그대로 있고 보인다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
@@ -30,6 +33,7 @@ const ItemStack := preload("res://scripts/item_stack.gd")
 const ItemTypes := preload("res://scripts/item_types.gd")
 const GroundItems := preload("res://scripts/ground_items.gd")
 const GroundItemNode := preload("res://scripts/ground_item_node.gd")
+const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 const TerrainTiles := preload("res://scripts/terrain_tiles.gd")
 
@@ -50,12 +54,6 @@ const PAUSE_BOX := "HUD/PauseMenu/Box/BoxLayout"
 ## 처음 지급되는 인벤토리에서 목재가 앉는 칸(`world.gd` 의 `STARTER_ITEMS` 순서).
 const WOOD_SLOT := 7
 const WOOD_COUNT := 64
-
-## **발밑에 버린 것은 캐릭터에 가려 그림을 볼 수 없다** — 그림을 보는 검사에서는
-## 아이템을 이만큼 아래로 내려놓는다(Y정렬상 캐릭터 앞이라 통째로 보인다).
-## **줍히는 거리(36) 안이라 잠금이 그대로 남는다** — 밖으로 내보내면 잠금이 풀려서
-## 뒤따르는 "버린 자리에 서 있으면 안 주워진다"가 헛돈다.
-const SHOW_OFFSET := Vector2(0.0, 30.0)
 
 ## Y정렬 검사에서 아이템을 플레이어 위/아래로 얼마나 옮기는가. 그림이 겹칠 만큼
 ## 가깝고, 줍히는 거리(36) 안이라 **잠긴 채로 남는다**.
@@ -93,19 +91,19 @@ func _initialize() -> void:
 		_settle,
 		_stand_on_open_land,
 		_settle,
-		# 8) 버리면 그려진다
+		# 10) 버리면 그려진다 — **옮기지 않고** 놓인 그 자리에서 본다
 		func(): _remember_shot("empty"),
 		_drop_wood,
-		_show_item_beside_player,
+		_read_drop_spot,
 		_settle,
 		func(): _shoot("70_ground_dropped"),
 		_check_drawn_after_drop,
 	]
-	# 9) 앞뒤(Y) 정렬 — 위에 놓으면 플레이어 뒤, 아래에 놓으면 플레이어 앞
+	# 11) 앞뒤(Y) 정렬 — 위에 놓으면 플레이어 뒤, 아래에 놓으면 플레이어 앞
 	_steps.append_array(_sort_steps(-SORT_OFFSET, false, "71_ground_behind"))
 	_steps.append_array(_sort_steps(SORT_OFFSET, true, "72_ground_front"))
 	_steps.append_array([
-		# 10) 버린 자리에 서 있는 동안은 안 주워진다
+		# 12) 버린 자리에 서 있는 동안은 안 주워진다
 		_move_item_onto_player,
 		_settle,
 		_check_not_taken_while_standing,
@@ -117,7 +115,7 @@ func _initialize() -> void:
 		_settle,
 		_check_picked_up,
 		func(): _shoot("73_ground_picked_up"),
-		# 11) 꽉 찬 인벤토리 — 들어갈 만큼만 들어가고 나머지는 바닥에 남는다
+		# 13) 꽉 찬 인벤토리 — 들어갈 만큼만 들어가고 나머지는 바닥에 남는다
 		_fill_inventory_and_drop_stone,
 		_settle,
 		_step_onto_stone,
@@ -128,7 +126,7 @@ func _initialize() -> void:
 		_settle,
 		func(): _shoot("74_ground_overflow"),
 		_check_leftover_drawn,
-		# 12) 나갔다 들어와도 그 자리에 그대로
+		# 14) 나갔다 들어와도 그 자리에 그대로
 		func(): _press(PAUSE_BOX + "/ExitButton"),
 		_settle,
 		func(): change_scene_to_file(WORLD_SCENE),
@@ -140,9 +138,9 @@ func _initialize() -> void:
 		_check_drawn_after_reload,
 		# 아이콘이 있는 아이템(도구)도 바닥에서 어떻게 보이는지 남긴다 — 자리표시
 		# 사각형과 달리 이쪽이 실제 그림이다.
-		_drop_axe,
 		func(): _remember_shot("before_tool"),
-		_place_axe_beside_player,
+		_drop_axe,
+		_read_axe_spot,
 		_settle,
 		func(): _shoot("76_ground_tool"),
 		_check_tool_drawn,
@@ -180,6 +178,8 @@ func _process(delta: float) -> bool:
 func _check_core() -> void:
 	_check_drop_starts_locked()
 	_check_lock_needs_leaving()
+	_check_lock_follows_dropper()
+	_check_drop_spot()
 	_check_pickup_radius()
 	_check_full_inventory_keeps_leftover()
 	_check_lifetime()
@@ -263,6 +263,102 @@ func _check_lock_needs_leaving() -> void:
 	if ground.size() != 0 or inv.count_of("wood") != 5:
 		_fails.append("코어: 돌아왔는데 안 주워졌다 (바닥 %d개, 인벤 %d개)"
 				% [ground.size(), inv.count_of("wood")])
+
+
+## 9) **잠금이 풀리는 기준은 놓인 자리가 아니라 버린 사람이 서 있던 자리다**
+## (2026-09-07, INBOX #42 — 버린 것이 앞 한 칸에 놓이면서 둘이 갈렸다).
+func _check_lock_follows_dropper() -> void:
+	var ground := GroundItems.new()
+	var inv := Inventory.new()
+	var stood := Vector2.ZERO
+	var at := stood + Vector2(0.0, PlayerMotion.DROP_DISTANCE)  # 바라보는 쪽 한 칸 앞
+	ground.drop(ItemStack.new("wood", 5), at, 1000.0, stood)
+	# 버린 자리에 서 있는 동안은 — 놓인 것이 줍히는 거리 밖이어도 — 잠긴 채다.
+	for i in 10:
+		ground.update(stood, inv, 1000.0)
+	if not bool((ground.items[0] as Dictionary)[GroundItems.KEY_LOCKED]):
+		_fails.append("코어: 버린 자리에 서 있는데 잠금이 풀렸다")
+	# 놓인 것 쪽으로 한 발짝 — 줍히는 거리 안이지만 아직 버린 자리를 안 벗어났다.
+	ground.update(stood + Vector2(0.0, GroundItems.PICKUP_RADIUS - 1.0), inv, 1000.0)
+	if ground.size() != 1 or inv.count_of("wood") != 0:
+		_fails.append("코어: 버린 자리를 안 벗어났는데 도로 주워졌다")
+	# 버린 자리를 벗어나면 풀리고, 그 뒤에 놓인 자리로 가면 주워진다.
+	ground.update(stood + Vector2(0.0, -200.0), inv, 1000.0)
+	if bool((ground.items[0] as Dictionary)[GroundItems.KEY_LOCKED]):
+		_fails.append("코어: 버린 자리를 벗어났는데 잠금이 안 풀렸다")
+	ground.update(at, inv, 1000.0)
+	if ground.size() != 0 or inv.count_of("wood") != 5:
+		_fails.append("코어: 잠금이 풀린 뒤인데 놓인 자리에서 안 주워졌다")
+
+
+## 8) **버린 것은 바라보는 방향 앞 한 칸에 놓이고, 물 위에는 안 놓인다**
+## (2026-09-07, INBOX #42 — docs/DESIGN.md 「바닥 드롭」).
+##
+## 자리를 고르는 것은 코어(`player_motion.gd` 의 `drop_position()`)라 화면 없이 잰다.
+func _check_drop_spot() -> void:
+	var world := WorldGen.new()
+	world.build(SEED)
+	var motion := PlayerMotion.new(world)
+
+	# (1) 사방이 육지인 칸 — 네 방향 모두 정확히 한 칸 앞이다.
+	var open := _find_open_tile(world)
+	if open == Vector2i(-1, -1):
+		_fails.append("코어: 사방이 육지인 칸을 못 찾았다")
+		return
+	motion.place_at_tile(open)
+	for d in PlayerMotion.DIR_ANGLE.size():
+		# `facing` 은 `tick()` 이 조준 각도에서 정하는 값이다 — 여기서는 그 결과만 흉내낸다.
+		motion.facing = d
+		var spot := motion.drop_position()
+		var want := motion.position + motion.facing_direction() * PlayerMotion.DROP_DISTANCE
+		if spot.distance_to(want) > 0.5:
+			_fails.append("코어: %d번 방향으로 버린 것이 앞 한 칸(%s)이 아니라 %s 에 놓였다"
+					% [d, want, spot])
+		if spot.distance_to(motion.position) <= GroundItems.PICKUP_RADIUS:
+			_fails.append("코어: 버린 자리가 줍히는 거리(%.0f) 안이다 — 발밑과 안 갈린다"
+					% GroundItems.PICKUP_RADIUS)
+
+	# (2) 물가에서 물을 보고 버려도 바다 칸에는 안 놓인다 — 놓이면 영영 못 줍는다.
+	var shore := _find_shore(world)
+	if shore.is_empty():
+		_fails.append("코어: 물가 칸을 못 찾았다")
+		return
+	motion.place_at_tile(shore[0])
+	motion.facing = shore[1]
+	var at := motion.drop_position()
+	var tile := WorldGen.world_to_tile(at)
+	if not world.is_land(tile.x, tile.y):
+		_fails.append("코어: 물을 보고 버렸더니 바다 칸 %s 에 놓였다 — 영영 못 줍는다" % tile)
+	if at.distance_to(motion.position) > PlayerMotion.DROP_DISTANCE + 0.5:
+		_fails.append("코어: 버린 자리가 한 칸(%.0f)보다 멀다" % PlayerMotion.DROP_DISTANCE)
+
+
+## 스폰 근처에서 사방 2칸이 전부 육지인 칸.
+func _find_open_tile(world: RefCounted) -> Vector2i:
+	var spawn: Vector2i = world.spawn_tile
+	for radius in range(0, 40):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var tile := spawn + Vector2i(dx, dy)
+				if _land_around(world, tile, 2):
+					return tile
+	return Vector2i(-1, -1)
+
+
+## 스폰 근처에서 **한 방향 앞이 바다인** 육지 칸과 그 방향. `[타일, 방향]` 을 돌려준다.
+func _find_shore(world: RefCounted) -> Array:
+	var spawn: Vector2i = world.spawn_tile
+	for radius in range(1, 120):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var tile := spawn + Vector2i(dx, dy)
+				if not world.is_land(tile.x, tile.y):
+					continue
+				for d in PlayerMotion.DIR_ANGLE.size():
+					var ahead := Vector2i(Vector2.from_angle(PlayerMotion.DIR_ANGLE[d]).round())
+					if not world.is_land(tile.x + ahead.x, tile.y + ahead.y):
+						return [tile, d]
+	return []
 
 
 ## 3) 줍히는 거리 경계.
@@ -546,20 +642,18 @@ func _drop_axe() -> void:
 	current_scene.call("_on_drop_outside", Inventory.AREA_GENERAL, Inventory.HOTBAR_SLOTS - 1)
 
 
-## 도끼를 플레이어 **옆**으로 옮긴다 — 발밑에 놓으면 캐릭터에 가려 그림을 볼 수 없다.
-## 줍히는 거리 밖이라 그대로 남는다.
-func _place_axe_beside_player() -> void:
+## 버린 도끼가 놓인 자리를 받아 적는다 — **옮기지 않는다**(INBOX #42 뒤로는 버린 것이
+## 캐릭터 앞 한 칸에 놓여서 그대로 보인다). 줍히는 거리 밖이라 그대로 남는다.
+func _read_axe_spot() -> void:
 	var ground := _ground()
 	if ground == null or ground.size() < 2:
-		_fails.append("옆에 놓을 도끼가 없다")
+		_fails.append("버린 도끼가 바닥에 없다")
 		return
-	_axe_position = _player().global_position + Vector2(60.0, 0.0)
-	(ground.items[ground.size() - 1] as Dictionary)[GroundItems.KEY_POSITION] = _axe_position
-	ground.version += 1
+	_axe_position = (ground.items[ground.size() - 1] as Dictionary)[GroundItems.KEY_POSITION]
 
 
 ## 도구는 자리표시가 아니라 **구워진 그림**이라 아이템 색으로 셀 수가 없다 —
-## 옮기기 전 캡처와 견줘서 그 자리의 픽셀이 실제로 바뀌었는지 본다.
+## 버리기 전 캡처와 견줘서 그 자리의 픽셀이 실제로 바뀌었는지 본다.
 func _check_tool_drawn() -> void:
 	if _view().get_child_count() != 2:
 		_fails.append("도구를 버렸는데 바닥 그림이 %d개다 — 2개여야 한다"
@@ -567,7 +661,7 @@ func _check_tool_drawn() -> void:
 		return
 	var changed := _count_changed(_shots["before_tool"], _capture(), _axe_position)
 	if changed < SORT_MIN_PIXELS:
-		_fails.append("옆에 놓은 도끼가 화면에 안 보인다 (바뀐 픽셀 %d)" % changed)
+		_fails.append("버린 도끼가 화면에 안 보인다 (바뀐 픽셀 %d)" % changed)
 
 
 ## 다시 들어온 뒤 그림을 확인할 자리로 간다 — **줍히는 거리 밖**이라 안 주워진다.
@@ -621,12 +715,28 @@ func _land_around(world: RefCounted, tile: Vector2i, radius: int) -> bool:
 	return true
 
 
-## 인벤토리 창 밖으로 끌어다 놓은 것과 **같은 경로**로 버린다(창을 여는 부분은
-## `qa_inventory.gd` 가 이미 검사한다 — 여기 관심사는 버린 뒤에 무슨 일이 나는가다).
-## 버린 아이템을 캐릭터 밖으로 내려놓는다(위 `SHOW_OFFSET`).
-func _show_item_beside_player() -> void:
-	_shown_position = _drop_position + SHOW_OFFSET
-	_place_item(_shown_position)
+## 버린 것이 **실제로 놓인 자리**를 받아 적는다.
+##
+## 예전에는 여기서 아이템을 옆으로 옮겼다 — 발밑에 놓여서 캐릭터에 통째로 가렸기
+## 때문이다(2026-09-07, INBOX #42 가 그걸 고쳤다). 지금은 **한 픽셀도 안 옮기고**,
+## 코어가 고른 자리가 정말 사람 앞 한 칸인지까지 여기서 함께 본다.
+func _read_drop_spot() -> void:
+	var ground := _ground()
+	if ground == null or ground.size() == 0:
+		_fails.append("버렸는데 바닥에 아무것도 없다")
+		return
+	_shown_position = (ground.items[0] as Dictionary)[GroundItems.KEY_POSITION]
+	# 노드가 코어에 물어본 자리 그대로여야 한다(`world.gd` 가 다른 값을 넣지 않았는지).
+	var want: Vector2 = _player().call("drop_position")
+	if _shown_position.distance_to(want) > 0.5:
+		_fails.append("버린 것이 코어가 고른 자리(%s)가 아니라 %s 에 놓였다"
+				% [want, _shown_position])
+	var gap := _shown_position.distance_to(_drop_position)
+	if gap <= GroundItems.PICKUP_RADIUS:
+		_fails.append("버린 것이 발밑에서 %.1f px 밖에 안 떨어졌다 — 캐릭터에 가린다" % gap)
+	# 바라보는 쪽(기본은 아래)이라 Y정렬상 캐릭터 앞이다.
+	if _shown_position.y <= _drop_position.y:
+		_fails.append("아래를 보고 버렸는데 아이템이 캐릭터 앞으로 안 갔다")
 
 
 func _drop_wood() -> void:

@@ -54,6 +54,16 @@ const FACING_HALF_SECTOR := PI * 0.25
 ## 45+10도까지 유지하고, 그걸 넘겨야 다음 방향으로 넘어간다.
 const FACING_HYSTERESIS := PI / 18.0
 
+## 버린 아이템이 놓이는 자리 — **발밑이 아니라 바라보는 방향 앞 타일 한 칸**이다
+## (docs/DESIGN.md 「아이템 획득 방식 — 바닥 드롭」, 2026-09-07 INBOX #42).
+## 줍히는 거리(`ground_items.gd` 의 36)보다 커서, 서 있는 자리와 놓인 자리가 확실히
+## 갈린다.
+const DROP_DISTANCE := 48.0
+
+## 그 자리를 찾을 때 앞으로 나아가는 한 걸음. 타일(48)의 1/4 이라 **물 한 칸을 통째로
+## 건너뛰지 않는다** — 총알의 한 걸음(`bullets.gd`)과 같은 이유로 속도/거리와 따로 둔다.
+const DROP_STEP := 12.0
+
 ## 손에 든 도구를 한 번 쓰는 데 걸리는 틱 수. 60틱 = 1초이므로 30틱 = 0.5초다.
 ## **그림(`player_frames.gd` 의 `use_<도구>` 6프레임 × `USE_FPS` 12)과 같은 길이**여야
 ## 모션이 끝나는 순간과 다시 쓸 수 있게 되는 순간이 맞는다 — `qa_hotbar.gd` 가 둘이
@@ -226,6 +236,39 @@ func is_using() -> bool:
 ## 쓴다 (`facing` 은 그림을 고르느라 45도 단위로 뭉갠 값이다).
 func aim_direction() -> Vector2:
 	return Vector2.from_angle(aim_angle)
+
+
+## 지금 보고 있는 4방향의 단위 벡터 — **그림이 보는 쪽**이다(`aim_direction()` 과 달리
+## 45도 단위로 스냅된 값이라, 화면의 캐릭터가 향한 쪽과 어긋날 수가 없다).
+func facing_direction() -> Vector2:
+	return Vector2.from_angle(DIR_ANGLE[facing])
+
+
+## 버린 아이템이 놓일 자리 (docs/DESIGN.md 「아이템 획득 방식 — 바닥 드롭」).
+##
+## 바라보는 방향으로 한 칸 앞이되, **물 위에는 놓지 않는다** — 걸어 들어갈 수 없는
+## 자리에 놓이면 영영 못 줍고, 그건 「인벤토리 안전」의 *"아이템이 조용히 사라지면
+## 안 된다"* 와 같은 말이 된다. 앞으로 한 걸음씩 나아가며 **땅인 마지막 자리**를
+## 고르므로, 물가에서 물을 보고 버리면 발밑에 놓인다(그 경우만 예전과 같다).
+##
+## **물인지는 몸통 상자가 아니라 떨어진 칸으로 판정한다** — 놓이는 것은 걸어다니는
+## 몸이 아니라 점 하나다(「낚시」의 *"물 위인가는 찌가 떨어진 칸으로 판정한다"* 와
+## 같은 자리다).
+##
+## **코어에 있는 이유**: 나중에 서버가 "이 버리기가 유효한가"를 판정하려면 같은
+## 계산을 화면 없이 해야 한다 (docs/DESIGN.md 「서버 권위」).
+func drop_position() -> Vector2:
+	var direction := facing_direction()
+	var at := position
+	var travelled := DROP_STEP
+	while travelled <= DROP_DISTANCE + SKIN:
+		var next := position + direction * travelled
+		var t := WorldGen.world_to_tile(next)
+		if not _world.is_land(t.x, t.y):
+			break
+		at = next
+		travelled += DROP_STEP
+	return at
 
 
 ## 지금 탄퍼짐 반각(라디안) — 쏜 총알이 조준 각도에서 좌우로 벌어질 수 있는 최대치다.

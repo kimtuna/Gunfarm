@@ -138,6 +138,15 @@ func muzzle_position() -> Vector2:
 	return motion.position + (global_position - position)
 
 
+## 인벤토리 창 밖으로 버린 것이 놓일 자리(전역, 지면 평면). **발밑이 아니라 바라보는
+## 방향 앞 한 칸**이고, 물 위는 피한다 — 계산은 전부 코어의 `drop_position()` 이 하고
+## 여기서는 좌표계만 옮긴다(`muzzle_position()` 과 같은 모양이다).
+func drop_position() -> Vector2:
+	if motion == null:
+		return global_position
+	return motion.drop_position() + (global_position - position)
+
+
 ## 조준 각도를 재는 기준점(전역 좌표). **노드 원점은 발밑이라 발에서 재면 안 된다** —
 ## 마우스를 캐릭터 가슴 높이에 두는 것만으로 "위쪽 조준"으로 읽혀서 방향이 뒤집힌다.
 ## 그림 칸의 절반 높이 = 몸 한가운데에서 잰다.
