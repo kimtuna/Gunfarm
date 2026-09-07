@@ -22,6 +22,14 @@ const Inventory := preload("res://scripts/inventory.gd")
 ## 직접 본다"). **틱 안에서 쏘는 것**이라 위치는 `muzzle_position()` 으로 봐야 한다.
 signal use_started
 
+## 이 틱에 **재장전(R)을 눌렀다**. 총을 들었을 때만 실제로 재장전이 시작되는데, 무엇을
+## 들었는지 아는 것은 인벤토리를 가진 쪽(`world.gd`)이라 여기서는 "눌렸다"만 알린다
+## (`use_started` 와 같은 자리다).
+signal reload_requested
+
+## 이 틱에 **우클릭(탄종 전환)을 눌렀다.** 위와 같은 규칙이다.
+signal ammo_switch_requested
+
 ## 한 프레임에 몰아서 돌릴 수 있는 최대 틱 수. 창을 끌거나 잠깐 멈췄다 돌아왔을 때
 ## 밀린 시간을 한꺼번에 시뮬레이션하면 순간이동처럼 보인다 — 그냥 버린다.
 const MAX_TICKS_PER_FRAME := 5
@@ -57,6 +65,11 @@ var _accumulated := 0.0
 ## 고정 틱을 도는 곳이 달라서, 한 번 받아 두었다가 **틱이 실제로 돈 뒤에** 지운다 —
 ## 프레임이 빨라 이번 프레임에 틱이 하나도 안 돌면 클릭이 그냥 사라진다.
 var _use_pressed := false
+
+## 아직 틱에 넘기지 않은 재장전(R) / 탄종 전환(우클릭). 좌클릭과 같은 이유로 받아
+## 두었다가 틱이 실제로 돈 뒤에 지운다.
+var _reload_pressed := false
+var _switch_pressed := false
 
 @onready var _sprite: AnimatedSprite2D = $Sprite
 
@@ -140,6 +153,19 @@ func request_use() -> void:
 		_use_pressed = true
 
 
+## R(재장전) / 우클릭(탄종 전환)도 같은 길로 코어에 넘어간다 — 키를 정하는 곳은
+## `world.gd` 한 곳이고, 여기는 입력 한 벌에 실어주는 일만 한다.
+## **실제로 재장전/전환이 일어나는지는 총을 들었는지 아는 쪽이 정한다**(「서버 권위」).
+func request_reload() -> void:
+	if input_enabled:
+		_reload_pressed = true
+
+
+func request_ammo_switch() -> void:
+	if input_enabled:
+		_switch_pressed = true
+
+
 ## 지금 눌려 있는 이동 키와 마우스 조준, **든 칸과 좌클릭**을 한 벌로 모은다.
 ## **이게 서버로 보낼 입력이다** (docs/DESIGN.md 「서버 권위 / 클라이언트 신뢰」).
 ##
@@ -149,6 +175,8 @@ func read_input() -> RefCounted:
 	var slot: int = 0 if inventory == null else inventory.selected_hotbar
 	if not input_enabled:
 		_use_pressed = false
+		_reload_pressed = false
+		_switch_pressed = false
 		return PlayerInput.new(Vector2i.ZERO, _aim_angle(), slot, false)
 	return PlayerInput.new(
 		Vector2i(
@@ -158,6 +186,8 @@ func read_input() -> RefCounted:
 		aim_angle_for(get_global_mouse_position()),
 		slot,
 		_use_pressed,
+		_reload_pressed,
+		_switch_pressed,
 	)
 
 
@@ -191,11 +221,17 @@ func _process(delta: float) -> void:
 		# 총알의 출발 자리를 정한다(코어의 위치는 틱마다 다르다).
 		if motion.use_started:
 			use_started.emit()
+		if motion.reload_started:
+			reload_requested.emit()
+		if motion.switch_started:
+			ammo_switch_requested.emit()
 		ticks += 1
 	if ticks > 0:
 		# 틱이 실제로 돈 뒤에야 지운다 — 프레임이 빠를 때 클릭이 틱을 못 만나고
 		# 사라지는 것을 막는다. 여러 틱이 한꺼번에 돌아도 코어가 겹쳐 재생을 막는다.
 		_use_pressed = false
+		_reload_pressed = false
+		_switch_pressed = false
 	if _accumulated >= PlayerMotion.TICK_DELTA:
 		_accumulated = 0.0
 	position = motion.position

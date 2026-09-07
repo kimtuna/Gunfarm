@@ -32,10 +32,21 @@ var hotbar := 0
 ## 이 값을 받은 코어가 정한다.
 var use := false
 
+## 이 틱에 R 을 눌렀는가 = 재장전 (docs/DESIGN.md 「총기 스탯」의 탄창 항목).
+## **총을 들었을 때만 의미가 있지만 그 판정은 여기서 하지 않는다** — 이 입력은 든
+## 칸 번호까지만 알고, 그 칸에 총이 있는지는 인벤토리를 가진 쪽이 본다 (「서버 권위」).
+var reload := false
+
+## 이 틱에 우클릭했는가 = 장전된 탄종 전환 (docs/DESIGN.md 「조작」의 우클릭).
+var switch_ammo := false
+
 
 func _init(move_axes: Vector2i = Vector2i.ZERO, aim: float = AIM_DOWN,
-		hotbar_slot: int = 0, use_pressed: bool = false) -> void:
+		hotbar_slot: int = 0, use_pressed: bool = false,
+		reload_pressed: bool = false, switch_pressed: bool = false) -> void:
 	move = move_axes
 	aim_angle = aim
 	hotbar = hotbar_slot
 	use = use_pressed
+	reload = reload_pressed
+	switch_ammo = switch_pressed

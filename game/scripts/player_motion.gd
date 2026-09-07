@@ -15,6 +15,7 @@ extends RefCounted
 
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerInput := preload("res://scripts/player_input.gd")
+const GunAmmo := preload("res://scripts/gun_ammo.gd")
 
 ## 스프라이트 시트의 행 순서와 같다 (scripts/player_frames.gd 의 `DIR_NAMES`).
 enum { DOWN = 0, LEFT = 1, RIGHT = 2, UP = 3 }
@@ -111,7 +112,25 @@ var aim_focus := 1.0
 ## 스냅된 `facing` 이 아니라 이 각도를 써야 한다 (docs/DESIGN.md 「조작」).
 var aim_angle := PlayerInput.AIM_DOWN
 
+## 총의 탄창(`gun_ammo.gd` — 탄종별 잔여 발수 + 재장전). **화면 상태가 아니라 플레이어
+## 상태다** — 서버가 "이 발사가 유효한가"를 판정하려면 알아야 한다 (docs/DESIGN.md
+## 「서버 권위」, INBOX #35). **총을 들고 있지 않아도 여기 있다**: 이 코어는 든 칸
+## 번호까지만 알고 그 칸에 총이 있는지는 모르므로(아래 `held_slot`), 총을 잠깐
+## 내려놨다고 탄창이 없어지면 도로 채워지는 꼴이 된다.
+var gun: RefCounted = GunAmmo.new()
+
+## **이 틱에 재장전(R)을 눌렀는가** — 눌린 내내가 아니라 눌린 순간 하나다.
+## `use_started` 와 같은 자리이고, 실제로 재장전을 시작할지는 **총을 들었는지 아는
+## 쪽**(인벤토리를 가진 `world.gd`)이 정한다 (docs/DESIGN.md 「서버 권위」).
+var reload_started := false
+
+## **이 틱에 우클릭(탄종 전환)을 눌렀는가.** 위와 같은 규칙이다.
+var switch_started := false
+
 var _world: RefCounted = null
+## 지난 틱에 눌려 있었는가 — 누르고 있는 동안 매 틱 다시 시작되지 않게 하는 것뿐이다.
+var _reload_held := false
+var _switch_held := false
 
 
 func _init(world: RefCounted) -> void:
@@ -135,6 +154,15 @@ func tick(input: RefCounted) -> void:
 	if use_ticks_left == 0 and input.use:
 		use_ticks_left = USE_TICKS
 		use_started = true
+	# **재장전 타이머는 손에 무엇을 들었든 여기서 돈다** — 총을 든 동안만 돌게 하면
+	# 재장전 중에 도끼로 바꿨다가 돌아왔을 때 시간이 멈춰 있던 게 된다.
+	gun.tick()
+	# 눌린 순간 하나만 잡는다. 한 프레임에 여러 틱이 돌아도(`player.gd`) 같은 입력이
+	# 여러 번 들어오므로, 이 가장자리 검출이 없으면 R 한 번에 재장전이 계속 되감긴다.
+	reload_started = input.reload and not _reload_held
+	_reload_held = input.reload
+	switch_started = input.switch_ammo and not _switch_held
+	_switch_held = input.switch_ammo
 	var dir := Vector2(signf(float(input.move.x)), signf(float(input.move.y)))
 	is_moving = dir != Vector2.ZERO
 	# 정조준은 **서 있는가 움직이는가**로만 정해진다 — 조준선이 스스로 흐려지고

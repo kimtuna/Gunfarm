@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=13 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
@@ -8,6 +8,7 @@
 [ext_resource type="Script" path="res://scripts/ground_items_view.gd" id="6_ground"]
 [ext_resource type="Script" path="res://scripts/bullets_view.gd" id="7_bullets"]
 [ext_resource type="Script" path="res://scripts/aim_line.gd" id="8_aim"]
+[ext_resource type="Script" path="res://scripts/gun_hud.gd" id="9_gunhud"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hotbar"]
 content_margin_left = 10.0
@@ -124,6 +125,30 @@ unique_name_in_owner = true
 layout_mode = 2
 mouse_filter = 2
 script = ExtResource("5_panel")
+
+[node name="GunHud" type="PanelContainer" parent="HUD/Layout"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -95.0
+offset_top = -176.0
+offset_right = 95.0
+offset_bottom = -102.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hotbar")
+
+[node name="GunHudPanel" type="Control" parent="HUD/Layout/GunHud"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("9_gunhud")
 
 [node name="PauseMenu" type="Control" parent="HUD"]
 unique_name_in_owner = true

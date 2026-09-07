@@ -159,6 +159,12 @@ func _ready() -> void:
 	# 좌클릭이 총알이 되는 자리 — **무엇을 들었는지 아는 쪽이 여기다**(인벤토리를
 	# 가진 쪽이 판정한다, docs/DESIGN.md 「서버 권위」).
 	(%Player as Node2D).use_started.connect(_on_player_use_started)
+	# R(재장전) / 우클릭(탄종 전환)도 같은 자리에서 받는다 — 셋 다 "총을 들었는가"를
+	# 먼저 물어야 하는 입력이라, 그 판정이 한 함수(`_held_item_id`)에 모여 있다.
+	(%Player as Node2D).reload_requested.connect(_on_player_reload_requested)
+	(%Player as Node2D).ammo_switch_requested.connect(_on_player_ammo_switch_requested)
+	# 총 UI 는 탄창을 들고 있는 플레이어 코어를 그대로 읽는다 (docs/DESIGN.md 「서버 권위」).
+	(%GunHudPanel as Control).setup((%Player as Node2D).motion)
 
 	(%WhoLabel as Label).text = character_name
 	(%InfoLabel as Label).text = "시드 %d   ·   스폰 (%d, %d)   ·   지도 %d×%d칸   ·   바다 %d%%" % [
@@ -187,9 +193,14 @@ func _give_starter_items() -> void:
 func _process(delta: float) -> void:
 	_update_ground_items()
 	_tick_bullets(delta)
-	# 조준선은 총을 들고 있을 때만 뜬다 (docs/DESIGN.md 「전투」) — 다른 도구를 들거나
-	# 빈손이면 사라지고, 창이 열려 조작이 끊긴 동안에도 감춘다(핫바와 같은 규칙).
-	(%AimLine as Node2D).armed = not _menu_open() and _held_item_id() == GUN_ITEM
+	# 조준선과 총 UI 는 **총을 들고 있을 때만** 뜬다 (docs/DESIGN.md 「전투」와
+	# 「총기 스탯」의 "탄창에 남은 발수는 총을 들고 있을 때만 화면에 표시한다") —
+	# 다른 도구를 들거나 빈손이면 사라지고, 창이 열려 조작이 끊긴 동안에도 감춘다
+	# (핫바와 같은 규칙). **판정이 한 줄인 이유**: 둘이 따로 갈리면 총을 내렸을 때
+	# 한쪽만 남는다.
+	var armed := not _menu_open() and _held_item_id() == GUN_ITEM
+	(%AimLine as Node2D).armed = armed
+	(%GunHud as Control).visible = armed
 	var tile: Vector2i = (%Player as Node2D).tile()
 	if tile != _marked_tile:
 		_marked_tile = tile
@@ -244,20 +255,44 @@ func _held_item_id() -> String:
 	return "" if stack == null else stack.id
 
 
-## 좌클릭으로 도구 쓰기가 시작됐다 — 그게 총이면 한 발이 나간다.
+## 좌클릭으로 도구 쓰기가 시작됐다 — 그게 총이고 **탄창에 남은 게 있으면** 한 발이 나간다.
 ##
-## **탄창·재장전·탄종은 아직 없다**(INBOX #35) — 지금은 좌클릭할 때마다 무한히 나가고,
 ## 연사 간격은 도구 쓰기 자체가 갖고 있는 0.5초(`player_motion.gd` 의 `USE_TICKS`)가
-## 그대로 「총기 스탯」의 초당 2발이 된다.
+## 그대로 「총기 스탯」의 초당 2발이 된다 — 여기서 따로 세지 않는다.
+##
+## **탄창이 비었거나 재장전 중이면 총알만 안 나가고 사용 모션은 그대로 나온다.** 모션은
+## 손에 든 것이 무엇인지 모르는 코어가 틀고(「생활 스킬 — 채집 계열」의 "대상이 없어도
+## 사용 모션은 나온다"), 총알을 만드는 것은 인벤토리를 아는 이쪽이다 — 못 쐈다는 것은
+## 총 UI 의 빈 탄창이 말한다.
 func _on_player_use_started() -> void:
 	if _held_item_id() != GUN_ITEM:
 		return
 	var player := %Player as Node2D
+	# **한 발을 실제로 덜어낸 경우에만** 총알이 나간다 (docs/DESIGN.md 「총기 스탯」의
+	# "다 쏘면 좌클릭해도 발사되지 않고").
+	if not player.motion.gun.fire():
+		return
 	# **탄퍼짐은 지금 조준선의 선명도 그대로다** — 쏜 뒤에 반동으로 깎이므로 순서가
 	# 중요하다(먼저 쏘고 그 다음에 흐트러진다).
 	bullets.fire(player.muzzle_position(), player.motion.aim_angle,
 			player.motion.spread_angle())
 	player.motion.apply_recoil()
+
+
+## R — 재장전 (docs/DESIGN.md 「총기 스탯」). **예비 탄약이 없어서 끝나면 언제나 가득**
+## 이고, 이미 가득이거나 이미 재장전 중이면 아무 일도 하지 않는다(`gun_ammo.gd`).
+func _on_player_reload_requested() -> void:
+	if _held_item_id() != GUN_ITEM:
+		return
+	(%Player as Node2D).motion.gun.start_reload()
+
+
+## 우클릭 — 장전된 탄종 전환 (기본탄 ↔ 마취탄, docs/DESIGN.md 「조작」).
+## **탄종마다 탄창이 따로라** 바꿔도 그쪽에 남아 있던 발수 그대로다.
+func _on_player_ammo_switch_requested() -> void:
+	if _held_item_id() != GUN_ITEM:
+		return
+	(%Player as Node2D).motion.gun.switch_kind()
 
 
 ## 씬이 내려갈 때(메인 메뉴로 나가기, 종료) 마지막으로 한 번 더 적는다 —
@@ -337,6 +372,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		if not _menu_open():
 			get_viewport().set_input_as_handled()
 			(%Player as Node2D).request_use()
+		return
+	# R = 재장전, 우클릭 = 탄종 전환 (docs/DESIGN.md 「조작」/「총기 스탯」).
+	# **좌클릭과 같은 규칙**이다: 창이 하나라도 열려 있으면 안 먹고, 총을 들었는지는
+	# 여기서 보지 않는다(입력으로 코어까지 갔다가 인벤토리를 아는 자리에서 갈린다).
+	if event.is_action_pressed("reload"):
+		if not _menu_open():
+			get_viewport().set_input_as_handled()
+			(%Player as Node2D).request_reload()
+		return
+	if event.is_action_pressed("switch_ammo"):
+		if not _menu_open():
+			get_viewport().set_input_as_handled()
+			(%Player as Node2D).request_ammo_switch()
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
