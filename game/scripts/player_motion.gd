@@ -52,9 +52,26 @@ const FACING_HALF_SECTOR := PI * 0.25
 ## 45+10도까지 유지하고, 그걸 넘겨야 다음 방향으로 넘어간다.
 const FACING_HYSTERESIS := PI / 18.0
 
+## 손에 든 도구를 한 번 쓰는 데 걸리는 틱 수. 60틱 = 1초이므로 30틱 = 0.5초다.
+## **그림(`player_frames.gd` 의 `use_<도구>` 6프레임 × `USE_FPS` 12)과 같은 길이**여야
+## 모션이 끝나는 순간과 다시 쓸 수 있게 되는 순간이 맞는다 — `qa_hotbar.gd` 가 둘이
+## 어긋나지 않았는지 직접 견준다. **여기 있는 이유**는 이게 그림 사정이 아니라
+## "얼마나 자주 휘두를 수 있는가"라는 게임 값이고, 나중에 서버가 좌클릭의 결과를
+## 계산할 때 같은 값을 봐야 하기 때문이다 (docs/DESIGN.md 「서버 권위」).
+const USE_TICKS := 30
+
 var position := Vector2.ZERO
 var facing := DOWN
 var is_moving := false
+
+## 지금 손에 든 핫바 칸. **입력이 정한다**(`player_input.gd` 의 `hotbar`) —
+## 화면 상태가 아니라 플레이어 상태다 (docs/DESIGN.md 「캐릭터 애니메이션」의
+## "무엇을 들고 있는가는 플레이어 상태다"). 그 칸에 무엇이 들어 있는지는
+## 인벤토리를 가진 쪽이 본다 — 이 코어는 칸 번호까지만 안다.
+var held_slot := 0
+
+## 도구를 쓰는 중이면 남은 틱 수. 0 이면 안 쓰는 중이다.
+var use_ticks_left := 0
 
 ## 지금 조준하고 있는 각도(라디안) — **스냅되지 않은 원본이다.**
 ## `facing` 은 4방향 시트를 고르려고 여기서 스냅한 값이고, 총알 방향과 시야 콘은
@@ -75,6 +92,14 @@ func tick(input: RefCounted) -> void:
 	# 그래서 서 있을 때도 마우스를 돌리면 캐릭터가 같이 돈다.
 	aim_angle = input.aim_angle
 	facing = _facing_for_aim(aim_angle)
+	held_slot = input.hotbar
+	# **쓰는 중에 또 눌러도 겹쳐 재생되지 않는다** — 남은 틱이 0 이 되어야 다시 시작한다
+	# (docs/DESIGN.md 「캐릭터 애니메이션」의 "한 번 재생된 뒤 다시 hold 로 돌아온다").
+	# **대상이 있는지는 보지 않는다** — 허공에 대고도 나가야 나중에 근접무기가 성립한다
+	# (docs/DESIGN.md 「생활 스킬 — 채집 계열」).
+	use_ticks_left = maxi(0, use_ticks_left - 1)
+	if use_ticks_left == 0 and input.use:
+		use_ticks_left = USE_TICKS
 	var dir := Vector2(signf(float(input.move.x)), signf(float(input.move.y)))
 	is_moving = dir != Vector2.ZERO
 	if not is_moving:
@@ -84,6 +109,12 @@ func tick(input: RefCounted) -> void:
 	# 축을 따로 밀어야 벽에 비스듬히 붙었을 때 멈추지 않고 미끄러진다.
 	_move_axis(Vector2(step.x, 0.0))
 	_move_axis(Vector2(0.0, step.y))
+
+
+## 지금 손에 든 도구를 쓰는 중인가. 그리는 쪽은 이게 참인 동안 `use_<도구>` 를
+## 틀고, 거짓이 되면 `hold_<도구>` 로 돌아온다.
+func is_using() -> bool:
+	return use_ticks_left > 0
 
 
 ## 조준 방향의 단위 벡터. 총알/시야 콘처럼 **정확한 방향이 필요한 쪽은 여기를**

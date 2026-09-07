@@ -1,9 +1,22 @@
-[gd_scene load_steps=7 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=9 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 [ext_resource type="Theme" path="res://ui/menu_theme.tres" id="4_theme"]
+[ext_resource type="Script" path="res://scripts/inventory_panel.gd" id="5_panel"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hotbar"]
+content_margin_left = 10.0
+content_margin_top = 10.0
+content_margin_right = 10.0
+content_margin_bottom = 10.0
+bg_color = Color(0.164706, 0.192157, 0.14902, 0.870588)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.760784, 0.478431, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_pause"]
 content_margin_left = 32.0
@@ -67,6 +80,29 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.803922, 0.827451, 0.760784, 1)
 theme_override_font_sizes/font_size = 18
 text = "시드"
+
+[node name="Hotbar" type="PanelContainer" parent="HUD/Layout"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -294.0
+offset_top = -92.0
+offset_right = 294.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_hotbar")
+
+[node name="HotbarPanel" type="Control" parent="HUD/Layout/Hotbar"]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("5_panel")
 
 [node name="PauseMenu" type="Control" parent="HUD"]
 unique_name_in_owner = true

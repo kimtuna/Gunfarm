@@ -56,6 +56,10 @@
 - **매 프레임 `Input.warp_mouse()` 를 다른 자리로 부르면 그 이동이 다 반영되지 않는다**
   (OS 가 커서 이동을 합쳐버린다) — 마우스를 흔드는 검증이 "안 흔들렸다"로 통과해버린다.
   한 자리마다 2~3프레임씩 머물게 할 것.
+- **겹쳐 뜬 창이 있으면 마우스 버튼은 `_unhandled_input()`까지 못 간다** — 전체 화면을
+  덮는 Control(딤 등)이나 그 창의 `_input()`이 먼저 소비한다. "창이 열려 있으면 이 클릭이
+  안 먹는가"를 마우스로만 검증하면 그 판단 코드가 **한 번도 불려보지 않은 채** 통과한다 —
+  같은 클릭을 `InputEventAction`으로도 흘려보낼 것(Control이 안 먹어서 그대로 도달한다).
 - **`--script` 자체 QA에서 키 입력(Esc 등)은 `InputEventAction` + `Input.parse_input_event()`로
   흘려보낼 수 있다.** `event.action`에 액션 이름, `pressed = true`를 넣으면 씬의
   `_unhandled_input()`이 실제로 받는다 — 버튼처럼 `emit_signal`로 우회하지 않아도 된다.

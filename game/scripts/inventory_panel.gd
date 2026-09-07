@@ -9,9 +9,11 @@ extends Control
 ## 놓았는가"를 물을 때도, 자체 QA 가 "그 칸이 화면 어디인가"를 물을 때도 같은 함수를
 ## 부르므로 배치를 바꿔도 어긋날 데가 없다 — `map_canvas.gd` 의 `map_rect()` 와 같은 방식.
 ##
-## **아이콘 그림은 아직 없다**(이번은 [BUILD] 바퀴다). 칸에는 아이템 색으로 칠한
-## 자리표시와 두 글자 이름을 그린다 — 진짜 아이콘은 도구의 [DESIGN] 바퀴가 만든다
-## (docs/DESIGN.md 「새 도구를 추가하는 절차」 6번).
+## **화면 아래 핫바도 이 스크립트다**(2026-09-07, INBOX #25) — `hotbar_only` 를 켜면
+## 인벤토리 맨 위 9칸만 한 줄로 그린다. **별도 보관함이 아니라 같은 코어를 비추는
+## 것이라** 창에서 1번 칸을 바꾸면 하단 핫바도 같이 바뀐다(둘 다 `inventory.version`
+## 을 보고 다시 그린다). 칸 그림·아이콘·번호·고른 칸 표시가 **같은 코드**라 두 곳이
+## 어긋날 수가 없다.
 
 const ItemTypes := preload("res://scripts/item_types.gd")
 const Inventory := preload("res://scripts/inventory.gd")
@@ -53,6 +55,9 @@ const ITEM_INSET := 8.0
 
 var inventory: RefCounted = null
 
+## 하단 핫바 모드 — 일반 칸 맨 위 9칸만 한 줄로 그린다(장비 칸도 제목도 없다).
+var hotbar_only := false
+
 ## 지금 끌고 있는 칸({"area","index"}, 없으면 빈 Dictionary). 끌려나간 칸은 흐리게 그린다.
 var drag_from: Dictionary = {}
 
@@ -62,14 +67,17 @@ var hovered: Dictionary = {}
 var _drawn_version := -1
 
 
-func setup(new_inventory: RefCounted) -> void:
+func setup(new_inventory: RefCounted, only_hotbar: bool = false) -> void:
 	inventory = new_inventory
+	hotbar_only = only_hotbar
 	custom_minimum_size = panel_size()
 	_drawn_version = -1
 	queue_redraw()
 
 
 func panel_size() -> Vector2:
+	if hotbar_only:
+		return Vector2(Inventory.HOTBAR_SLOTS * SLOT + (Inventory.HOTBAR_SLOTS - 1) * GAP, SLOT)
 	var equip_w := EQUIP_COLS * SLOT + (EQUIP_COLS - 1) * GAP
 	var general_w := GENERAL_COLS * SLOT + (GENERAL_COLS - 1) * GAP
 	var rows := ceili(float(Inventory.EQUIPMENT_SLOTS) / EQUIP_COLS)
@@ -85,6 +93,11 @@ func _process(_delta: float) -> void:
 
 ## 칸 하나가 이 Control 안에서 차지하는 사각형.
 func slot_rect(area: String, index: int) -> Rect2:
+	if hotbar_only:
+		# 핫바는 일반 칸 맨 위 9칸뿐이다 — 나머지는 그리지도, 짚히지도 않는다.
+		if area != Inventory.AREA_GENERAL or index >= Inventory.HOTBAR_SLOTS:
+			return Rect2()
+		return Rect2(Vector2(index * (SLOT + GAP), 0.0), Vector2(SLOT, SLOT))
 	var cols := EQUIP_COLS if area == Inventory.AREA_EQUIPMENT else GENERAL_COLS
 	var origin := Vector2(0.0, CAPTION_H)
 	if area != Inventory.AREA_EQUIPMENT:
@@ -106,6 +119,11 @@ func global_slot_rect(area: String, index: int) -> Rect2:
 func slot_at(global_point: Vector2) -> Dictionary:
 	if inventory == null:
 		return {}
+	if hotbar_only:
+		for index in Inventory.HOTBAR_SLOTS:
+			if global_slot_rect(Inventory.AREA_GENERAL, index).has_point(global_point):
+				return {"area": Inventory.AREA_GENERAL, "index": index}
+		return {}
 	for area in [Inventory.AREA_GENERAL, Inventory.AREA_EQUIPMENT]:
 		for index in inventory.slot_count(area):
 			if global_slot_rect(area, index).has_point(global_point):
@@ -120,6 +138,10 @@ func _draw() -> void:
 		return
 	_drawn_version = inventory.version
 	var font := get_theme_default_font()
+	if hotbar_only:
+		for index in Inventory.HOTBAR_SLOTS:
+			_draw_slot(font, Inventory.AREA_GENERAL, index)
+		return
 	_draw_caption(font, Vector2(0.0, 0.0), "장비")
 	_draw_caption(font, Vector2(slot_rect(Inventory.AREA_GENERAL, 0).position.x, 0.0), "소지품")
 	for index in inventory.slot_count(Inventory.AREA_EQUIPMENT):

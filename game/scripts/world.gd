@@ -113,6 +113,13 @@ func _ready() -> void:
 		inventory.from_data(stored_inventory)
 
 	(%TerrainView as Node2D).set_world(world)
+	# 화면 아래 핫바는 **인벤토리 맨 위 9칸을 그대로 비추는 것**이지 별도 보관함이
+	# 아니다 (docs/DESIGN.md 「인벤토리 / 장비」) — 그래서 E 창과 **같은 코어**를 넘긴다.
+	# 그리는 코드도 창과 같은 스크립트다(`inventory_panel.gd` 의 `hotbar_only`).
+	(%HotbarPanel as Control).setup(inventory, true)
+	# 플레이어도 인벤토리를 본다 — **든 칸에 무엇이 있는가**가 어느 모션을 그릴지
+	# 정하기 때문이다 (docs/DESIGN.md 「캐릭터 애니메이션」).
+	(%Player as Node2D).inventory = inventory
 	# 슬롯에 저장된 외형을 그대로 입힌다 — 커스터마이징 화면에서 고른 색·머리모양이
 	# 월드에서도 같아야 한다. 칠하는 일은 `character_sprite.gd`(팔레트 교체)가 한다.
 	(%Player as Node2D).appearance = appearance
@@ -218,6 +225,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			if inventory.select_hotbar(index):
 				_inventory_dirty = true
 			return
+	# 좌클릭 = 지금 손에 든 도구의 동작 (docs/DESIGN.md 「조작」). **창이 하나라도
+	# 열려 있으면 안 먹는다** — 인벤토리에서 아이템을 끄는 좌클릭과 부딪힌다(그쪽은
+	# 자기 `_input` 에서 먼저 소비하지만, 지도/일시정지/설정은 여기서 막아야 한다).
+	# 대상이 없어도(허공에 대고) 모션은 나간다 — 「생활 스킬 — 채집 계열」.
+	if event.is_action_pressed("use_tool"):
+		if not _menu_open():
+			get_viewport().set_input_as_handled()
+			(%Player as Node2D).request_use()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
@@ -239,8 +255,14 @@ func _set_pause_open(open: bool) -> void:
 
 
 ## 메뉴가 하나라도 열려 있으면 플레이어는 조작을 받지 않는다.
+##
+## **하단 핫바도 그때 같이 감춘다**(2026-09-07, INBOX #25 — 고른 쪽을 적어둔다).
+## 인벤토리 창은 같은 9칸을 자기 맨 윗줄에 이미 그리고 있어서 두 벌이 겹치고,
+## 지도·일시정지는 화면을 어둡게 덮는데 핫바만 그 위에 밝게 남으면 "지금 조작이
+## 끊겨 있다"는 신호와 어긋난다.
 func _sync_player_input() -> void:
 	(%Player as Node2D).input_enabled = not _menu_open()
+	(%Hotbar as Control).visible = not _menu_open()
 
 
 # --- 전체 맵 (docs/DESIGN.md 「맵 (M)」) ---------------------------------------

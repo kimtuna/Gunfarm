@@ -11,7 +11,8 @@ extends SceneTree
 ##      시트의 열 수와 같고, 도는(loop) 애니메이션이다. **도구를 든 모션도 여기
 ##      포함이다**(2026-09-07, INBOX #24 — `docs/DESIGN.md` 「새 도구를 추가하는
 ##      절차」 4: 안 넓히면 새 모션은 아무도 검사하지 않는다). 동작(좌클릭으로
-##      패기)은 그 도구의 [BUILD] 바퀴 몫이고, 여기는 **시트가 실렸는가**까지다.
+##      패기)은 `qa_hotbar.gd` 가 보고, 여기는 **시트가 실렸는가**까지다.
+##      **사용 모션만 돌지 않는다**(INBOX #25 — 한 번 내려치고 끝난다).
 ##   2) **모든 모션 시트가 외형대로 칠해진다** — idle 만 칠하고 나머지를 빠뜨리면
 ##      그 모션으로 바뀌는 순간 캐릭터가 기준색으로 되돌아간다. 모션 × 네 방향 ×
 ##      모든 프레임을 픽셀로 견준다.
@@ -166,11 +167,16 @@ func _check_animations() -> void:
 			var count := sprite.sprite_frames.get_frame_count(anim)
 			if count != columns:
 				_fails.append("%s 가 %d프레임이다 — 시트는 %d열이다" % [anim, count, columns])
-			if not sprite.sprite_frames.get_animation_loop(anim):
+			# **사용 모션만 돌지 않는다** — 좌클릭 한 번에 한 번 내려치고 끝나야
+			# 하기 때문이다(2026-09-07, INBOX #25). 나머지는 전부 돌아야 한다.
+			var loops: bool = sprite.sprite_frames.get_animation_loop(anim)
+			if loops and PlayerFrames.plays_once(motion):
+				_fails.append("%s 가 도는 애니메이션이다 — 사용 모션은 한 번만 재생돼야 한다" % anim)
+			elif not loops and not PlayerFrames.plays_once(motion):
 				_fails.append("%s 가 도는 애니메이션이 아니다 — 한 바퀴 돌고 멈춘다" % anim)
 			counted += 1
 	if _fails.is_empty():
-		print("[qa] 모션 %d종 × 4방향 = %d개 애니메이션, 전부 loop (%s)"
+		print("[qa] 모션 %d종 × 4방향 = %d개 애니메이션 (사용 모션만 한 번 재생) (%s)"
 				% [PlayerFrames.motions().size(), counted,
 					", ".join(PlayerFrames.motions().keys())])
 

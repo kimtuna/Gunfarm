@@ -14,6 +14,7 @@ const PlayerFrames := preload("res://scripts/player_frames.gd")
 const CharacterSprite := preload("res://scripts/character_sprite.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 const Appearance := preload("res://scripts/character_appearance.gd")
+const Inventory := preload("res://scripts/inventory.gd")
 
 ## 한 프레임에 몰아서 돌릴 수 있는 최대 틱 수. 창을 끌거나 잠깐 멈췄다 돌아왔을 때
 ## 밀린 시간을 한꺼번에 시뮬레이션하면 순간이동처럼 보인다 — 그냥 버린다.
@@ -25,6 +26,12 @@ var motion: RefCounted = null
 ## 이 노드가 로컬 플레이어의 입력을 받는가. 나중에 다른 플레이어를 그릴 때는 꺼진다
 ## (그때 조준 각도는 마우스가 아니라 서버가 보낸 값으로 들어온다).
 var input_enabled := true
+
+## 이 캐릭터의 인벤토리(`inventory.gd` — 순수 클래스). **손에 든 칸이 무엇인지**
+## 알아야 도구를 든 모션을 고를 수 있어서 들고 있는다 (docs/DESIGN.md 「캐릭터
+## 애니메이션」의 "손에 든 도구가 캐릭터에 그대로 보인다").
+## **null 이어도 된다** — 슬롯을 안 거치고 씬을 직접 띄우면(자체 QA) 빈손이다.
+var inventory: RefCounted = null
 
 ## 이 캐릭터의 외형(`character_appearance.gd` 의 id 들 — 슬롯에 저장된 그대로).
 ## **빈 Dictionary 면 기본 외형**이다 — 슬롯을 안 거치고 월드 씬을 직접 띄워도
@@ -39,6 +46,11 @@ var appearance: Dictionary = {}:
 		_apply_appearance()
 
 var _accumulated := 0.0
+
+## 아직 틱에 넘기지 않은 좌클릭. 키를 받는 곳(`world.gd` 의 `_unhandled_input`)과
+## 고정 틱을 도는 곳이 달라서, 한 번 받아 두었다가 **틱이 실제로 돈 뒤에** 지운다 —
+## 프레임이 빨라 이번 프레임에 틱이 하나도 안 돌면 클릭이 그냥 사라진다.
+var _use_pressed := false
 
 @onready var _sprite: AnimatedSprite2D = $Sprite
 
@@ -102,18 +114,46 @@ func aim_angle_for(mouse_global: Vector2) -> float:
 	return offset.angle()
 
 
-## 지금 눌려 있는 이동 키와 마우스 조준을 한 벌로 모은다.
+## 좌클릭을 받아 둔다 — 키를 정하는 곳은 `world.gd` 의 `_unhandled_input` 한 곳이고
+## (docs/DESIGN.md 「인벤토리 / 장비」의 키 규칙), 여기는 그것을 **입력 한 벌에 실어
+## 코어로 넘기는** 일만 한다. 창이 열려 있으면 그쪽이 애초에 부르지 않는다.
+func request_use() -> void:
+	if input_enabled:
+		_use_pressed = true
+
+
+## 지금 눌려 있는 이동 키와 마우스 조준, **든 칸과 좌클릭**을 한 벌로 모은다.
 ## **이게 서버로 보낼 입력이다** (docs/DESIGN.md 「서버 권위 / 클라이언트 신뢰」).
+##
+## **든 칸은 입력이 끊겨도 그대로 넘긴다** — 숫자키는 인벤토리 창이 열려 있어도 먹으므로
+## (핫바는 그 창의 일부다), 창 안에서 칸을 바꾸면 뒤의 캐릭터도 같이 바뀌어야 한다.
 func read_input() -> RefCounted:
+	var slot: int = 0 if inventory == null else inventory.selected_hotbar
 	if not input_enabled:
-		return PlayerInput.new(Vector2i.ZERO, _aim_angle())
+		_use_pressed = false
+		return PlayerInput.new(Vector2i.ZERO, _aim_angle(), slot, false)
 	return PlayerInput.new(
 		Vector2i(
 			int(Input.is_action_pressed("move_right")) - int(Input.is_action_pressed("move_left")),
 			int(Input.is_action_pressed("move_down")) - int(Input.is_action_pressed("move_up")),
 		),
 		aim_angle_for(get_global_mouse_position()),
+		slot,
+		_use_pressed,
 	)
+
+
+## 지금 손에 든 것의 **시트 이름**. 빈손이거나, 아직 그 도구의 시트가 없으면 빈
+## 문자열이다 — 그때는 예전대로 `idle`/`walk` 로 돈다(도구 7종 중 그림이 있는 것은
+## `player_frames.gd` 의 `TOOLS` 뿐이고, 없는 것을 들어도 에러로 죽지 않는다).
+## 아이템 id 와 시트 이름은 같은 문자열이다(`axe` — `gen_character.py` 의 `TOOLS`).
+func held_tool() -> String:
+	if inventory == null or motion == null:
+		return ""
+	var stack: RefCounted = inventory.at(Inventory.AREA_GENERAL, motion.held_slot)
+	if stack == null:
+		return ""
+	return stack.id if PlayerFrames.TOOLS.has(stack.id) else ""
 
 
 func _aim_angle() -> float:
@@ -130,20 +170,41 @@ func _process(delta: float) -> void:
 		_accumulated -= PlayerMotion.TICK_DELTA
 		motion.tick(input)
 		ticks += 1
+	if ticks > 0:
+		# 틱이 실제로 돈 뒤에야 지운다 — 프레임이 빠를 때 클릭이 틱을 못 만나고
+		# 사라지는 것을 막는다. 여러 틱이 한꺼번에 돌아도 코어가 겹쳐 재생을 막는다.
+		_use_pressed = false
 	if _accumulated >= PlayerMotion.TICK_DELTA:
 		_accumulated = 0.0
 	position = motion.position
 	_update_animation()
 
 
+## 지금 상태에 맞는 애니메이션을 튼다.
+##
+## 우선순위는 **쓰는 중 → 걷는 중 → 서 있기**다(docs/DESIGN.md 「캐릭터 애니메이션」의
+## "도끼를 고르면 hold_axe, 걸으면 walk_axe, 좌클릭하면 use_axe 가 한 번 재생된 뒤
+## 다시 hold_axe"). 든 도구가 없으면 이름에 접미사가 안 붙어 예전 `idle`/`walk` 그대로다.
+##
+## **없는 애니메이션은 빈손 → 서 있기 순으로 물러난다** — 시트가 한 장 빠져도 캐릭터가
+## 통째로 사라지지 않는다.
 func _update_animation() -> void:
 	if motion == null:
 		return
 	var dir: String = PlayerFrames.DIR_NAMES[motion.facing]
-	# 걷는 중이면 걷기 시트를 쓴다(INBOX #15). 어떤 이유로 그 시트가 안 실렸으면
-	# 서 있는 그림으로 떨어진다 — 캐릭터가 통째로 안 보이는 것보다는 낫다.
-	var wanted := "walk_%s" % dir if motion.is_moving else "idle_%s" % dir
-	if not _sprite.sprite_frames.has_animation(wanted):
-		wanted = "idle_%s" % dir
+	var tool := held_tool()
+	var suffix := "" if tool.is_empty() else "_%s" % tool
+	var wanted := ""
+	if not tool.is_empty() and motion.is_using():
+		wanted = "use%s_%s" % [suffix, dir]
+	elif motion.is_moving:
+		wanted = "walk%s_%s" % [suffix, dir]
+	else:
+		wanted = ("hold%s_%s" % [suffix, dir]) if not tool.is_empty() else "idle_%s" % dir
+	for fallback: String in [wanted,
+			"walk_%s" % dir if motion.is_moving else "idle_%s" % dir, "idle_%s" % dir]:
+		if _sprite.sprite_frames.has_animation(fallback):
+			wanted = fallback
+			break
 	if _sprite.animation != wanted:
 		_sprite.play(wanted)

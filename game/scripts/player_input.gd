@@ -22,7 +22,20 @@ var move := Vector2i.ZERO
 ## **이동 방향과 무관하다** — 왼쪽으로 걸으면서 오른쪽을 겨눌 수 있다(게걸음).
 var aim_angle := AIM_DOWN
 
+## 지금 손에 든 핫바 칸(0~8). **아이템 id 가 아니라 칸 번호다** — 서버는 그 칸에
+## 무엇이 들어 있는지 자기 인벤토리에서 직접 보므로, 클라이언트가 "나는 도끼를
+## 들었다"고 주장할 자리가 없다 (docs/DESIGN.md 「서버 권위」).
+var hotbar := 0
 
-func _init(move_axes: Vector2i = Vector2i.ZERO, aim: float = AIM_DOWN) -> void:
+## 이 틱에 좌클릭했는가 = 손에 든 도구를 쓴다 (docs/DESIGN.md 「조작」).
+## **누른 순간만 true 인 버튼**이고, 실제로 무엇이 일어나는지(모션 재생·대상 판정)는
+## 이 값을 받은 코어가 정한다.
+var use := false
+
+
+func _init(move_axes: Vector2i = Vector2i.ZERO, aim: float = AIM_DOWN,
+		hotbar_slot: int = 0, use_pressed: bool = false) -> void:
 	move = move_axes
 	aim_angle = aim
+	hotbar = hotbar_slot
+	use = use_pressed

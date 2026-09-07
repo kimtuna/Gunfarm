@@ -101,6 +101,14 @@ static func new_frames() -> SpriteFrames:
 	return frames
 
 
+## 사용 모션(`use_<도구>`)인가. **이 모션만 돌지 않는다** — 좌클릭 한 번에 한 번
+## 내려치고 끝나야 하기 때문이다(docs/DESIGN.md 「캐릭터 애니메이션」의 "한 번
+## 재생된 뒤 다시 hold 로 돌아온다"). 돌게 두면 다시 `hold_` 로 넘어가기 전에
+## 두 번째 스윙이 시작되어 도끼가 반쯤 올라간 자세에서 그림이 튄다.
+static func plays_once(motion: String) -> bool:
+	return motion.begins_with("use_")
+
+
 ## 시트 한 장(행 = 방향, 열 = 프레임)을 `<모션>_<방향>` 애니메이션으로 잘라 넣는다.
 ## **색을 갈아끼운 텍스처를 그대로 넘겨도 된다** — 팔레트 교체는 알파를 건드리지
 ## 않으므로 칸 배치가 그대로다 (`character_sprite.gd` 의 `sprite_frames()`).
@@ -110,7 +118,7 @@ static func add_motion(frames: SpriteFrames, texture: Texture2D, motion: String,
 	for row in DIR_NAMES.size():
 		var anim := "%s_%s" % [motion, DIR_NAMES[row]]
 		frames.add_animation(anim)
-		frames.set_animation_loop(anim, true)
+		frames.set_animation_loop(anim, not plays_once(motion))
 		frames.set_animation_speed(anim, fps)
 		for column in columns:
 			var atlas := AtlasTexture.new()

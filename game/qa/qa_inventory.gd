@@ -359,10 +359,20 @@ func _enter_world() -> void:
 func _check_closed_at_start() -> void:
 	if _screen() != null:
 		_fails.append("월드에 들어오자마자 인벤토리가 열려 있다")
-	# 상시 요약 HUD 를 만들지 않는다 (docs/DESIGN.md 「인벤토리 / 장비」).
+	# 상시로 화면에 두는 것은 **하단 핫바 하나뿐이다** (docs/DESIGN.md 「인벤토리 /
+	# 장비」의 "그 외의 상시 HUD 는 여전히 없다"). 2026-09-07 INBOX #25 로 핫바가
+	# 생기기 전에는 인벤토리 칸이 하나도 안 떠 있어야 했다 — 지금은 "핫바 모드인
+	# 것 하나"만 허용하고, 27칸짜리 창이 상시로 떠 있으면 여전히 불합격이다.
+	var panels: Array[String] = []
 	for node in current_scene.find_children("*", "Control", true, false):
-		if node.get_script() == InventoryPanel:
-			_fails.append("창을 안 열었는데 인벤토리 칸이 화면에 떠 있다 (%s)" % node.name)
+		if node.get_script() != InventoryPanel:
+			continue
+		if not node.hotbar_only:
+			_fails.append("창을 안 열었는데 인벤토리 창 칸이 화면에 떠 있다 (%s)" % node.name)
+		panels.append(node.name)
+	if panels.size() != 1:
+		_fails.append("상시로 떠 있는 칸 그림이 %d개다 — 하단 핫바 하나여야 한다 (%s)"
+				% [panels.size(), ", ".join(panels)])
 
 
 func _check_starter_items() -> void:
