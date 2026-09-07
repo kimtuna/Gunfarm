@@ -169,14 +169,48 @@ func _draw_slot(font: Font, area: String, index: int) -> void:
 				INDEX_FONT_SIZE, INDEX_COLOR)
 
 
-## 아이템 자리표시 하나. 아이콘이 생기기 전까지의 모양이다 — 아이템 색으로 칠한 사각형
-## 위에 밝은 띠(빛)와 아래 그림자, 어두운 테두리를 넣어 도트 그림들과 같은 결로 보이게 한다.
+## 칸 하나에 아이템 하나. **아이콘 그림이 있으면 그걸 그리고**, 없으면 아이템 색으로
+## 칠한 자리표시(밝은 띠 + 그림자 + 어두운 테두리)를 그린다 — 도구가 하나씩 그려지는
+## 동안 두 가지가 섞여 있게 된다(`item_types.gd` 의 `icon`).
 ##
 ## **그리는 대상(`canvas`)을 인자로 받는다** — 칸 안에 그릴 때는 이 Control 이고, 끌고
 ## 있는 동안 마우스를 따라다니는 그림은 창 위를 덮는 다른 노드다. 같은 함수를 쓰므로
 ## 끌기 전과 끌고 있는 동안의 그림이 어긋날 수 없다.
 func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCounted, alpha: float = 1.0) -> void:
 	var rect := slot.grow(-ITEM_INSET)
+	var icon := ItemTypes.icon_of(stack.id)
+	if icon != null:
+		_draw_icon(canvas, icon, slot, alpha)
+	else:
+		_draw_placeholder(canvas, font, rect, stack, alpha)
+	if stack.count > 1:
+		var text := str(stack.count)
+		var at := slot.position + slot.size - Vector2(6.0, 5.0)
+		at.x -= font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, COUNT_FONT_SIZE).x
+		canvas.draw_string(font, at + Vector2(1.0, 1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				COUNT_FONT_SIZE, Color(COUNT_SHADOW, alpha))
+		canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				COUNT_FONT_SIZE, Color(COUNT_COLOR, alpha))
+
+
+## 아이콘 그림 한 장을 칸 가운데에 그린다.
+##
+## **배율은 정수여야 한다**(`docs/STYLE_GUIDE.md` 1번) — 소수 배율로 늘리면 아트
+## 픽셀 하나가 화면에서 2px, 3px 로 들쭉날쭉해져 도트가 뭉개진다. 칸(56px)에
+## 들어가는 가장 큰 정수 배율을 쓰고, **자리도 정수로 반올림**한다(반 픽셀에
+## 놓으면 같은 일이 벌어진다).
+func _draw_icon(canvas: CanvasItem, icon: Texture2D, slot: Rect2, alpha: float) -> void:
+	var art := Vector2(icon.get_size())
+	var zoom := maxi(1, int(floor(minf(slot.size.x / art.x, slot.size.y / art.y))))
+	var size := art * float(zoom)
+	var at := (slot.position + (slot.size - size) * 0.5).round()
+	canvas.draw_texture_rect(icon, Rect2(at, size), false, Color(1.0, 1.0, 1.0, alpha))
+
+
+## 아이콘이 아직 없는 아이템의 자리표시 — 아이템 색으로 칠한 사각형 위에 밝은
+## 띠(빛)와 아래 그림자, 어두운 테두리를 넣어 도트 그림들과 같은 결로 보이게 한다.
+func _draw_placeholder(canvas: CanvasItem, font: Font, rect: Rect2, stack: RefCounted,
+		alpha: float) -> void:
 	var base: Color = ItemTypes.color_of(stack.id)
 	canvas.draw_rect(rect, Color(base, alpha))
 	canvas.draw_rect(Rect2(rect.position, Vector2(rect.size.x, 4.0)),
@@ -188,14 +222,6 @@ func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCounted, a
 	var ink := Color(0.06, 0.07, 0.05) if base.get_luminance() > 0.42 else Color(0.95, 0.95, 0.92)
 	_string_centered(canvas, font, rect, ItemTypes.short_name(stack.id), NAME_FONT_SIZE,
 			Color(ink, alpha))
-	if stack.count > 1:
-		var text := str(stack.count)
-		var at := slot.position + slot.size - Vector2(6.0, 5.0)
-		at.x -= font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, COUNT_FONT_SIZE).x
-		canvas.draw_string(font, at + Vector2(1.0, 1.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-				COUNT_FONT_SIZE, Color(COUNT_SHADOW, alpha))
-		canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-				COUNT_FONT_SIZE, Color(COUNT_COLOR, alpha))
 
 
 ## 끌고 있는 아이템을 마우스 자리에 그린다 — 창 위에 떠 있어야 하므로 이 Control 이

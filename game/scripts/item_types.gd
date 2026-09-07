@@ -9,9 +9,11 @@ extends RefCounted
 ## 지어내지 않는다(PROMPT.md). 실제로 얻는 경로(채집/드롭/제작)는 그 자원을 만드는
 ## 바퀴가 붙인다 — 이 표는 "이런 아이템이 있다"는 정의만 갖는다.
 ##
-## **아이콘 그림은 아직 없다.** 인벤토리 칸에는 `color` 로 칠한 자리표시를 그린다 —
-## 진짜 아이콘은 DESIGN.md 「새 도구를 추가하는 절차」 6번대로 그 도구의 [DESIGN]
-## 바퀴가 같이 만든다. 그때 이 표에 `icon` 을 한 줄 늘리면 된다.
+## **아이콘 그림이 있는 아이템은 `icon` 한 줄을 갖는다** — 그 그림이 인벤토리 칸에
+## 그려지고, 없는 아이템은 `color` 로 칠한 자리표시가 그려진다(둘이 섞여 있어도
+## 된다). 진짜 아이콘은 DESIGN.md 「새 도구를 추가하는 절차」 6번대로 그 도구의
+## [DESIGN] 바퀴가 같이 만든다 — 그림은 `gen_character.py` 의 `tool_icon()` 이
+## 캐릭터와 **같은 램프·같은 광원**으로 굽는다.
 
 # --- 카테고리 (docs/DESIGN.md 「카테고리」) -------------------------------------
 const CAT_RAW := "원재료"
@@ -59,7 +61,7 @@ const ITEMS := {
 	# 도구 7종 (docs/DESIGN.md 「생활 스킬 — 채집 계열」의 도구 표).
 	# 도구는 「카테고리」의 완성품이고, 한 칸에 하나씩만 들어간다.
 	"gun": {"name": "기본 소총", "category": CAT_PRODUCT, "color": Color(0.42, 0.45, 0.49), "stack": MAX_STACK_UNIQUE},
-	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE},
+	"axe": {"name": "도끼", "category": CAT_PRODUCT, "color": Color(0.60, 0.42, 0.24), "stack": MAX_STACK_UNIQUE, "icon": "item_axe"},
 	"pickaxe": {"name": "곡괭이", "category": CAT_PRODUCT, "color": Color(0.49, 0.52, 0.55), "stack": MAX_STACK_UNIQUE},
 	"sickle": {"name": "낫", "category": CAT_PRODUCT, "color": Color(0.66, 0.68, 0.70), "stack": MAX_STACK_UNIQUE},
 	"hoe": {"name": "괭이", "category": CAT_PRODUCT, "color": Color(0.55, 0.56, 0.47), "stack": MAX_STACK_UNIQUE},
@@ -120,6 +122,27 @@ static func category_of(id: String) -> String:
 
 static func color_of(id: String) -> Color:
 	return of(id).get("color", Color(0.5, 0.5, 0.5))
+
+
+## 아이콘 그림이 놓인 자리. 아이콘이 없는 아이템은 빈 문자열이다 — 그리는 쪽이
+## 그때 `color_of()` 자리표시로 되돌아간다. 그림을 만드는 코드
+## (`game/tools/gen_character.py` 의 `icon_path()`)와 같은 규칙이어야 한다.
+static func icon_path(id: String) -> String:
+	var name := String(of(id).get("icon", ""))
+	return "" if name.is_empty() else "res://assets/sprites/%s.png" % name
+
+
+## 아이콘 텍스처(없으면 `null`). **한 번 읽고 들고 있는다** — 인벤토리는 매 프레임
+## 다시 그려지는데 칸마다 `load()` 를 부르면 그리기 한 번에 27번 파일을 뒤진다.
+static var _icons := {}
+
+static func icon_of(id: String) -> Texture2D:
+	if _icons.has(id):
+		return _icons[id]
+	var path := icon_path(id)
+	var texture: Texture2D = null if path.is_empty() else load(path)
+	_icons[id] = texture
+	return texture
 
 
 ## 이 아이템이 한 칸에 몇 개까지 쌓이는가. 모르는 아이템은 0 — 넣을 자리가 없다는 뜻이라

@@ -80,11 +80,12 @@ static func idle_texture(appearance: Dictionary) -> ImageTexture:
 ## `player_frames.gd` 한 곳에만 있다 — 도구별 모션이 늘어도 여기는 안 고친다.
 static func sprite_frames(appearance: Dictionary) -> SpriteFrames:
 	var frames := PlayerFrames.new_frames()
-	for motion in PlayerFrames.MOTIONS:
+	var all := PlayerFrames.motions()
+	for motion in all:
 		var texture := motion_texture(appearance, motion)
 		if texture == null:
 			return null
-		PlayerFrames.add_motion(frames, texture, motion, PlayerFrames.MOTIONS[motion])
+		PlayerFrames.add_motion(frames, texture, motion, all[motion])
 	return frames
 
 

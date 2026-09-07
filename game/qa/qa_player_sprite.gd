@@ -41,6 +41,10 @@ var _fails: Array[String] = []
 var _image: Image = null
 var _style := ""
 var _frames := 0
+var _board: ColorRect = null
+## 캡처 순서 — 0: 머리모양 판, 1: 도구 판. **불린이 아니라 단계 번호다**: 판을
+## 치웠는지로 판단하면 두 번째 판을 세운 순간 다시 첫 단계로 읽혀 무한히 돈다.
+var _stage := 0
 
 
 func _initialize() -> void:
@@ -199,7 +203,16 @@ func _process(_delta: float) -> bool:
 	# 상태를 만든 직후 바로 찍으면 한 프레임 전이 찍힌다 (docs/GOTCHAS.md).
 	if _frames < 3:
 		return false
-	_shoot()
+	if _stage == 0:
+		_shoot("80_player_idle_hairstyles")
+		# 두 번째 판은 앞의 것을 치우고 새로 세운다 — 뷰포트를 통째로 찍으므로
+		# 겹쳐두면 둘이 한 장에 섞인다.
+		_board.queue_free()
+		_build_tool_board()
+		_stage = 1
+		_frames = 0
+		return false
+	_shoot("81_player_tools_on_grass")
 	_report()
 	return true
 
@@ -212,6 +225,7 @@ func _build_board() -> void:
 	board.color = TerrainPalettes.color_of("grass", 1)
 	board.size = Vector2(step * DIRS.size() + 40, step * STYLES.size() + 40)
 	root.add_child(board)
+	_board = board
 	for s in STYLES.size():
 		var texture: Texture2D = load(PlayerFrames.sheet_path("idle", STYLES[s]))
 		if texture == null:
@@ -228,13 +242,54 @@ func _build_board() -> void:
 			board.add_child(view)
 
 
-func _shoot() -> void:
+## **도구를 든 모습을 실제 지형 색 위에 실제 배율(3배)로** 늘어놓는다
+## (2026-09-07, INBOX #24 — `docs/STYLE_GUIDE.md` 7번 6항: 기존 자산과 나란히
+## 놓고 팔레트·도트 크기·외곽선이 어울리는지 보는 자리다).
+## 행 = 방향, 열 = 맨손 idle · 도구를 들고 서 있기 · 사용 모션 프레임들.
+## 도구 동작은 아직 안 붙었으므로(그건 [BUILD] 바퀴다) 시트에서 직접 떠다 그린다.
+func _build_tool_board() -> void:
+	var step := CELL * SCALE + 12
+	var motions: Array[String] = ["idle", "hold", "use"]
+	var columns := 2
+	var sheets := {}
+	for tool: String in PlayerFrames.TOOLS:
+		for motion in motions:
+			var key := motion if motion == "idle" else "%s_%s" % [motion, tool]
+			var texture: Texture2D = load(PlayerFrames.sheet_path(key, STYLES[0]))
+			if texture == null:
+				continue
+			sheets[key] = texture
+			if motion == "use":
+				columns += texture.get_width() / CELL
+	var board := ColorRect.new()
+	board.color = TerrainPalettes.color_of("grass", 1)
+	board.size = Vector2(step * columns + 24, step * DIRS.size() + 24)
+	root.add_child(board)
+	_board = board
+	for row in DIRS.size():
+		var column := 0
+		for key: String in sheets:
+			var texture: Texture2D = sheets[key]
+			for f in texture.get_width() / CELL:
+				var atlas := AtlasTexture.new()
+				atlas.atlas = texture
+				atlas.region = Rect2(f * CELL, row * CELL, CELL, CELL)
+				var view := TextureRect.new()
+				view.texture = atlas
+				view.position = Vector2(12 + column * step, 12 + row * step)
+				view.size = Vector2(CELL, CELL) * SCALE
+				view.stretch_mode = TextureRect.STRETCH_SCALE
+				board.add_child(view)
+				column += 1
+
+
+func _shoot(shot_name: String) -> void:
 	var vp := root.get_texture()
 	if vp == null:
 		print("[qa] 캡처 건너뜀 — --headless 로 돌렸다(뷰포트 텍스처 없음)")
 		return
 	var shot := vp.get_image()
-	var path := "%s/80_player_idle_hairstyles.png" % SHOTS
+	var path := "%s/%s.png" % [SHOTS, shot_name]
 	shot.save_png(path)
 	print("[qa] shot %s (%dx%d)" % [path, shot.get_width(), shot.get_height()])
 

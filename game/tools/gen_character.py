@@ -59,7 +59,19 @@ PANTS_COOL = (62, 76, 108)      # 데님 — 옷색이 이미 흙빛일 때(주�
 PANTS_MIX = 0.25                # 옷색을 이만큼 섞는다. 더 섞으면 색상차가 사라진다
 PANTS_NEAR = 46.0               # 옷색이 흙빛과 이만큼 안쪽이면 데님으로 간다(도)
 
-MATS = ["skin", "hair", "shirt", "pants", "boot", "blush", "eye", "glint"]
+# 도구 재질 2종 — **커스터마이징과 무관한 고정색이다.** 자루(나무)와 날(쇠)로
+# 나눠 두는 이유가 둘이다: (1) 17px 에서 도끼가 도끼로 읽히려면 자루와 날이 색으로
+# 갈려야 하고(형태만으로는 몇 px 안 된다), (2) `character_sprite.gd` 의 색 바꿔치기는
+# **기준색 램프에 있는 색만** 갈아끼우므로, 이 두 램프는 어떤 외형을 골라도 그대로
+# 남는다 — 도구가 옷색을 따라 변하면 안 된다.
+# 앞으로 붙는 도구 6종(총/곡괭이/낫/괭이/물뿌리개/낚싯대)도 이 두 램프를 그대로 쓴다.
+HELVE = (146, 104, 62)      # 물푸레나무 자루
+BLADE = (150, 156, 164)     # 쇠 날 — 채도가 낮아 옷·피부 어느 색과도 안 붙는다
+HELVE_BAND = 118.0          # 바지(셔츠×0.70 ≈ 103)와 겹치지 않게 한 단 위로 띄운다
+BLADE_BAND = 152.0
+
+MATS = ["skin", "hair", "shirt", "pants", "boot", "helve", "blade",
+        "blush", "eye", "glint"]
 
 BAYER4 = np.array([
     [0, 8, 2, 10],
@@ -255,6 +267,11 @@ def palette(skin=BASE_SKIN, hair=BASE_HAIR, cloth=BASE_CLOTH, bands=None):
         "pants": make_ramp(pants_color(cloth_rgb), band["pants"], hi_mix=0.14),
         "boot": make_ramp(pants_color(cloth_rgb), band["boot"], hi_mix=0.12,
                           ramp=(1.30, 1.0, 0.88, 0.80)),
+        # 도구 2종은 **커스터마이징 색을 보지 않는다** — 어떤 외형을 골라도 도끼는
+        # 같은 도끼다. 그래서 `bands_for()` 를 거치지 않고 고정 밴드를 쓴다.
+        "helve": make_ramp(HELVE, HELVE_BAND, hi_mix=0.20),
+        "blade": make_ramp(BLADE, BLADE_BAND, hi_to=COOL, hi_mix=0.30,
+                           sat=(0.80, 1.0, 1.10, 1.20)),
         # 볼 홍조는 단계가 하나다 — 1~2px 이라 램프를 줘봐야 쓸 자리가 없다.
         "blush": [blush_color(skin_rgb)],
         "eye": [INK] * 4,
@@ -303,6 +320,52 @@ def rbox(x0, y0, x1, y1, r=1.2, dome=None, axis="x"):
     else:
         t = np.clip(np.abs(GY - cy) / max(hh, 1e-6), 0, 1)
     h = np.sqrt(np.clip(1 - t * t, 0, 1)) * dome
+    return m, h * m
+
+
+def capsule(x0, y0, x1, y1, r0, r1=None):
+    """두 점을 잇는 **아무 각도나 되는** 둥근 막대. 굵기는 r0 → r1 로 변한다.
+
+    `rbox`/`_fall_shape` 는 축에 붙어 있어서(세로로만 흐른다) 비스듬한 도구 자루를
+    못 만든다. 도구는 방향마다 기울기가 다르므로 이 원시 도형이 필요하다 —
+    **앞으로 붙는 도구 6종(총열·곡괭이 자루·낚싯대)도 이걸 쓴다.**
+
+    높이는 축에서 멀어질수록 낮아지는 원기둥이라 가운데가 밝고 양옆이 그늘진다 —
+    머리 껍데기·팔과 같은 입체감이라 도구만 납작해 보이지 않는다.
+    """
+    if r1 is None:
+        r1 = r0
+    dx, dy = x1 - x0, y1 - y0
+    t = np.clip(((GX - x0) * dx + (GY - y0) * dy) / max(dx * dx + dy * dy, 1e-6), 0.0, 1.0)
+    d = np.hypot(GX - (x0 + t * dx), GY - (y0 + t * dy))
+    r = r0 + (r1 - r0) * t
+    m = d <= r
+    h = np.sqrt(np.clip(1.0 - (d / np.maximum(r, 1e-6)) ** 2, 0, 1)) * (ROUND * max(r0, r1))
+    return m, h * m
+
+
+def wedge(x0, y0, x1, y1, h0, h1, bulge=0.0):
+    """축을 따라 **넓어지다가 끝이 잘리는** 쐐기. 도끼날처럼 "날 선 끝"이 필요한
+    도구에 쓴다 (`capsule` 과 달리 끝이 둥근 뚜껑이 아니다).
+
+    `capsule` 로 날을 만들면 바깥 끝이 **반원**이라 도끼가 아니라 **망치**로 읽힌다
+    (실제로 첫 후보가 그랬다 — 17px 에서 도끼날은 몇 px 뿐이라 그 반원이 전부다).
+    여기서는 축 방향 `t` 를 1 에서 끊어 **날(bit)이 곧은 변**으로 남는다.
+
+    `bulge` 는 그 변을 가운데만 볼록하게 민다 — 실제 벌목 도끼의 날이 활처럼
+    휜 것이고, 완전히 곧으면 이 크기에서 **벽돌**로 보인다.
+
+    높이는 `capsule` 과 같은 원기둥 단면이라 도구끼리 입체감이 어긋나지 않는다.
+    **앞으로 붙는 도구 6종 중 날붙이(낫·곡괭이 끝)도 이걸 쓴다.**
+    """
+    dx, dy = x1 - x0, y1 - y0
+    l2 = max(dx * dx + dy * dy, 1e-6)
+    t = ((GX - x0) * dx + (GY - y0) * dy) / l2
+    perp = ((GX - x0) * (-dy) + (GY - y0) * dx) / np.sqrt(l2)
+    half = h0 + (h1 - h0) * np.clip(t, 0.0, 1.0)
+    q = np.abs(perp) / np.maximum(half, 1e-6)
+    m = (t >= 0) & (q <= 1.0) & (t <= 1.0 + bulge * np.clip(1.0 - q * q, 0, 1))
+    h = np.sqrt(np.clip(1.0 - q * q, 0, 1)) * (ROUND * max(h0, h1))
     return m, h * m
 
 
@@ -707,6 +770,7 @@ def _body(b, d, cfg, pose):
     off = tw / 2 + aw / 2 - cfg["arm_in"]
     xs = [sx * cfg["side_arm"]] if side else [-off, off]
     limbs = []
+    hands = []                                  # 손끝 자리 — 도구를 여기에 쥐여준다
     for i, offx in enumerate(xs):
         ax = cx + offx                          # 어깨 — 다리와 같은 이유로 안 움직인다
         # **팔도 어깨에서 꺾는다 — `arm_dy` 는 손만 위아래로 움직인다**(2026-09-07,
@@ -728,7 +792,135 @@ def _body(b, d, cfg, pose):
                                        tip=0.5, slant=lean), "shirt"))
         # 손은 벙어리장갑 모양 — 소매 끝에서 살짝 넓어진다
         limbs.append(b.add(ellipsoid(ax + lean, arm_bot + 0.5, 0.6, 0.58), "skin"))
-    return limbs + far
+        hands.append((ax + lean, arm_bot + 0.5))
+    return limbs + far, hands
+
+
+# ── 도구 (DESIGN.md 「새 도구를 추가하는 절차」) ────────────────────────────
+# **도구는 캐릭터 옆에 아이콘으로 띄우지 않는다 — 프레임 자체에 그려 넣는다**
+# (DESIGN.md 「캐릭터 애니메이션」의 못박힌 규칙). 그러면서도 **형태를 다시 정의하지
+# 않는다**: 몸은 idle/걷기와 **같은 `character()`** 가 그리고, 도구는 그 결과로
+# 나온 **손 자리에 얹기만** 한다(`_body()` 가 손 좌표를 돌려준다). 그래서 프레임
+# 사이에서 캐릭터가 차지하는 크기가 어긋날 수가 없다.
+#
+# 값을 치르고 알아낸 것 — **다음 도구 6종도 여기서 출발한다**:
+#  - **자루 길이는 4.6px 가 상한이다.** 그보다 길면 든 손 반대쪽으로 날이 넘어와서
+#    얼굴을 덮거나(앞모습) 캔버스 밖으로 나간다(17px 은 좁다). 4.6 + 날 1.4 ≈ 6px
+#    이라 화면에서 18px — `STYLE_GUIDE.md` 1번의 아트 6px 하한을 딱 지킨다.
+#  - **자루는 비스듬해야 한다(68도).** 수직으로 세우면 실루엣 옆선이 자루 길이만큼
+#    곧아져서 「각짐」에 걸린다. 기울이면 줄마다 한 칸씩 밀려서 곧은 구간이 3줄로 끊긴다.
+#  - **날은 자루 끝에서 바깥(광원 반대쪽)으로 벌어지는 쐐기다.** 굵기가 일정한
+#    막대로 붙이면 망치로 보인다 — `capsule` 의 r0 < r1 로 벌린다.
+#  - **자루 끝(poll)을 반대쪽에 조금 남긴다.** 없으면 날이 자루에 얹힌 게 아니라
+#    자루가 날 속으로 사라진 것처럼 보인다.
+AXE = dict(
+    helve=4.0, helve_r=(0.62, 0.50),
+    # 날: (자루에서 바깥으로, 자루를 따라 위로) 두 점 + 그 두 점에서의 굵기.
+    # **위가 좁고 아래가 넓은 세로 쐐기**여야 도끼로 읽힌다 — 자루에 수직으로
+    # 뻗는 가로 막대로 만들면 망치/깃발이 되고, 굵기가 일정한 세로 판이면 벽돌이 된다.
+    bit_a=(0.35, 1.10), bit_b=(2.05, -0.90), bit_r=(0.55, 1.75), bit_bulge=0.25,
+    # 들고 있는 각도(도, +x 에서 반시계). **80 도 — 거의 세워 든다.**
+    # 더 눕히면(60~70도) 날이 몸 쪽으로 넘어와 팔에 파묻히고, 더 세워 몸 쪽으로
+    # 기울이면(100도 이상) 날이 **얼굴 위**로 올라온다(머리가 어깨보다 넓다).
+    hold=80.0,
+    # 도구를 든 손이 몸 옆으로 나가는 폭 / 내려가는 폭.
+    reach=1.05, drop=0.25,
+    # 패기 — 자루 각도가 `mid ± amp` 를 왕복한다(85도 ↔ -40도).
+    # **양끝이 캔버스에 물려 있다**: 위로 더 들면(90도 넘김) 날이 얼굴 위로
+    # 넘어오고(머리가 어깨보다 넓다), 아래로 더 내리면 날이 오른쪽/아래 테두리
+    # 밖으로 잘린다. 17px 에 자루 5.6px 짜리 도끼를 든 대가다 —
+    # **머리 위로 크게 넘기는 장작패기 동작은 이 칸에 안 들어간다.**
+    swing_mid=11.0, swing_amp=71.0,
+    # 패는 동안 손이 그리는 타원 (들 때 뒤·위로 / 칠 때 앞·아래로 + 위상이 90도
+    # 어긋난 앞뒤 성분).
+    use_rise=-1.60, swing_lift=0.60, swing_fwd=0.70, swing_loop=0.30,
+    swing_sag=0.25, swing_tuck=2.20,
+    # 걷는 동안 도구를 든 팔은 덜 흔든다 — 실제로도 연장을 든 팔은 잘 안 흔들고,
+    # 안 줄이면 도끼가 팔을 따라 크게 움직여 「이어짐」 상한을 넘는다.
+    arm_damp=0.35,
+)
+
+TOOLS = {"axe": AXE}
+
+## 도구를 쥔 손. 앞/뒷모습은 **화면 오른쪽 손**(팔 두 개 중 1번), 옆모습은 보이는
+## 손 하나뿐이다. 방향이 바뀌어도 도구가 화면 같은 쪽에 있어야 덜 어지럽다.
+def tool_hand(direction):
+    return 0 if direction in ("left", "right") else 1
+
+
+def tool_sx(direction):
+    """도구가 놓이는 쪽. 옆모습은 바라보는 쪽, 앞/뒷모습은 화면 오른쪽이다."""
+    return -1.0 if direction == "left" else 1.0
+
+
+def tool_pose(direction, motion, phase, cfg, tool):
+    """도구 모션의 부위 오프셋 + 자루 각도.
+
+    `motion` 은 `hold` / `use` / `walk` 다. **걷기는 걷기 자세 그대로**(`walk_pose`)
+    이고 도구를 든 팔만 덜 흔들며, **패기는 서 있는 자세**(다리는 idle)에서 팔과
+    자루만 움직인다 — 패면서 다리가 걷고 있으면 안 된다.
+
+    어느 모션이든 도구를 든 손은 **몸에서 한 칸 바깥으로** 나간다(`reach`).
+    17px 에서 몸통은 x 6~11 을 쓰고 머리는 4~13 까지 퍼져 있어서, 손을 몸 옆에
+    붙인 채로 도구를 세우면 자루가 팔에 파묻혀 **막대기 하나로** 보인다(실제로
+    첫 후보가 그랬다). 바깥으로 한 칸 내보내면 자루가 빈 자리(x 12~15)에 선다.
+    """
+    pose = dict(walk_pose(direction, phase if motion == "walk" else None, cfg))
+    hand = tool_hand(direction)
+    sx = tool_sx(direction)
+    angle = tool["hold"]
+    arm_dx, arm_dy = list(pose["arm_dx"]), list(pose["arm_dy"])
+    if motion == "walk":
+        arm_dx[hand] *= tool["arm_damp"]
+        arm_dy[hand] *= tool["arm_damp"]
+    arm_dx[hand] += tool["reach"] * sx
+    arm_dy[hand] += tool["drop"]
+    if motion == "use" and phase is not None:
+        t = 2.0 * np.pi * float(phase)
+        up, fwd = float(np.cos(t)), float(np.sin(t))
+        angle = tool["swing_mid"] + tool["swing_amp"] * up
+        # 손은 **타원을 그린다** — 들 때 앞·위로, 칠 때 뒤·아래로(`up`), 거기에
+        # 90도 어긋난 `fwd` 로 앞뒤를 한 번 더 준다. **드는 순간 손이 앞으로
+        # 나가는 것**(`swing_fwd`)은 옆모습 때문이다: 손을 몸 쪽에 둔 채 자루를
+        # 세우면 자루가 **눈을 덮는다**(얼굴이 폭 8px 인데 손이 그 한가운데 온다). 순수 진자(각도와 손이 같은
+        # 위상)로 두면 올라갈 때와 내려올 때가 **같은 그림**이 되어 6장 중 넉 장만
+        # 쓰는 셈이 된다 — 걷기에서 위상을 반 칸 밀었을 때와 같은 실패다.
+        # **팔꿈치가 접힌다**(`swing_tuck`) — 자루가 수평에 가까울수록 손을 몸
+        # 쪽으로 당긴다. 17px 칸에서 손 바깥으로 남은 자리는 3px 뿐이라, 팔을
+        # 뻗은 채로 자루를 눕히면 날이 **칸 밖으로 잘려나간다**(「잘림」).
+        # 실제로도 휘두르는 중간에는 팔꿈치가 접혀 손이 몸에 붙는다.
+        tuck = tool["swing_tuck"] * abs(float(np.cos(np.radians(angle))))
+        arm_dx[hand] += (tool["swing_fwd"] * up + tool["swing_loop"] * fwd - tuck) * sx
+        arm_dy[hand] += (tool["use_rise"] - tool["swing_lift"] * up
+                         + tool["swing_sag"] * fwd)
+    pose["arm_dx"], pose["arm_dy"] = tuple(arm_dx), tuple(arm_dy)
+    pose["tool_angle"] = angle
+    return pose
+
+
+def _tool_axe(b, gx, gy, angle_deg, sx, tool, lift=0.16):
+    """손 자리(gx, gy)에 도끼를 쥐여준다. `sx` 가 -1 이면 좌우가 뒤집힌다.
+
+    **손보다 반 칸 위에서 시작한다** — 정확히 손 위에서 시작하면 자루가 손을 통째로
+    덮어서 팔이 자루 속으로 사라진다. 반 칸 띄우면 손끝 한 칸이 남아 쥔 것으로 읽힌다.
+    """
+    a = np.radians(angle_deg)
+    ux, uy = np.cos(a) * sx, -np.sin(a)          # 자루 방향(손 → 날)
+    nx, ny = np.sin(a) * sx, np.cos(a)           # 날이 벌어지는 쪽(자루의 바깥)
+    L = tool["helve"]
+    x0, y0 = gx - ux * 0.55, gy - uy * 0.55      # 손 아래로 조금 삐져나온 자루 끝
+    hx, hy = gx + ux * L, gy + uy * L
+    b.add(capsule(x0, y0, hx, hy, *tool["helve_r"]), "helve", lift=lift)
+    # 날 — 자루 끝에서 **바깥으로 벌어지다 끝이 잘리는 쐐기**(`wedge`)다.
+    # `bit_a`(자루 쪽, 도끼눈)에서 `bit_b`(날 끝)로 가면서 넓어진다. 여기에
+    # `capsule` 을 쓰면 바깥 끝이 반원이라 **망치**로 읽힌다 — 실제로 그렇게
+    # 나왔다. 자루에 수직인 막대(굵기 일정)로 붙여도 망치고, 자루와 나란한
+    # 판으로 붙이면 벽돌이다.
+    ax0, ay0 = tool["bit_a"]
+    bx0, by0 = tool["bit_b"]
+    b.add(wedge(hx + nx * ax0 + ux * ay0, hy + ny * ax0 + uy * ay0,
+                hx + nx * bx0 + ux * by0, hy + ny * bx0 + uy * by0,
+                *tool["bit_r"], bulge=tool["bit_bulge"]), "blade", lift=lift + 0.05)
 
 
 def _fall_shape(cx, hw, y0, y1, taper=1.0, tip=1.3, slant=0.0, wave=0.0):
@@ -952,16 +1144,23 @@ def _hair(b, d, cfg, hx, hy, rx, ry, style, bob=0.0):
               & ((GX - hx) * tip > 0.9 + 0.35 * (GY - hy) / ry), lift=LIFT)
 
 
-def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **over):
-    """한 프레임을 그린다. `phase=None` 이면 idle, 0~1 이면 걷기 위상."""
+def character(direction="down", hair="short", pal=None, cfg=None, phase=None,
+              tool=None, motion="walk", **over):
+    """한 프레임을 그린다. `phase=None` 이면 서 있는 자세, 0~1 이면 그 모션의 위상.
+
+    `tool` 을 주면 그 도구를 **손에 쥔 채** 그린다(`motion` 은 `hold`/`use`/`walk`).
+    몸은 도구가 있든 없든 **같은 코드가 그린다** — 도구는 손 자리에 얹히기만 한다.
+    """
     cfg = dict(CFG, **(cfg or {}))
     cfg.update(over)
     pal = pal or palette()
-    pose = walk_pose(direction, phase, cfg)
+    kit = TOOLS.get(tool)
+    pose = (tool_pose(direction, motion, phase, cfg, kit) if kit
+            else walk_pose(direction, phase, cfg))
     bob = pose["bob"]
     b = Build()
 
-    limbs = _body(b, direction, cfg, pose)
+    limbs, hands = _body(b, direction, cfg, pose)
     side = direction in ("left", "right")
     sx = 1.0 if direction == "right" else -1.0
     cx = 8.5 + (0.25 * sx if side else 0.0)
@@ -981,6 +1180,11 @@ def character(direction="down", hair="short", pal=None, cfg=None, phase=None, **
         for es in (-1, 1):
             b.add(ellipsoid(hx + es * (rx - 0.4), hy + 1.0, er, er * 1.25), "skin")
     _hair(b, direction, cfg, hx, hy, rx, ry, hair, bob)
+
+    # 도구는 **맨 나중에** 얹는다 — 손에 쥔 것이므로 몸/머리보다 앞이다.
+    if kit:
+        gx, gy = hands[tool_hand(direction)]
+        _tool_axe(b, gx, gy, pose["tool_angle"], -1.0 if direction == "left" else 1.0, kit)
 
     lum = light(b.hgt, b.mat, key=cfg["key"], amb=cfg["amb"], rim=cfg["rim"])
     m, l = downsample(b.mat, lum)
@@ -1171,6 +1375,76 @@ def walk_sheet(pal=None, **over):
     return sheet(lambda d: [character(d, phase=ph, pal=pal, **over) for ph in phases])
 
 
+## 패기 한 바퀴 프레임 수. 걷기와 같은 6장이다 — `qa_sprite_check.py` 의 「이어짐」이
+## 한 프레임에 바뀌는 몸 픽셀을 0.30 으로 자르는데, 도끼가 도는 각도(82도)를 넉 장에
+## 나누면 그 상한을 넘는다. **4장으로 줄이면 올라갈 때와 내려올 때가 같은 그림이
+## 되기도 한다**(cos 이 0 인 두 자리) — 걷기에서 위상을 반 칸 밀었을 때와 같은 실패다.
+USE_FRAMES = 6
+
+
+def use_phases(frames=USE_FRAMES):
+    return [i / frames for i in range(frames)]
+
+
+def hold_sheet(tool, pal=None, **over):
+    """도구를 들고 서 있기 — idle 과 같은 1프레임이다."""
+    return sheet(lambda d: [character(d, pal=pal, tool=tool, motion="hold", **over)])
+
+
+def use_sheet(tool, pal=None, **over):
+    return sheet(lambda d: [character(d, phase=ph, pal=pal, tool=tool, motion="use", **over)
+                            for ph in use_phases()])
+
+
+def tool_walk_sheet(tool, pal=None, **over):
+    return sheet(lambda d: [character(d, phase=ph, pal=pal, tool=tool, motion="walk", **over)
+                            for ph in walk_phases()])
+
+
+def tool_motions(tool):
+    """도구 하나가 만드는 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 1)."""
+    return (("hold_%s" % tool, lambda **kw: hold_sheet(tool, **kw)),
+            ("use_%s" % tool, lambda **kw: use_sheet(tool, **kw)),
+            ("walk_%s" % tool, lambda **kw: tool_walk_sheet(tool, **kw)))
+
+
+# 아이콘은 같은 도끼를 **캔버스 가득** 그린 것이다 — 손에 쥔 것(자루 5.3px)을 그대로
+# 키우면 칸 안에서 좁쌀만 하게 보인다. 같은 램프·같은 광원·같은 `wedge` 라 손에
+# 쥔 것과 같은 도끼로 읽히고, **날을 몸통 대비 크게** 잡는다(17px 칸 하나에 도끼
+# 하나뿐이라 날이 작으면 무슨 도구인지 안 읽힌다).
+#
+# **자루를 거의 세운다(76도).** 45~58도로 눕히면 날의 축이 그만큼 기울어서 **날의
+# 곧은 변이 대각선**이 되는데, 5px 짜리 날에서 대각선 변은 계단 두 칸이라 쐐기가
+# 안 읽히고 깃발처럼 보인다(실제로 50/58/66/74도를 나란히 뽑아 비교했다).
+# 세우면 날의 변이 세로에 가까워져 도끼로 읽힌다 — **아이콘은 실루엣이 전부라
+# 「각짐」(캐릭터 옆선 규칙)을 여기에 적용하지 않는다.**
+ICON_AXE = dict(AXE, helve=8.6, helve_r=(0.95, 0.75),
+                bit_a=(-0.7, 0.6), bit_b=(3.6, -0.2), bit_r=(0.75, 3.4), bit_bulge=0.26)
+ICONS = {"axe": dict(kit=ICON_AXE, grip=(4.6, 13.2), angle=74.0)}
+
+
+def tool_icon(tool="axe", pal=None):
+    """인벤토리 칸에 보일 도구 아이콘 한 장(17px).
+
+    **월드의 도끼와 같은 파이프라인으로 그린다** — 같은 램프, 같은 광원(왼쪽 위),
+    같은 잉크 외곽선. 아이콘만 따로 그리면 칸 안의 그림과 손에 쥔 그림이 다른
+    손에서 나온 것처럼 보인다(DESIGN.md 「그래픽 파이프라인」 1) 어울림).
+    화면에서는 2배(34px)로 그려서 「아이템/오브젝트 크기 표준」의 16px 하한을 넘긴다.
+    """
+    spec = ICONS[tool]
+    pal = pal or palette()
+    b = Build()
+    _tool_axe(b, spec["grip"][0], spec["grip"][1], spec["angle"], 1.0, spec["kit"], lift=0.0)
+    lum = light(b.hgt, b.mat, key=CFG["key"], amb=CFG["amb"], rim=CFG["rim"])
+    m, l = downsample(b.mat, lum)
+    pm = downsample_part(b.part)
+    return outline(inner_lines(quantize(m, l, pal, 0.0), m, pm, pal), m)
+
+
+def icon_path(tool):
+    return f"{SPRITES}/item_{tool}.png"
+
+
 def motion_path(motion, style):
     """머리모양 하나당 시트 하나. `player_frames.gd` 의 `sheet_path()` 와 같은 규칙이다."""
     return f"{SPRITES}/player_{motion}_{style}.png"
@@ -1275,7 +1549,7 @@ const CLOTHES := {
 
 # 이번에 다시 굽는 모션. 2026-09-07 (INBOX #20) 에 걷기가 돌아왔다 — `CFG` 의
 # 걷기 진폭을 17px 격자에서 다시 잡아서 idle 과 같은 칸 크기로 굽는다.
-MOTIONS_NOW = (("idle", idle_sheet), ("walk", walk_sheet))
+MOTIONS_NOW = (("idle", idle_sheet), ("walk", walk_sheet)) + tool_motions("axe")
 
 if __name__ == "__main__":
     for style in HAIR_STYLES:
@@ -1283,6 +1557,9 @@ if __name__ == "__main__":
             p = motion_path(motion, style)
             make(hair=style).save(p)
             print("saved", p)
+    for tool in ICONS:
+        to_img(tool_icon(tool)).save(icon_path(tool))
+        print("saved", icon_path(tool))
     print("saved", export_palettes())
     if os.environ.get("GEN_OUT"):     # 후보 비교용 — 저장소를 더럽히지 않는다
         strip([to_img(character(d), 6) for d in DIRS]).save(f"{OUT}/idle_x6.png")
@@ -1299,3 +1576,21 @@ if __name__ == "__main__":
                 stack([strip([to_img(character(d), scale)]
                              + [to_img(character(d, phase=ph), scale) for ph in walk_phases()])
                        for d in DIRS]).save(f"{OUT}/walk_x{scale}.png")
+        # 도구 — **맨 앞 칸이 맨손 idle 이다.** 도구를 들었다고 다른 캐릭터가 되지
+        # 않았는지는 나란히 놓아야 보인다(DESIGN.md 「캐릭터 애니메이션」의 "이어짐").
+        for tool in TOOLS:
+            for scale in (6, 3):
+                stack([strip([to_img(character(d), scale),
+                              to_img(character(d, tool=tool, motion="hold"), scale)])
+                       for d in DIRS]).save(f"{OUT}/{tool}_hold_x{scale}.png")
+                # 맨 앞 두 칸이 **맨손 idle · 그 도구를 들고 서 있기**다 — 도구를
+                # 들었다고 다른 캐릭터가 됐는지, 그리고 들고 있기에서 그 모션으로
+                # 자연스럽게 넘어가는지는 나란히 놓아야 보인다.
+                for name, phases in (("use", use_phases()), ("walk", walk_phases())):
+                    stack([strip([to_img(character(d), scale),
+                                  to_img(character(d, tool=tool, motion="hold"), scale)]
+                                 + [to_img(character(d, tool=tool, motion=name, phase=ph), scale)
+                                    for ph in phases])
+                           for d in DIRS]).save(f"{OUT}/{tool}_{name}_x{scale}.png")
+            for scale in (12, 6, 3):
+                to_img(tool_icon(tool), scale).save(f"{OUT}/{tool}_icon_x{scale}.png")

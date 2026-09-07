@@ -44,9 +44,27 @@ const IDLE_FPS := 4.0
 ## 이고, 그러면 한 걸음이 캐릭터 키만큼(타일 1칸)으로 줄어든다.
 const WALK_FPS := 14.0
 
+## 도구를 쥔 채 쓰는 모션(패기 등)의 재생 속도. 한 바퀴 6프레임이라 12fps 면
+## 0.5초에 한 번 내려친다 — 걷기(14)보다 느린 것은 도끼질이 걸음보다 무겁기
+## 때문이고, 더 빠르면 도끼가 순간이동하는 것처럼 보인다.
+const USE_FPS := 12.0
+
+## 도구 하나가 붙이는 모션 3종 — 들고 있기 / 사용 / 든 채 걷기
+## (`docs/DESIGN.md` 「새 도구를 추가하는 절차」 1). **도구가 늘면 아래 `TOOLS` 에
+## 이름 한 줄만 늘린다** — 시트가 같이 실리고 색 바꿔치기도 따라온다.
+## 생성기(`gen_character.py` 의 `TOOLS`)와 같은 목록이어야 한다.
+const TOOLS := ["axe"]
+
+
 ## 한 캐릭터가 가진 모션과 그 재생 속도. **여기 한 줄을 늘리면** 시트가 자동으로
 ## 같이 실려서 `<모션>_<방향>` 애니메이션이 생긴다(도구별 모션이 그렇게 붙는다).
-const MOTIONS := {"idle": IDLE_FPS, "walk": WALK_FPS}
+static func motions() -> Dictionary:
+	var out := {"idle": IDLE_FPS, "walk": WALK_FPS}
+	for tool in TOOLS:
+		out["hold_%s" % tool] = IDLE_FPS
+		out["use_%s" % tool] = USE_FPS
+		out["walk_%s" % tool] = WALK_FPS
+	return out
 
 
 ## `<모션>` × `<머리모양>` 한 벌이 놓인 자리. 생성기(`gen_character.py` 의
@@ -59,13 +77,14 @@ static func sheet_path(motion: String, hairstyle: String) -> String:
 ## `walk_left` 처럼 `<모션>_<방향>` 이다.
 static func build(hairstyle: String = DEFAULT_HAIRSTYLE) -> SpriteFrames:
 	var frames := new_frames()
-	for motion in MOTIONS:
+	var all := motions()
+	for motion in all:
 		var path := sheet_path(motion, hairstyle)
 		var texture: Texture2D = load(path)
 		if texture == null:
 			push_error("플레이어 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % path)
 			return null
-		add_motion(frames, texture, motion, MOTIONS[motion])
+		add_motion(frames, texture, motion, all[motion])
 	return frames
 
 

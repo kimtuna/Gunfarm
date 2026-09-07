@@ -7,10 +7,14 @@ extends SceneTree
 ##
 ## 그림 자체(프레임 사이가 매끄러운가, 자세가 idle 과 이어지는가)는 파이썬 쪽
 ## `qa_sprite_check.py` 의 「이어짐」이 본다. 여기는 **엔진에 제대로 실렸는가**만 본다:
-##   1) `walk_<방향>` 애니메이션이 네 방향 다 있고, 프레임 수가 시트의 열 수와
-##      같고, 도는(loop) 애니메이션이다.
-##   2) **걷기 시트도 외형대로 칠해진다** — idle 만 칠하고 걷기를 빠뜨리면 움직이는
-##      순간 캐릭터가 기준색으로 되돌아간다. 네 방향 × 모든 프레임을 픽셀로 견준다.
+##   1) `<모션>_<방향>` 애니메이션이 **모든 모션 × 네 방향** 다 있고, 프레임 수가
+##      시트의 열 수와 같고, 도는(loop) 애니메이션이다. **도구를 든 모션도 여기
+##      포함이다**(2026-09-07, INBOX #24 — `docs/DESIGN.md` 「새 도구를 추가하는
+##      절차」 4: 안 넓히면 새 모션은 아무도 검사하지 않는다). 동작(좌클릭으로
+##      패기)은 그 도구의 [BUILD] 바퀴 몫이고, 여기는 **시트가 실렸는가**까지다.
+##   2) **모든 모션 시트가 외형대로 칠해진다** — idle 만 칠하고 나머지를 빠뜨리면
+##      그 모션으로 바뀌는 순간 캐릭터가 기준색으로 되돌아간다. 모션 × 네 방향 ×
+##      모든 프레임을 픽셀로 견준다.
 ##   3) 이동 키를 누르면 애니메이션이 `walk_<방향>` 으로 바뀌고 **프레임이 실제로
 ##      넘어간다**(멈춰 있는 애니메이션은 걷는 것으로 안 보인다), 떼면 idle 로 돌아온다.
 ##   4) 네 방향 모두 그 방향의 걷기로 바뀐다 — 방향과 행이 어긋나면 옆으로 걸으면서
@@ -105,6 +109,7 @@ func _initialize() -> void:
 	_steps.append(func(): _shoot("81_walk_moving"))
 	_steps.append(func(): _release("right"))
 	_steps.append(_save_strip)
+	_steps.append(_save_tool_strips)
 
 
 func _process(delta: float) -> bool:
@@ -133,55 +138,76 @@ func _sprite() -> AnimatedSprite2D:
 	return null if player == null else player.get_node_or_null("Sprite") as AnimatedSprite2D
 
 
-## 걷기 애니메이션이 네 방향 다 있고, 시트의 열 수만큼 프레임이 있고, 도는가.
+## **모든 모션**이 네 방향 다 있고, 시트의 열 수만큼 프레임이 있고, 도는가.
+##
+## 여러 프레임짜리 모션(걷기 · 도구 사용)은 `DESIGN.md` 「캐릭터 애니메이션」의
+## 4~6프레임도 함께 본다. 서 있는 모션(idle · 도구를 들고 있기)은 한 장이므로 뺀다.
 func _check_animations() -> void:
 	var sprite := _sprite()
 	if sprite == null or sprite.sprite_frames == null:
 		_fails.append("플레이어에 SpriteFrames 가 없다")
 		return
-	var sheet: Texture2D = load(PlayerFrames.sheet_path("walk", String(LOOK["hairstyle"])))
-	if sheet == null:
-		_fails.append("걷기 시트를 못 읽었다 — `--import` 를 안 돌렸을 수 있다")
-		return
-	var columns := sheet.get_width() / PlayerFrames.CELL
-	if columns < 4 or columns > 6:
-		_fails.append("걷기가 %d프레임이다 — DESIGN.md 「캐릭터 애니메이션」은 4~6프레임이다"
-				% columns)
-	for dir: String in PlayerFrames.DIR_NAMES:
-		var anim := "walk_%s" % dir
-		if not sprite.sprite_frames.has_animation(anim):
-			_fails.append("%s 애니메이션이 없다 — 걷기 시트가 안 실렸다" % anim)
+	var style := String(LOOK["hairstyle"])
+	var counted := 0
+	for motion: String in PlayerFrames.motions():
+		var sheet: Texture2D = load(PlayerFrames.sheet_path(motion, style))
+		if sheet == null:
+			_fails.append("%s 시트를 못 읽었다 — `--import` 를 안 돌렸을 수 있다" % motion)
 			continue
-		var count := sprite.sprite_frames.get_frame_count(anim)
-		if count != columns:
-			_fails.append("%s 가 %d프레임이다 — 시트는 %d열이다" % [anim, count, columns])
-		if not sprite.sprite_frames.get_animation_loop(anim):
-			_fails.append("%s 가 도는 애니메이션이 아니다 — 한 바퀴 돌고 멈춘다" % anim)
+		var columns := sheet.get_width() / PlayerFrames.CELL
+		if columns > 1 and (columns < 4 or columns > 6):
+			_fails.append("%s 가 %d프레임이다 — DESIGN.md 「캐릭터 애니메이션」은 4~6프레임이다"
+					% [motion, columns])
+		for dir: String in PlayerFrames.DIR_NAMES:
+			var anim := "%s_%s" % [motion, dir]
+			if not sprite.sprite_frames.has_animation(anim):
+				_fails.append("%s 애니메이션이 없다 — %s 시트가 안 실렸다" % [anim, motion])
+				continue
+			var count := sprite.sprite_frames.get_frame_count(anim)
+			if count != columns:
+				_fails.append("%s 가 %d프레임이다 — 시트는 %d열이다" % [anim, count, columns])
+			if not sprite.sprite_frames.get_animation_loop(anim):
+				_fails.append("%s 가 도는 애니메이션이 아니다 — 한 바퀴 돌고 멈춘다" % anim)
+			counted += 1
 	if _fails.is_empty():
-		print("[qa] walk_<방향> 4개 × %d프레임, 전부 loop" % columns)
+		print("[qa] 모션 %d종 × 4방향 = %d개 애니메이션, 전부 loop (%s)"
+				% [PlayerFrames.motions().size(), counted,
+					", ".join(PlayerFrames.motions().keys())])
 
 
-## **걷기 시트도 고른 외형으로 칠해졌는가.** idle 만 칠하면 움직이는 순간 기준색으로
-## 튄다 — 네 방향 × 모든 프레임을 시트와 픽셀 단위로 견준다.
+## **모든 모션 시트가 고른 외형으로 칠해졌는가.** idle 만 칠하면 다른 모션으로
+## 바뀌는 순간 기준색으로 튄다 — 모션 × 네 방향 × 모든 프레임을 픽셀로 견준다.
+##
+## **도구 재질(자루·날)은 칠해지면 안 된다** — 팔레트 교체는 기준색 램프에 있는
+## 색만 갈아끼우고 도구 램프는 커스터마이징과 무관한 고정색이라(`gen_character.py`
+## 의 `HELVE`/`BLADE`), 여기서 픽셀이 그대로 같다는 것이 곧 그 확인이다.
 func _check_recolored() -> void:
-	var want := CharacterSprite.motion_texture(LOOK, "walk")
+	for motion: String in PlayerFrames.motions():
+		if not _check_recolored_motion(motion):
+			return
+	print("[qa] 모션 %d종 × 4방향 × 모든 프레임이 고른 외형(%s)으로 칠해져 있다"
+			% [PlayerFrames.motions().size(), LOOK["hairstyle"]])
+
+
+func _check_recolored_motion(motion: String) -> bool:
+	var want := CharacterSprite.motion_texture(LOOK, motion)
 	if want == null:
-		_fails.append("칠한 걷기 텍스처를 못 만들었다")
-		return
+		_fails.append("칠한 %s 텍스처를 못 만들었다" % motion)
+		return false
 	var image := want.get_image()
 	var sprite := _sprite()
 	if sprite == null or sprite.sprite_frames == null:
-		return
+		return false
 	var cell := PlayerFrames.CELL
 	for row in PlayerFrames.DIR_NAMES.size():
-		var anim := "walk_%s" % PlayerFrames.DIR_NAMES[row]
+		var anim := "%s_%s" % [motion, PlayerFrames.DIR_NAMES[row]]
 		if not sprite.sprite_frames.has_animation(anim):
-			return
+			return false
 		for f in sprite.sprite_frames.get_frame_count(anim):
 			var texture := sprite.sprite_frames.get_frame_texture(anim, f)
 			if texture == null:
 				_fails.append("%s #%d 프레임이 비었다" % [anim, f])
-				return
+				return false
 			var got := texture.get_image()
 			var wrong := 0
 			for y in cell:
@@ -190,10 +216,10 @@ func _check_recolored() -> void:
 							image.get_pixel(f * cell + x, row * cell + y)):
 						wrong += 1
 			if wrong > 0:
-				_fails.append("%s #%d 가 칠한 시트와 %d픽셀 다르다 — 걷기가 안 칠해졌다"
-						% [anim, f, wrong])
-				return
-	print("[qa] 걷기 4방향 × 모든 프레임이 고른 외형(%s)으로 칠해져 있다" % LOOK["hairstyle"])
+				_fails.append("%s #%d 가 칠한 시트와 %d픽셀 다르다 — %s 가 안 칠해졌다"
+						% [anim, f, wrong, motion])
+				return false
+	return true
 
 
 ## 걷는 동안 **조준한 방향**의 걷기가 돌고, **프레임이 실제로 넘어가는가.**
@@ -280,6 +306,39 @@ func _save_strip() -> void:
 	var path := "%s/82_walk_frames.png" % SHOTS
 	strip.save_png(path)
 	print("[qa] shot %s (왼쪽 첫 칸이 idle, 나머지가 걷기 한 바퀴)" % path)
+
+
+## 도구를 든 모션도 같은 방식으로 한 장에 이어붙인다 — **맨 왼쪽 두 칸이 맨손
+## idle 과 그 도구를 들고 서 있기**다. 「도구를 들었더니 다른 캐릭터가 됐는가」와
+## 「사용 모션이 들고 있기에서 자연스럽게 이어지는가」는 나란히 놓아야 보인다
+## (docs/DESIGN.md 「캐릭터 애니메이션」).
+func _save_tool_strips() -> void:
+	var sprite := _sprite()
+	if sprite == null or sprite.sprite_frames == null:
+		return
+	var cell := PlayerFrames.CELL
+	var dirs: Array = PlayerFrames.DIR_NAMES
+	var shot := 84
+	for tool: String in PlayerFrames.TOOLS:
+		for motion in ["use_%s" % tool, "walk_%s" % tool]:
+			if not sprite.sprite_frames.has_animation("%s_%s" % [motion, dirs[0]]):
+				continue
+			var frames := sprite.sprite_frames.get_frame_count("%s_%s" % [motion, dirs[0]])
+			var columns := frames + 2
+			var strip := Image.create_empty(columns * cell, dirs.size() * cell, false,
+					Image.FORMAT_RGBA8)
+			strip.fill(Color(0.12, 0.11, 0.13))
+			for row in dirs.size():
+				_blit(strip, sprite, "idle_%s" % dirs[row], 0, 0, row)
+				_blit(strip, sprite, "hold_%s_%s" % [tool, dirs[row]], 0, 1, row)
+				for f in frames:
+					_blit(strip, sprite, "%s_%s" % [motion, dirs[row]], f, f + 2, row)
+			strip.resize(strip.get_width() * STRIP_ZOOM, strip.get_height() * STRIP_ZOOM,
+					Image.INTERPOLATE_NEAREST)
+			var path := "%s/%d_%s_frames.png" % [SHOTS, shot, motion]
+			strip.save_png(path)
+			print("[qa] shot %s (왼쪽 두 칸이 맨손 idle · 도구를 들고 서 있기)" % path)
+			shot += 1
 
 
 func _blit(strip: Image, sprite: AnimatedSprite2D, anim: String, frame: int,

@@ -180,9 +180,16 @@ def _player_spec(**over):
         # 하이라이트(흰자)는 **2×2 일 때만** 넣는다 — 2×1 에 넣으면 두 칸 중 한
         # 칸이 흰색이 되어 눈이 아니라 점 두 개로 읽힌다. 지금은 없어야 한다.
         eye_glint=False,
+        # **손에 쥔 도구는 「비율」에서 뺀다**(2026-09-07, INBOX #24) — 「비율」은
+        # 몸의 비율을 보는 검사라 머리 옆에 든 도끼날이 "머리"로 세어지면 안 된다.
+        # (「각짐」은 반대로 도구까지 넣어서 잰다 — 아래 `_check_natural` 참고.)
+        # 도구가 없는 시트에서는 이 검사가 한 픽셀도 달라지지 않는다.
+        tool_mats=("helve", "blade"),
         # 프레임이 한 장뿐인 시트(idle)는 「이어짐」을 돌 게 없다 — `motion` 을 준
-        # 시트만 본다.
+        # 시트만 본다. `link` 는 그 반대로 **1프레임짜리 시트**가 다른 시트와 얼마나
+        # 벌어졌는지만 본다(도구를 들었다고 다른 캐릭터가 되면 안 된다).
         motion=None,
+        link=None,
     ), **over)
 
 
@@ -224,6 +231,71 @@ def _walk_spec(style):
     )
 
 
+def _tool_spec(motion, tool, style):
+    """도구를 든 세 모션(`hold`/`use`/`walk`) 시트 — idle/걷기 스펙에서 갈라진다
+    (2026-09-07, INBOX #24. 도구 6종이 더 붙을 때 이 함수만 다시 부르면 된다).
+
+    더해지는 것:
+      **대비 helve|blade** — 자루와 날이 색으로 갈리는지. 17px 에서 도끼가 도끼로
+      읽히는 것은 형태가 아니라 이 두 재질의 명도차다. 겸해서 「재질」 검사가
+      **도구가 시트에서 통째로 사라지지 않았는지**(각 재질 4px 이상)를 본다.
+      **이음** — `hold` 는 맨손 idle 과, `use`/`walk` 는 `hold` 와 견준다.
+      DESIGN.md 「캐릭터 애니메이션」의 "idle 에서 사용 모션으로 바뀔 때 자세가
+      갑자기 다른 캐릭터처럼 변하면 안 된다" 가 여기서 숫자가 된다.
+    """
+    base = _walk_spec(style) if motion == "walk" else _player_spec()
+    spec = dict(base, contrast=base["contrast"] + [("helve", "blade", 18.0)])
+    held = "player_hold_%s_%s.png" % (tool, style)
+    if motion == "hold":
+        # 1프레임짜리라 「이어짐」이 돌 게 없다 — 맨손 idle 과의 차이만 본다.
+        # 상한 0.42: 도구를 쥐면 손이 몸 밖으로 나가고 도끼가 통째로 더해지므로
+        # 걷기 한 프레임(0.30)보다는 커야 하고, 그보다 크면 자세가 딴판이 된 것이다.
+        return dict(spec, motion=None,
+                    link=dict(to="player_idle_%s.png" % style, max=0.42))
+    # `use` 만 「이어짐」 상한을 0.30 → 0.35 로 늦춘다 — 한 프레임에 도끼가 칸의
+    # 1/4 을 돈다. **그게 이 모션의 내용이다**(도끼가 안 움직이면 패는 게 아니다).
+    # **「자리」는 걷기와 같은 2px 그대로다.** 처음엔 3px 로 늦춰뒀는데, 그건
+    # 도구가 몸을 가려서가 아니라 **견주는 두 시트를 서로 다르게 재던 탓**이었다
+    # (한쪽만 도구를 뺐다 — `_load_ref`). 재는 법을 맞추자 2px 로 통과한다.
+    swing = motion == "use"
+    return dict(spec, link=None, motion=dict(
+        base["motion"] or {},
+        frames=(4, 6),
+        change=(0.05, 0.35 if swing else 0.30),
+        even=3.0,
+        shift=2,
+        idle=held,
+        from_idle=1.5,
+    ))
+
+
+def _icon_spec(**over):
+    """도구 아이템 아이콘 한 장(`item_<도구>.png`, 17px 한 칸).
+
+    캐릭터 시트와 **같은 램프·같은 잉크·같은 광원**을 쓰므로 앞쪽 검사(팔레트 /
+    색충돌 / 잉크아래 / 순검정 / 외곽선 / 잘림 / 실루엣 / 재질 / 대비)가 그대로
+    돈다 — 아이콘만 다른 손에서 나온 것처럼 보이는 것을 여기서 막는다.
+    「자연스러움」 갈래(각짐·비율·눈·옷 포인트·단색)만 건너뛴다 — 아이콘에는 사람이
+    없다. 대신 **평평한 아이콘은 「명암폭」이 잡는다**(음영이 없으면 55 를 못 넘는다).
+
+    **「잘림」이 여기서 특히 중요하다** — 칸 가득 그리다 보면 날이 테두리에 닿아
+    외곽선이 잘리기 쉽다(실제로 자리를 잡는 동안 여러 번 그랬다).
+    """
+    return dict(_player_spec(
+        kind="icon",
+        rows=["icon"],
+        contrast=[("helve", "blade", 18.0)],
+        # 도구는 쇠(무채색)와 나무 둘뿐이라 사람 기준을 그대로 쓸 수 없다.
+        # 실측(도끼): 평균 156 / 명암폭 73 / 어두운비율 0% / 채도 44.
+        luma_mean=(120.0, 190.0),
+        luma_spread=55.0,
+        dark_frac=0.22,
+        chroma_mean=25.0,
+        # 도구가 그림의 전부다 — 「비율」에서 뺄 것이 없다.
+        tool_mats=(),
+    ), **over)
+
+
 # 머리모양 4종은 **형태만 다르고 팔레트·비율·광원이 같다** — 그래서 스펙도 하나를
 # 돌려 쓴다. 34px 시트는 **머리카락이 길수록 실제로 더 어둡고 덜 쨍해서**(기준색의
 # 머리는 검정 = 무채색이다) 그 셋(평균명도/어두운비율/채도)만 시트마다 늦춰야 했다.
@@ -246,10 +318,22 @@ TERRAIN_SPEC = dict(
     shirt_gap=35.0,
 )
 
+# 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
+# 손에 쥔 세 모션 시트 12장과 아이템 아이콘 한 장이 함께 등록된다.
+TOOL_NAMES = ("axe",)
+
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC}
+for _tool in TOOL_NAMES:
+    SPECS["item_%s.png" % _tool] = _icon_spec()
 for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STYLES
     SPECS["player_idle_%s.png" % _style] = _player_spec()
     SPECS["player_walk_%s.png" % _style] = _walk_spec(_style)
+    # 도구별 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 4 — 안 넓히면 새 모션은
+    # 아무도 검사하지 않는다). 도구가 늘면 이 줄의 목록만 늘린다.
+    for _tool in TOOL_NAMES:
+        for _motion in ("hold", "use", "walk"):
+            SPECS["player_%s_%s_%s.png" % (_motion, _tool, _style)] = \
+                _tool_spec(_motion, _tool, _style)
 
 
 # ── 검사 ──────────────────────────────────────────────────────────────────
@@ -316,7 +400,37 @@ def _longest_run(profile):
     return best
 
 
-def _straight_run(mask):
+def _load_ref(folder, name, spec, color2mat):
+    """견줄 시트 한 장 → (rgb, 몸 마스크, **도구를 뺀 몸 마스크**).
+
+    「이음」은 이 시트와 지금 시트의 바운딩박스를 견주는데, **양쪽을 같은 방식으로
+    재야** 한다 — 한쪽만 도구를 빼면 그 차이가 통째로 "미끄러졌다"로 잡힌다
+    (도끼를 든 시트끼리 견주는 `use`/`walk` 가 실제로 그랬다).
+    """
+    img = np.array(Image.open(os.path.join(folder, name)).convert("RGBA"))
+    rgb, body = img[..., :3].astype(np.int32), img[..., 3] == 255
+    mm = np.full(body.shape, "", dtype=object)
+    for c, m in color2mat.items():
+        mm[body & np.all(rgb == np.array(c), axis=-1)] = m
+    return rgb, body, body & ~_tool_mask(spec, mm, body)
+
+
+def _tool_mask(spec, matmap, body):
+    """손에 쥔 도구가 차지한 픽셀 — **도구 재질 + 거기 붙은 외곽선**.
+
+    잉크는 어느 재질에도 안 잡히므로 재질(`tool_mats`)만 지우면 도구 모양의
+    **잉크 테두리가 몸으로 남는다.** 「각짐」(어느 줄을 판정하지 않을지)과
+    「자리」·「이음」(몸이 칸 안에서 미끄러졌는지)이 둘 다 이 마스크를 쓴다.
+    """
+    tool = np.zeros(body.shape, bool)
+    for mat in spec.get("tool_mats", ()):
+        tool |= matmap == mat
+    if not tool.any():
+        return tool
+    return tool | (_neighbors(tool) & body & (matmap == ""))
+
+
+def _straight_run(mask, skip=None):
     """실루엣 옆선/윗선에서 가장 긴 **곧은** 구간(px).
 
     줄마다 바깥쪽 끝 좌표를 뽑아 같은 값이 몇 줄 이어지는지 센다 — 6줄 내리
@@ -325,14 +439,26 @@ def _straight_run(mask):
     **아랫변(발바닥)만 빼고 본다** — 캐릭터는 땅을 딛고 서 있어서 신발 밑창이
     평평한 게 맞다. 여기를 같이 재면 발이 클수록 불합격이 되는데, 그건 각진
     실루엣과 아무 상관이 없다.
+
+    `skip`(손에 쥔 도구)이 그 줄의 바깥쪽 끝을 차지하고 있으면 **그 줄은
+    "모름"으로 끊는다**(2026-09-07, INBOX #24). 도구를 빼고 재면 도구가 가린
+    자리에 **없던 직선**이 생기고(도끼가 팔 바깥을 덮으면 몸의 오른쪽 끝이
+    도끼 왼쪽 경계에서 잘려 8줄 곧은 선이 된다), 도구를 넣고 재면 이번엔
+    **자루·날의 곧은 변**이 잡힌다 — 막대의 옆선이 곧은 건 각진 게 아니라
+    자루의 생김새다. 어느 쪽도 아닌 "그 줄은 판정하지 않는다"가 맞다.
     """
     best = 0
-    for m, both in ((mask, True), (mask.T, False)):
+    for m, sk, both in ((mask, skip, True),
+                        (mask.T, None if skip is None else skip.T, False)):
         lo, hi = [], []
-        for line in m:
+        for i, line in enumerate(m):
             xs = np.nonzero(line)[0]
-            lo.append(None if xs.size == 0 else int(xs[0]))
-            hi.append(None if xs.size == 0 else int(xs[-1]))
+            if xs.size == 0:
+                lo.append(None)
+                hi.append(None)
+                continue
+            lo.append(None if (sk is not None and sk[i][xs[0]]) else int(xs[0]))
+            hi.append(None if (sk is not None and sk[i][xs[-1]]) else int(xs[-1]))
         best = max(best, _longest_run(lo))
         if both:
             best = max(best, _longest_run(hi))
@@ -415,6 +541,19 @@ def check_sheet(path, spec):
     edge_ink = float((edge & inkm).sum()) / max(edge_n, 1)
     rep.add(edge_n > 0 and edge_ink >= 0.90, "외곽선",
             "가장자리의 %.0f%% 만 잉크색" % (edge_ink * 100))
+
+    # 잘림 — **칸 테두리에 잉크가 아닌 픽셀이 닿으면 외곽선이 잘린 것이다**
+    # (2026-09-07, INBOX #24). 도구를 크게 휘두르면 날이 칸 밖으로 나가는데, 잘린
+    # 자리는 외곽선이 없어서 그림이 칼로 도려낸 것처럼 보인다. 맨 몸은 머리
+    # 외곽선이 맨 윗줄에 닿아 있어서(잉크는 닿아도 된다) 이 검사를 그대로 통과한다.
+    cut = []
+    for r, d in enumerate(rows):
+        for c in range(cols):
+            sub_m = (body & ~inkm)[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
+            n = int(sub_m[0].sum() + sub_m[-1].sum() + sub_m[:, 0].sum() + sub_m[:, -1].sum())
+            if n:
+                cut.append("%s#%d:%dpx" % (d, c, n))
+    rep.add(not cut, "잘림", "%s 가 칸 테두리에 닿았다 — 외곽선이 잘린다" % " ".join(cut[:4]))
 
     # 실루엣 — 프레임마다 4-연결 덩어리가 하나여야 한다
     bad = []
@@ -500,9 +639,22 @@ def check_sheet(path, spec):
     rep.add(ch >= spec["chroma_mean"], "채도",
             "%.0f < %.0f — 탁하다" % (ch, spec["chroma_mean"]), "%.0f" % ch)
 
-    _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, glint)
+    # 「자연스러움」은 **사람 그림에만** 도는 갈래다(머리 비율·눈·옷 포인트) —
+    # 도구 아이콘에는 머리도 옷도 없다.
+    if spec["kind"] == "character":
+        _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, glint)
+    # 도구를 뺀 몸 실루엣 — 「자리」(칸 안에서 미끄러지는가)를 이걸로 잰다.
+    # **도구에 붙은 외곽선까지 같이 뺀다**: 잉크는 어느 재질에도 안 잡혀서
+    # 재질만 지우면 도끼 모양의 잉크 테두리가 몸으로 남고, 바운딩박스가 도구를
+    # 뺀 자리까지 그대로 벌어진다(실제로 날을 키웠더니 「이음」이 3px 로 튀었다).
+    # 「각짐」의 `skip` 과 같은 계산이다 — 한 곳에 모아 둔다.
+    bodym = body & ~_tool_mask(spec, matmap, body)
     if spec.get("motion"):
-        _check_motion(rep, spec["motion"], os.path.dirname(path), rgb, body, cell, rows, cols)
+        _check_motion(rep, spec["motion"], os.path.dirname(path), rgb, body, cell, rows, cols,
+                      bodym, spec, color2mat)
+    if spec.get("link"):
+        _check_link(rep, spec["link"], os.path.dirname(path), rgb, body, cell, rows, bodym,
+                    spec, color2mat)
 
     rep.dump()
     return rep
@@ -534,7 +686,7 @@ def _changed(a, ba, b, bb):
     return float(ch.sum()) / max(int(ba.sum()), int(bb.sum()), 1)
 
 
-def _delta(a, ba, b, bb):
+def _delta(a, ba, b, bb, boxa=None, boxb=None):
     """두 프레임 사이 (바뀐 몸 픽셀 비율, 실루엣 바운딩박스가 움직인 px).
 
     **바뀐 비율**은 색까지 본다 — 실루엣만 보면 팔이 몸 앞에서 움직이는 것처럼
@@ -548,10 +700,14 @@ def _delta(a, ba, b, bb):
     """
     ratio = min(_changed(a, ba, _shifted(b, dy, dx), _shifted(bb, dy, dx))
                 for dy in (-1, 0, 1) for dx in (-1, 0, 1))
-    return ratio, int(np.abs(_box(ba) - _box(bb)).max())
+    # **바운딩박스는 도구를 뺀 몸으로 잰다**(`boxa`/`boxb`, 2026-09-07 INBOX #24).
+    # "칸 안에서 미끄러지는가"는 캐릭터가 제자리에 서 있는지를 보는 것인데,
+    # 도끼를 휘두르면 도구가 칸의 절반을 가로질러서 몸이 가만히 있어도 3px 이 나온다.
+    return ratio, int(np.abs(_box(ba if boxa is None else boxa)
+                             - _box(bb if boxb is None else boxb)).max())
 
 
-def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols):
+def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols, bodym, spec, color2mat):
     lo, hi = mo["frames"]
     rep.add(lo <= cols <= hi, "프레임수", "%d장 (%d~%d장이어야 한다)" % (cols, lo, hi),
             "%d장" % cols)
@@ -563,7 +719,9 @@ def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols):
         for c in range(cols):
             a, ba = _frame(rgb, body, cell, r, c)
             b, bb = _frame(rgb, body, cell, r, (c + 1) % cols)   # 도는 애니메이션이다
-            ch, shift = _delta(a, ba, b, bb)
+            ch, shift = _delta(a, ba, b, bb,
+                               _frame(rgb, bodym, cell, r, c)[1],
+                               _frame(rgb, bodym, cell, r, (c + 1) % cols)[1])
             deltas.append(ch)
             tag = "%s#%d→%d" % (d, c, (c + 1) % cols)
             if ch > chi:
@@ -587,16 +745,15 @@ def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols):
 
     if not mo.get("idle"):
         return
-    path = os.path.join(folder, mo["idle"])
-    prev = np.array(Image.open(path).convert("RGBA"))
-    pr, pa = prev[..., :3].astype(np.int32), prev[..., 3] == 255
+    pr, pa, pm = _load_ref(folder, mo["idle"], spec, color2mat)
     worst = max(max(_delta(*_frame(rgb, body, cell, r, c),
                            *_frame(rgb, body, cell, r, (c + 1) % cols))[0]
                     for c in range(cols)) for r in range(len(rows)))
     bad, show = [], 0.0
     for r, d in enumerate(rows):
         b, bb = _frame(rgb, body, cell, r, 0)
-        ch, shift = _delta(*_frame(pr, pa, cell, r, 0), b, bb)
+        ch, shift = _delta(*_frame(pr, pa, cell, r, 0), b, bb,
+                           _frame(pr, pm, cell, r, 0)[1], _frame(rgb, bodym, cell, r, 0)[1])
         show = max(show, ch)
         if ch > worst * mo["from_idle"] or shift > mo["shift"]:
             bad.append("%s %.2f/%dpx" % (d, ch, shift))
@@ -604,6 +761,28 @@ def _check_motion(rep, mo, folder, rgb, body, cell, rows, cols):
             "%s ← idle 에서 넘어오는 순간이 걷기 안의 가장 큰 변화(%.2f)의 %.1f배를 넘는다"
             % (" ".join(bad[:3]), worst, mo["from_idle"]),
             "%.2f (걷기 최대 %.2f)" % (show, worst))
+
+
+def _check_link(rep, link, folder, rgb, body, cell, rows, bodym, spec, color2mat):
+    """**1프레임짜리 시트가 다른 시트와 얼마나 벌어졌는가**(2026-09-07, INBOX #24).
+
+    「이어짐」의 `이음` 은 프레임이 여럿인 시트에만 도는데, 도구를 들고 서 있는
+    시트(`hold_<도구>`)는 한 장뿐이라 아무도 안 본다 — 그런데 **거기가 바로
+    "도구를 들었더니 다른 캐릭터가 됐다"가 나타나는 자리**다. 맨손 idle 과 나란히
+    놓고 바뀐 몸 픽셀 비율을 잰다.
+    """
+    pr, pa, pm = _load_ref(folder, link["to"], spec, color2mat)
+    bad, show = [], 0.0
+    for r, d in enumerate(rows):
+        # 바뀐 비율은 **도구까지 넣어서**(도구가 더해진 몫이 곧 이 검사의 내용이다),
+        # 미끄러짐은 **도구를 빼고**(몸이 제자리에 서 있는지) 잰다.
+        ch, shift = _delta(*_frame(pr, pa, cell, r, 0), *_frame(rgb, body, cell, r, 0),
+                           _frame(pr, pm, cell, r, 0)[1], _frame(rgb, bodym, cell, r, 0)[1])
+        show = max(show, ch)
+        if ch > link["max"] or shift > link.get("shift", 2):
+            bad.append("%s %.2f/%dpx" % (d, ch, shift))
+    rep.add(not bad, "이음", "%s ← %s 와 너무 많이 다르다(상한 %.2f)"
+            % (" ".join(bad), link["to"], link["max"]), "%.2f" % show)
 
 
 # ── 「자연스러움」 (INBOX #13) ────────────────────────────────────────────
@@ -664,14 +843,22 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
             px = rgb[r * cell:(r + 1) * cell, c * cell:(c + 1) * cell]
             tag = "%s#%d" % (d, c)
 
-            run = _straight_run(sub)
+            # 「각짐」 — **도구가 바깥 끝을 차지한 줄은 판정하지 않는다**
+            # (`_straight_run` 의 `skip`, 2026-09-07 INBOX #24). 도구 픽셀과
+            # 거기 붙은 잉크(도구의 외곽선)를 함께 넘긴다.
+            skip = _tool_mask(spec, mm, sub)
+            run = _straight_run(sub, skip if skip.any() else None)
             worst = max(worst, run)
             if run > spec["straight_max"]:
                 angular.append("%s %dpx" % (tag, run))
 
             # 비율은 **외곽선을 뺀 알맹이**로 잰다 — STYLE_GUIDE 3번 표가 그
-            # 기준이다(외곽선은 위아래로 1px 씩 더 붙는다).
+            # 기준이다(외곽선은 위아래로 1px 씩 더 붙는다). **손에 쥔 도구는
+            # 몸이 아니라 뺀다**(2026-09-07, INBOX #24) — 머리 옆에 든 도끼날이
+            # 머리로, 자루가 어깨폭으로 세어지면 비율이 통째로 뒤틀린다.
             fill = mm != ""
+            for mat in spec.get("tool_mats", ()):
+                fill &= mm != mat
             ys = np.nonzero(fill.any(1))[0]
             top, bot = int(ys[0]), int(ys[-1])
 
@@ -847,7 +1034,10 @@ def check_tiles(path, spec):
 
 
 def main(argv):
-    paths = argv[1:] or [os.path.join(SPRITES, n) for n in SPECS]
+    # **인자가 없으면 폴더를 훑는다** — SPECS 만 돌면 등록을 잊은 새 PNG 가
+    # 조용히 검사에서 빠진다(STYLE_GUIDE 7번 "등록되지 않은 PNG 는 불합격").
+    paths = argv[1:] or sorted(os.path.join(SPRITES, n) for n in os.listdir(SPRITES)
+                               if n.endswith(".png"))
     failed = False
     for p in paths:
         spec = SPECS.get(os.path.basename(p))
