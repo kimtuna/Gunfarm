@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""T자 그림 한 장 → **부품으로 나눈 리그**. 모든 모션을 여기서 조립한다.
+"""4방향 시트 한 장 → **부품으로 나눈 리그**. 모든 모션을 여기서 조립한다.
 
 왜 이렇게 하는가 (2026-09-08 사람 결정):
     도구 7종 × 4방향 × (들고있기/사용/걷기) 면 시트가 90장이 넘는다. 그림을 매번
@@ -35,9 +35,15 @@ SOURCE_ARM_DEG = 10.0
 
 ## **4방향을 한 장에 받은 시트**(`game/tools/comfy.py` 가 주문한다)를 쓴다.
 ## 방향마다 따로 뽑으면 같은 씨앗을 써도 캐릭터가 달라진다 — 머리색·옷 모양·몸 비율이
-## 전부 어긋났다(2026-09-08 실측, `docs/CHARACTER.md` 「방향 4장을 맞추기」).
+## 전부 어긋났다(2026-09-08 실측, `docs/CHARACTER.md` 「4방향을 한 장에 받는다」).
 ## 배치는 `comfy.SHEET_CELLS` 와 **반드시 같아야 한다** — 어긋나면 엉뚱한 자리를 자른다.
-SHEET = "~/ComfyUI/output/g0_00001_.png"
+##
+## **저장소 안에 둔다.** `~/ComfyUI/output/` 만 가리키면 그 폴더를 비우는 순간 캐릭터를
+## 다시 못 굽는다 — 리그의 원본은 자산이지 임시 파일이 아니다.
+## 지금 것: 2026-09-08 INBOX #56 에서 `comfy.py` 의 기본 프롬프트로 씨앗 여섯 개를
+## 뽑아 고른 장(seed 5555). 고른 이유는 `docs/STATUS.md` 와 `docs/CHARACTER.md` 3-b 에 있다.
+SHEET = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), "docs", "design_reference", "farmer_sheet4.png")
 
 ## 방향마다 원본이 다르다 — 옆·뒷모습은 그 방향으로 그려진 그림이어야 한다.
 ## **`right` 는 `left` 를 좌우반전해 쓴다** — 게임의 정석이고, 두 장을 따로 뽑으면
@@ -47,6 +53,10 @@ SHEET = "~/ComfyUI/output/g0_00001_.png"
 ## **옷을 프롬프트에 못 박아야 한다.** 안 그러면 정면만 반바지고 옆·뒤는 긴바지로
 ## 나온다(사람 지적, 2026-09-08). 색이 갈리는 것은 `quantize_all(ref_cells=...)` 로
 ## 정면 팔레트를 씌워 맞출 수 있지만, **옷의 모양이 갈리는 것은 다시 뽑는 수밖에 없다.**
+## **옛 길이다 — 지금은 안 쓴다** (2026-09-08, INBOX #56). `build_sheets()` 는 위
+## `SHEET` 한 장을 쓴다. 아래는 방향마다 그림을 따로 뽑던 때의 잔재이고, 그 방식이
+## 왜 실패했는지는 `docs/CHARACTER.md` 3-b 에 있다 — **되살리지 말 것.**
+## (`load()` 는 한 인물짜리 그림을 시험해 볼 때 여전히 쓸 수 있어서 남겨둔다.)
 SOURCES = {
     "down": SOURCE,
     "up":   "~/ComfyUI/output/pt5_00001_.png",
@@ -89,15 +99,22 @@ def joints(cx=512, top=180, h=680, heads=3.6, arm_deg=90.0):
 ## 반경이 팔 두께의 절반이면 되지만, 팔을 내린 자세에서는 뼈가 팔의 좌우 한가운데를
 ## 지난다 — 지금 값(34/30)은 후자 기준이다. 너무 크게 잡으면 팔이 가슴을 물고 가서
 ## 옆모습 걷기에서 셔츠가 팔을 따라 흔들린다.
+##
+## **반경은 픽셀이 아니라 「키에 대한 비율」이다** (2026-09-08, INBOX #56). 처음엔
+## 34/30/78 px 로 적혀 있었는데 그 값은 **키 680px 짜리 그림 한 장 기준**이었다.
+## 4방향을 한 장에 받으면서 한 인물의 키가 420px 이 됐고(`comfy.FIG_H`), 같은 픽셀
+## 값을 그대로 쓰면 반경이 몸에 비해 1.6배가 되어 위팔이 가슴을 문다. 비율로 적어두면
+## 캔버스나 인물 크기가 바뀌어도 따라온다 — `split()` 이 키를 곱한다.
+RIG_H = 680.0                     # 아래 비율을 잰 기준 키
 PARTS = [
-    ("armL_upper", ("shoulderL", "elbowL"), None,          "shoulderL", 34),
-    ("armL_lower", ("elbowL", "handL"),     "armL_upper",  "elbowL",    30),
-    ("armR_upper", ("shoulderR", "elbowR"), None,          "shoulderR", 34),
-    ("armR_lower", ("elbowR", "handR"),     "armR_upper",  "elbowR",    30),
-    ("legL_upper", ("hipL", "kneeL"),       None,          "hipL",      78),
-    ("legL_lower", ("kneeL", "footL"),      "legL_upper",  "kneeL",     78),
-    ("legR_upper", ("hipR", "kneeR"),       None,          "hipR",      78),
-    ("legR_lower", ("kneeR", "footR"),      "legR_upper",  "kneeR",     78),
+    ("armL_upper", ("shoulderL", "elbowL"), None,          "shoulderL", 34/RIG_H),
+    ("armL_lower", ("elbowL", "handL"),     "armL_upper",  "elbowL",    30/RIG_H),
+    ("armR_upper", ("shoulderR", "elbowR"), None,          "shoulderR", 34/RIG_H),
+    ("armR_lower", ("elbowR", "handR"),     "armR_upper",  "elbowR",    30/RIG_H),
+    ("legL_upper", ("hipL", "kneeL"),       None,          "hipL",      78/RIG_H),
+    ("legL_lower", ("kneeL", "footL"),      "legL_upper",  "kneeL",     78/RIG_H),
+    ("legR_upper", ("hipR", "kneeR"),       None,          "hipR",      78/RIG_H),
+    ("legR_lower", ("kneeR", "footR"),      "legR_upper",  "kneeR",     78/RIG_H),
     ("torso",      ("neck", "hipC"),        None,          "hipC",      None),
     ("head",       ("head", "neck"),        None,          "neck",      None),
 ]
@@ -131,8 +148,11 @@ def strip_outline(a, width=6):
     return out
 
 
-def split(img_rgba, J):
-    """그림을 부품별 레이어로 나눈다. 픽셀마다 **가장 가까운 뼈**에 준다."""
+def split(img_rgba, J, h=RIG_H):
+    """그림을 부품별 레이어로 나눈다. 픽셀마다 **가장 가까운 뼈**에 준다.
+
+    `h` 는 **그 그림 속 인물의 키**다 — 반경이 비율로 적혀 있어서 여기서 픽셀이 된다.
+    """
     a = np.asarray(img_rgba)
     H, W = a.shape[:2]
     ys, xs = np.mgrid[0:H, 0:W]
@@ -140,7 +160,7 @@ def split(img_rgba, J):
     for i, (name, (p, q), _, _, r) in enumerate(PARTS):
         d = _seg_dist(xs, ys, J[p], J[q])
         if r is not None:
-            d = np.where(d > r, np.inf, d)     # 제 굵기 밖으로는 안 뻗는다
+            d = np.where(d > r*h, np.inf, d)   # 제 굵기 밖으로는 안 뻗는다
         m = d < best
         best = np.where(m, d, best); who[m] = i
     layers = {}
@@ -150,26 +170,6 @@ def split(img_rgba, J):
         lay[m] = a[m]
         layers[name] = Image.fromarray(lay, 'RGBA')
     return layers
-
-
-if __name__ == "__main__":
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from gen_player import cutout
-    src, keep = cutout(os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else SOURCE))
-    rgba = np.dstack([np.asarray(src), (keep*255).astype(np.uint8)])
-    J = joints(arm_deg=SOURCE_ARM_DEG)
-    layers = split(Image.fromarray(strip_outline(rgba), 'RGBA'), J)
-    # 부품을 색으로 칠해 확인
-    COLORS = [(255,80,80),(255,160,80),(80,160,255),(80,220,255),
-              (120,255,120),(200,255,120),(255,120,255),(255,200,255),
-              (200,200,200),(255,255,120)]
-    prev = Image.new('RGB', src.size, (24,24,28))
-    for i,(name,_,_,_,_) in enumerate(PARTS):
-        m = np.asarray(layers[name])[...,3] > 0
-        p = np.asarray(prev).copy(); p[m] = COLORS[i]; prev = Image.fromarray(p)
-    prev.save(os.path.expanduser("~/Desktop/rig_parts.png"))
-    print("부품:", ", ".join(n for n,_,_,_,_ in PARTS))
-    print("→ ~/Desktop/rig_parts.png")
 
 
 # ── 조립 ────────────────────────────────────────────────────────────────────
@@ -451,6 +451,26 @@ def bake_rows(rows, layers, J, cell=96):
     return out
 
 
+def _only_figure(rgba, J):
+    """칸 안에서 **인물 한 덩어리만** 남긴다 — 나머지 덩어리는 지운다.
+
+    프롬프트에 "reference sheet" 류의 말을 넣으면 SDXL 이 인물 옆에 **소품(화분·항아리·
+    아이콘)을 같이 그린다.** 그 픽셀은 머리·몸통(반경 없음)이 통째로 가져가 버려서,
+    걷기에서 항아리가 머리를 따라 흔들린다. 골반에 닿은 덩어리 하나만 남긴다.
+    """
+    from skimage import measure
+    op = rgba[..., 3] > 0
+    lab = measure.label(op, connectivity=1)
+    hx, hy = int(J["hipC"][0]), int(J["hipC"][1])
+    want = lab[hy, hx]
+    if want == 0:                       # 골반이 빈 칸이면 가장 큰 덩어리를 쓴다
+        cnt = np.bincount(lab.ravel()); cnt[0] = 0
+        want = int(cnt.argmax()) if cnt.size > 1 else 0
+    out = rgba.copy()
+    out[lab != want] = 0
+    return out
+
+
 def load_sheet(path=None):
     """4방향이 한 장에 든 시트 → `{방향: (부품, 관절)}`.
 
@@ -478,8 +498,10 @@ def load_sheet(path=None):
         q = a.copy(); q[~m] = 0
         J = joints(cx=cx, top=top, h=comfy.FIG_H,
                    heads=comfy.FIG_HEADS, arm_deg=comfy.ARM_DEG)
+        q = _only_figure(q, J)
         name = {"front": "down", "left": "left", "back": "up"}[face]
-        out[name] = (split(Image.fromarray(strip_outline(q), 'RGBA'), J), J)
+        out[name] = (split(Image.fromarray(strip_outline(q), 'RGBA'), J,
+                           comfy.FIG_H), J)
     return out
 
 
@@ -546,3 +568,35 @@ def build_sheets(src=None, style="farmer", cell=96):
         Image.fromarray(sheet, 'RGBA').save(path)
         print("%s: %dx%d (4방향 × %d프레임, 칸 %dpx)"
               % (os.path.basename(path), cell*cols, cell*4, cols, cell))
+
+
+## 부품 나눔을 눈으로 볼 때 쓰는 색 (부품 순서 그대로).
+PART_COLORS = [(255,80,80),(255,160,80),(80,160,255),(80,220,255),
+               (120,255,120),(200,255,120),(255,120,255),(255,200,255),
+               (200,200,200),(255,255,120)]
+
+
+def preview_parts(path=None, out="~/Desktop/rig_parts.png"):
+    """**시트 한 장의 세 방향**을 부품 색으로 칠해 한 장에 보여준다.
+
+    `CHARACTER.md` 7절의 4번이 보는 그림이다 — **팔이 가슴을 물었으면 `PARTS` 의
+    반경을 줄인다.** 방향마다 따로 보지 않고 한 장에 그리는 이유는, 어긋나는 것이
+    보통 한 방향뿐이기 때문이다(옆모습에서 팔이 몸통에 겹친다).
+    """
+    for d, (layers, J) in load_sheet(path).items():
+        size = next(iter(layers.values())).size
+        break
+    prev = np.full((size[1], size[0], 3), 24, np.uint8)
+    for d, (layers, J) in load_sheet(path).items():
+        for i, (name, _, _, _, _) in enumerate(PARTS):
+            prev[np.asarray(layers[name])[..., 3] > 0] = PART_COLORS[i]
+    out = os.path.expanduser(out)
+    Image.fromarray(prev).save(out)
+    return out
+
+
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    out = preview_parts(sys.argv[1] if len(sys.argv) > 1 else None)
+    print("부품:", ", ".join(n for n,_,_,_,_ in PARTS))
+    print("→", out)

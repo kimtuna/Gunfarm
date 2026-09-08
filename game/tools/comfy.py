@@ -68,7 +68,12 @@ def figure(cx, top, h=FIG_H, heads=FIG_HEADS, arm_deg=ARM_DEG, face="front"):
     if face == "front":
         P[14] = (cx+er*0.55, nose-er*0.35); P[15] = (cx-er*0.55, nose-er*0.35)
         P[16] = (cx+er*1.10, nose-er*0.20); P[17] = (cx-er*1.10, nose-er*0.20)
-    elif face == "back":                      # 눈 없음 — 뒤통수
+    elif face == "back":                      # **코도 눈도 없다 — 뒤통수**
+        # OpenPose 는 뒤에서 본 사람을 「코 없이 귀 둘」로 적는다. 그 규약을 지킨다.
+        # **다만 이것만으로는 뒷모습이 안 나온다** (2026-09-08, INBOX #56 실측:
+        # 코를 빼도, 좌우를 바꿔도 여섯 장 전부 얼굴이 그려졌다). 뒷모습을 만드는
+        # 것은 뼈대가 아니라 **아래 `GRID` 프롬프트**다.
+        P[0] = None
         P[16] = (cx+er*1.00, nose-er*0.20); P[17] = (cx-er*1.00, nose-er*0.20)
     else:                                     # 보이는 쪽 눈 하나 + 반대쪽 귀
         P[14 if s > 0 else 15] = (cx+s*er*1.20, nose-er*0.35)
@@ -99,24 +104,41 @@ def sheet_skeleton(path=None):
 ##   · 그림자 금지: 96px 에서 회색 옷과 색으로 구별되지 않아 프로그램으로 못 뗀다.
 ##   · 손 명시: 팔을 내리라고만 하면 AI 가 손을 안 그리고 소매를 뭉갠다.
 ##   · 옷을 못 박기: 안 그러면 방향마다 옷이 달라진다(정면만 반바지가 됐다).
-POS = ("character reference sheet, four views of the SAME character in a 2x2 grid, "
-       "front view, side view, back view, side view, consistent design across all views, "
-       "cute chibi pixel art sprite of a young female farmer, "
-       "3 head tall proportions, big round head, big expressive eyes, rosy cheeks, "
-       "friendly smile, long wavy auburn hair, "
-       "dark green short sleeve shirt, teal overall shorts with shoulder straps, "
-       "knee length, bare lower legs, tall brown boots, "
-       "arms straight down along the body, both hands visible, clear hands, "
-       "full body, standing idle, "
-       "16-bit SNES JRPG overworld sprite, clean dark outline, flat cel shading, "
-       "limited palette, plain solid grey background, no shadow, no cast shadow")
+##
+## **칸마다 무엇을 그릴지 말로 적어야 뒷모습이 나온다** (2026-09-08, INBOX #56).
+## `front view, side view, back view, side view` 처럼 나열만 하면 **네 칸이 전부 얼굴**로
+## 나온다 — 씨앗 여섯 장, 뼈대 세 가지(코 빼기 / 좌우 바꾸기 / 그대로)를 다 시험해도
+## 한 장도 뒤를 안 봤다. `bottom left ...` 처럼 **자리를 집어 말한** 순간 세 장 중 세 장이
+## 제대로 나왔다. **뼈대는 자세를 정하지만 「어느 쪽을 보는가」는 글이 정한다.**
+GRID = ("character turnaround reference sheet, 2x2 grid of the SAME character, "
+        "top left front view facing the viewer, top right side profile view, "
+        "bottom left rear view seen from behind showing only the back of the head and hair, "
+        "faceless from behind, bottom right side profile view, "
+        "consistent design across all four views, ")
+
+## 사람이 주문한 것: **여자, 귀엽게** (INBOX #56). 큰 눈 · 볼 홍조 · 3등신.
+BODY = ("cute chibi pixel art sprite of a young female farmer, "
+        "3 head tall proportions, big round head, big expressive eyes, rosy cheeks, "
+        "friendly smile, long wavy auburn hair worn loose down her back, "
+        "white short sleeve shirt, teal overall shorts with shoulder straps, "
+        "knee length, bare lower legs, tall brown boots, "
+        "arms straight down along the body, both hands visible, clear hands, "
+        "full body, standing idle, "
+        "16-bit SNES JRPG overworld sprite, clean dark outline, flat cel shading, "
+        "limited palette, plain solid grey background, no shadow, no cast shadow")
+POS = GRID + BODY
+## `reference sheet` 라고 하면 SDXL 이 **인물 옆에 소품을 같이 그린다**(화분·항아리·
+## 얼굴 아이콘 — 실측). 여기서 막고, 그래도 남는 것은 `rig._only_figure()` 가 지운다.
 NEG = ("drop shadow, cast shadow, ground shadow, floor shadow, shadow under feet, "
        "realistic proportions, tall, adult body, slim, long legs, small head, "
        "beard, mustache, muscular, male, "
        "blurry, antialiased, soft gradient, 3d render, photo, "
        "detailed background, scenery, grass, floor, text, watermark, label, "
        "long pants, trousers, jeans, covered legs, hat, cropped, headshot, "
-       "different characters, inconsistent design, extra people")
+       "different characters, inconsistent design, extra people, "
+       "face on the back of the head, all four facing forward, ponytail, hair tie, "
+       "item icons, props, plants, jars, pots, crops, flowers, furniture, tools, "
+       "inventory sprite sheet, extra objects")
 
 
 def workflow(seed, cn_strength=0.9, prefix="sheet4", pose="pose_sheet4.png",

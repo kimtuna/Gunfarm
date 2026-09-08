@@ -75,10 +75,32 @@ def cutout(path):
     bg = np.median(corners, axis=0)
     seen = None
     for tol in (34, 48, 64, 84):
-        seen = _flood(np.abs(a - bg).max(2) < tol)
+        near = np.abs(a - bg).max(2) < tol
+        seen = _flood(near)
         if seen[0].mean() + seen[-1].mean() + seen[:, 0].mean() + seen[:, -1].mean() > 3.9:
             break
-    return src, ~seen
+    return src, ~(seen | _trapped_bg(near, seen))
+
+
+def _trapped_bg(near, seen):
+    """테두리에서 못 흘러간 배경 — **큰 덩어리만** 배경으로 친다.
+
+    두 신발이 맞닿으면 그 위의 다리 사이 틈이 막혀 안 지워지고, 96px 로 줄면서
+    **가랑이에 회색 기둥**이 선다(2026-09-08, INBOX #56).
+
+    **그렇다고 「배경색이면 다 배경」으로 하면 안 된다.** 그늘진 흰 셔츠와 피부가
+    배경 회색에서 34 안에 들어와서, 옷과 얼굴에 구멍이 숭숭 뚫리고 `add_ink()` 가
+    그 구멍마다 테두리를 둘러 **검은 반점**이 됐다(실측). 크기로 가른다 — 갇힌
+    덩어리를 재보면 가랑이는 746·990px 인데 그 다음이 93px 이라 사이가 넓다.
+    """
+    from skimage import measure
+    holes = near & ~seen
+    lab = measure.label(holes, connectivity=1)
+    if lab.max() == 0:
+        return np.zeros_like(holes)
+    big = np.bincount(lab.ravel()) >= max(60, round(0.0002 * near.size))
+    big[0] = False
+    return big[lab]
 
 
 def add_ink(body, ink=INK):

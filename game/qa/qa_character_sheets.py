@@ -64,18 +64,30 @@ def body(c):
 
 
 def neck_row(op):
-    """머리와 몸통 사이의 가장 좁은 줄. 못 찾으면 None."""
+    """머리와 몸통 사이 — **위에서 내려오다 처음 잘록해지는 줄.** 못 찾으면 None.
+
+    **가장 좁은 줄을 고르면 안 된다** (2026-09-08, INBOX #56). 머리가 긴 캐릭터는
+    옆모습에서 머리카락이 어깨보다 넓어서, 구간 안의 최솟값이 목이 아니라 **허리**에
+    떨어진다 — 그러면 「머리」 띠가 어깨와 팔을 통째로 삼켜서 팔만 흔들어도
+    "머리가 움직인다"로 잡힌다(실측: 목 24줄인 캐릭터를 43줄로 잡아 18.3%).
+    목은 그 아래가 어깨로 **다시 넓어지는** 자리다 — 그것으로 가른다.
+    """
     ys = np.flatnonzero(op.sum(1) > 0)
     if ys.size < 8:
         return None
     top, bot = int(ys.min()), int(ys.max())
     h = bot - top + 1
-    # 머리는 위쪽 1/5 ~ 1/2 사이에서 끝난다 — 그 구간에서 폭이 최소인 줄이 목이다
     lo, hi = top + int(h*0.18), top + int(h*0.48)
     if hi <= lo:
         return None
-    widths = op[lo:hi].sum(1)
-    return lo + int(np.argmin(widths))
+    w = op.sum(1).astype(int)
+    for y in range(max(lo, top+1), min(hi, bot)):
+        # ① 내려오다 멈춘 자리(골짜기 바닥) ② 그 아래가 다시 넓어진다(어깨)
+        # ③ **위쪽에서 가장 넓었던 곳보다 뚜렷이 좁다** — 머리카락 안의 잔물결을 뺀다
+        if (w[y] <= w[y-1] and w[y] < w[y+1]
+                and w[y] <= 0.90 * w[top:y+1].max()):
+            return y
+    return lo + int(np.argmin(w[lo:hi]))  # 잘록한 데가 없으면 예전대로 최솟값
 
 
 def change(p, q):
