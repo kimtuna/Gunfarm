@@ -34,15 +34,17 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </style></head><body><main>
 <h1>Gunfarm</h1>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
+<div class="warn"><strong>루프 멈춤</strong><pre>한도에 걸려 대기 중입니다. 사람이 할 일은 없습니다.
 
+(15:50 까지 기다리는 중 — 자동으로 이어서 돕니다)</pre></div>
 <div class="cards">
   <div class="card"><b>63</b><span>완료</span></div>
   <div class="card"><b>2</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#69</span> [BUILD] **바닥 아이템 Y정렬 검사가 헛돈다 — 겹친 픽셀이 83px 뿐이다.** (2026-09-08, INBOX #67 을 하다 발견. **#67 이전부터 있던 고장이고 #67 은 이 숫자를 한 톨도 안 바꿨다** — HEAD 에서도 83 이다.)</li>
 <li><span class="num">#70</span> [DESIGN] **바닥 자리표시 더미만 아직 도트가 3배 굵다.** (2026-09-08, INBOX #67 을 하다 남긴 것.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>0b1a7b0  chore(dashboard): 진행 상황 갱신</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 15:06</p></section>
+<section><h2>마지막 커밋</h2><code>253e5ed  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 15:07</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #68 [BUILD] 커스터마이징(피부색·머리색·옷색)이 다시 동작한다.**
 커마 화면에서 색을 고르면 미리보기도 월드의 캐릭터도 실제로 바뀐다.
 
@@ -73,7 +75,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908150704";
+  var STAMP = "20260908150709";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
