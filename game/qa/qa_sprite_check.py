@@ -58,9 +58,14 @@
   규격      칸 크기 / 시트가 칸 수에 맞는지
   팔레트    재질 램프 밖의 색이 없는지 (여기가 곧 "PNG 가 지금 생성기와 같은가")
   이음매    **같은 지형이 이어붙었을 때 타일 경계가 안 보이는지** — 경계를 사이에
-            둔 픽셀쌍의 명도차를 타일 안쪽의 명도차와 견준다. 격자가 비치면 여기서
-            숫자로 잡힌다 (INBOX #12 의 "인접한 같은 지형끼리 이어져 보여야 한다")
+            둔 픽셀쌍의 명도차를 **그 무늬에서 아무 두 픽셀을 골랐을 때**와 견준다.
+            격자가 비치면 여기서 숫자로 잡힌다 (INBOX #12 의 "인접한 같은 지형끼리
+            이어져 보여야 한다"). 견주는 대상이 「타일 안쪽」에서 바뀐 이유는
+            `_luma_steps` 에 있다 (2026-09-08, INBOX #60)
   변주      무늬 변주들이 실제로 서로 다른지 (같으면 벽지가 된다)
+  무늬      **칸 안에 무늬가 실제로 보이는지** — 가장 넓은 한 색이 칸을 덮고 있지
+            않은지 + 명도가 실제로 갈리는지. 「변주」·「채도」·「평균명도」는 셋 다
+            단색을 통과시킨다 (2026-09-08, INBOX #60)
   캐릭터대비 풀 위에 선 캐릭터가 배경에 묻히지 않는지 — **실제 캐릭터 시트**의 몸
             픽셀 중 풀과 명도로 갈리는 넓이가 얼마나 되는지 (2026-09-08, INBOX #59)
 
@@ -469,9 +474,12 @@ TERRAIN_SPEC = dict(
     # 시트가 「규격」에서 통째로 불합격이었다 — **그림은 멀쩡했고 검사만 안 따라온
     # 것이다.** 지금은 `check_tiles()` 가 생성기에서 읽는다.
     palette=_terrain_palette,
-    # 같은 지형끼리 이어붙였을 때, 타일 경계의 명도차가 안쪽보다 이만큼 넘게
-    # 크면 격자가 비치는 것이다.
-    seam_ratio=1.35,
+    # 같은 지형끼리 이어붙였을 때, 타일 경계의 명도차가 **그 무늬에서 아무 두
+    # 픽셀을 골랐을 때**보다 이만큼 넘게 크면 격자가 비치는 것이다. 견주는 대상이
+    # 「타일 안쪽」에서 바뀐 이유와 실측표는 `_luma_steps` 에 있다
+    # (2026-09-08, INBOX #60). 실측: 지금 그림 땅 0.95 / 바다 0.93,
+    # 타일 끝줄을 4% 어둡게 한 것 1.22 / 1.26.
+    seam_ratio=1.10,
     luma_mean={"grass": (90.0, 115.0), "sea": (45.0, 70.0)},
     chroma_mean={"grass": 28.0, "sea": 30.0},
     # 한 픽셀이 "풀과 갈렸다"고 칠 명도차. **옛 `shirt_gap` 과 같은 35 다** — 바뀐
@@ -481,6 +489,18 @@ TERRAIN_SPEC = dict(
     # 실측한 두 극단의 가운데다 — 지금 그림 59.7% / 멜빵과 머리를 둘 다 풀색으로
     # 칠해본 것 16.5%(아래 `_character_fill` 옆 설명).
     char_share=0.40,
+    # ── 무늬가 실제로 보이는가 (2026-09-08, INBOX #60) ────────────────────
+    # **「변주」와 「채도」·「평균명도」는 단색을 통과시킨다** — 8종의 바이트열이
+    # 다르기만 하면 8종이고(점 두 개를 다른 자리에 찍어도 그렇다), 명도·채도는
+    # 오히려 단색일 때 가장 안정적으로 통과한다. 실제로 그 셋이 전부 초록불인
+    # 채로 땅 한가운데 칸 픽셀의 **98.9% 가 한 색**이었다.
+    # 지형 한가운데 칸에서 **가장 넓은 한 색**이 차지하는 비율의 상한.
+    # 실측: 무늬를 넣기 전 98.9% → 넣은 뒤 땅 76% / 바다 82%.
+    pattern_share=0.85,
+    # 그리고 칸 안 명도의 표준편차 하한 — 넓이만 갈라놓고 **명도가 안 갈리면**
+    # 무늬가 있어도 안 보인다. 재질마다 램프 폭이 달라 따로 잡는다
+    # (실측: 전 땅 2.3 / 바다 1.5 → 후 땅 9.9 / 바다 6.1).
+    pattern_std={"grass": 6.0, "sea": 4.0},
 )
 
 # 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
@@ -1235,10 +1255,46 @@ def _check_natural(rep, spec, pal, body, rgb, matmap, cell, rows, cols, ink, gli
 
 
 # ── 지형 타일 검사 ────────────────────────────────────────────────────────
-def _luma_steps(image):
-    """가로/세로로 이웃한 픽셀쌍의 명도차를, 타일 경계와 안쪽으로 나눠서."""
+def _uncorrelated_step(lum):
+    """그 그림에서 **아무 두 픽셀**을 골랐을 때의 평균 명도차 E|X-Y|.
+
+    무늬가 있는 바닥에서 「이음매」의 기준선이 되는 값이다 — 아래 `_luma_steps`
+    참고. 표본을 뽑지 않고 정렬 한 번으로 정확히 구한다(같은 그림이면 언제나
+    같은 값이라야 검사가 흔들리지 않는다).
+    """
+    x = np.sort(lum.ravel().astype(np.float64))
+    n = x.size
+    i = np.arange(n, dtype=np.float64)
+    return float((2.0 / n ** 2) * np.dot(2.0 * i - n + 1.0, x))
+
+
+def _luma_steps(image, cell):
+    """타일 경계를 사이에 둔 픽셀쌍의 명도차를 **셋**으로 나눠 돌려준다.
+
+    (경계, 타일 안쪽, **아무 두 픽셀**) — 판정에 쓰는 것은 경계 ÷ 아무 두 픽셀이다.
+
+    **칸 크기를 인자로 받는다** (2026-09-08, INBOX #60). 한때 `cell = 16` 이 여기
+    박혀 있었는데, 지형 아트가 48px 이 된 뒤로는 16px 마다 그은 선이 타일 경계가
+    아니라 **타일 안쪽**이라 「이음매」가 격자를 아예 안 보고 있었다 —
+    `check_tiles()` 가 생성기에서 읽어온 칸 크기를 그대로 넘긴다.
+
+    **견주는 대상도 같은 바퀴에 바꿨다.** 전에는 「타일 안쪽」과 견줬는데, 그건
+    **무늬가 있는 바닥에서 성립하지 않는 기준**이다: 풀잎은 세로로 이어진 획이라
+    타일 **안쪽**의 세로 명도차가 원래 낮고, 타일 경계에서는 서로 다른 변주가
+    만나 그 상관이 끊긴다 — 격자가 하나도 안 보이는 그림도 비가 1.5 까지 오른다
+    (실측: 무늬를 넣기 전 1.04 → 넣은 뒤 1.51, 눈으로는 3배로 확대해도 격자가 없다).
+    올바른 대조군은 **「그 무늬에서 아무 두 픽셀을 골랐을 때」** 다 — 이음매가
+    없다면 경계의 픽셀쌍이 딱 그만큼 무관해야 한다. 실측으로 갈린다:
+
+    | | 무늬 없음(옛 그림) | 무늬 있음 | 타일 끝줄을 4% 어둡게 |
+    |---|---|---|---|
+    | 경계 ÷ 안쪽 | 1.04 | **1.51 (거짓 실패)** | 1.95 |
+    | 경계 ÷ 아무 두 픽셀 | 0.47 | **0.95** | **1.22** |
+
+    **무늬가 짙을수록 이음매가 실제로 덜 보이는 것도 이 기준이 맞다** — 같은 격자를
+    넣어도 옛 그림은 3.16, 무늬가 있으면 1.22 다(무늬가 이음매를 가린다).
+    """
     lum = luma(image.astype(np.float32))
-    cell = 16
     dx = np.abs(np.diff(lum, axis=1))
     dy = np.abs(np.diff(lum, axis=0))
     bx = np.zeros(dx.shape[1], bool)
@@ -1247,7 +1303,7 @@ def _luma_steps(image):
     by[cell - 1::cell] = True
     border = np.concatenate([dx[:, bx].ravel(), dy[by, :].ravel()])
     inside = np.concatenate([dx[:, ~bx].ravel(), dy[~by, :].ravel()])
-    return float(border.mean()), float(inside.mean())
+    return float(border.mean()), float(inside.mean()), _uncorrelated_step(lum)
 
 
 def check_tiles(path, spec):
@@ -1282,15 +1338,24 @@ def check_tiles(path, spec):
     # 이음매 — 같은 지형을 넓게 깔았을 때 타일 경계가 보이면 안 된다.
     lines = []
     ok_seam = True
+    fields = {}
     for what, kind in (("땅", 1), ("바다", 0)):
-        field = gen.compose([[kind] * 9 for _ in range(9)])
-        border, inside = _luma_steps(field)
-        ratio = border / max(inside, 1e-3)
+        # **검사할 PNG 를 넘긴다.** 안 넘기면 `compose()` 가 생성기로 시트를 다시
+        # 구워서, 「이음매」만 파일이 아니라 **지금 코드**를 재게 된다 — 굽기를
+        # 잊은 채 생성기만 고친 바퀴를 이 검사가 놓친다(2026-09-08, INBOX #60).
+        fields[what] = field = gen.compose([[kind] * 9 for _ in range(9)],
+                                           a.astype(np.uint8))
+        border, inside, uncorr = _luma_steps(field, cell)
+        ratio = border / max(uncorr, 1e-3)
         ok_seam &= ratio <= spec["seam_ratio"]
-        lines.append("%s %.2f" % (what, ratio))
+        # 옛 기준(경계÷안쪽)도 같이 적어둔다 — 무늬를 손대는 바퀴가 두 값이
+        # 어떻게 갈리는지 보고 판단할 수 있게.
+        lines.append("%s %.2f(안쪽대비 %.2f)"
+                     % (what, ratio, border / max(inside, 1e-3)))
     rep.add(ok_seam, "이음매",
-            "타일 경계의 명도차가 안쪽의 %s배 (상한 %.2f) — 48px 격자가 비친다"
-            % ("/".join(lines), spec["seam_ratio"]), " ".join(lines))
+            "타일 경계의 명도차가 **아무 두 픽셀**의 %s배 (상한 %.2f) — "
+            "%dpx 격자가 비친다"
+            % ("/".join(lines), spec["seam_ratio"], cell), " ".join(lines))
 
     # 변주 — 지형 한가운데 칸들이 서로 다른 그림이어야 한다.
     for what, land, mask in (("땅", True, 255), ("바다", False, 0)):
@@ -1312,6 +1377,22 @@ def check_tiles(path, spec):
         flat = np.concatenate([c.reshape(-1, 3) for c in cells])
         stats[what] = (float(luma(flat).mean()),
                        float((flat.max(-1) - flat.min(-1)).mean()))
+
+        # 무늬 — 넓이(가장 넓은 한 색)와 명도(표준편차)를 함께 본다. 둘 중
+        # 하나만 보면 빠져나갈 길이 있다: 넓이만 보면 명도가 거의 같은 두 색으로
+        # 갈라놓은 그림이 통과하고, 명도만 보면 한 색이 칸을 덮은 채 점 몇 개만
+        # 튀는 그림이 통과한다.
+        counts = np.unique(flat, axis=0, return_counts=True)[1]
+        share = float(counts.max()) / len(flat)
+        std = float(luma(flat).std())
+        rep.add(share <= spec["pattern_share"] and std >= spec["pattern_std"][what],
+                "무늬",
+                "%s 가장 넓은 한 색 %.0f%%(상한 %.0f%%) · 명도 표준편차 %.1f"
+                "(하한 %.1f) — 무늬가 있어도 안 보인다"
+                % (what, share * 100, spec["pattern_share"] * 100,
+                   std, spec["pattern_std"][what]),
+                "%s %.0f%%/±%.1f" % (what, share * 100, std))
+
         lo, hi = spec["luma_mean"][what]
         rep.add(lo <= stats[what][0] <= hi, "평균명도",
                 "%s %.0f (%.0f~%.0f 밖)" % (what, stats[what][0], lo, hi),

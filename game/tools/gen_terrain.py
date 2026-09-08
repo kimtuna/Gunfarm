@@ -22,6 +22,10 @@
   * **풀잎은 사이를 띄운 세로 획 2~3장**이다. 붙여서 부채꼴로 그리면 풀이 아니라
     작은 삼각형(=멀리 있는 나무)으로 읽힌다. 물결은 반대로 **가로 획**이라야
     물처럼 보인다 — 등방 얼룩으로 채우면 물이 아니라 자갈밭이 된다.
+  * **얹는 양은 개수가 아니라 칸 넓이당으로 적는다**(2026-09-08, INBOX #60).
+    개수를 상수로 박아두면 칸 크기를 바꾼 바퀴가 반드시 잊는다 — 칸이 16 → 48px 로
+    커지는 동안 개수가 그대로여서 땅 픽셀의 **98.9% 가 한 색**이 됐다. 아래
+    `GRASS_TUFTS` / `SEA_RIPPLES` 참고.
   * **해안선은 타일 사각형을 그대로 쓰지 않는다.** 땅/바다 사각형에서 구한 부호
     거리장에 **16px 주기 노이즈**를 더해 경계를 흔든다. 주기가 타일 한 칸이라 이
     잡음은 **월드 좌표의 함수**가 되고, 그래서 따로 구운 이웃 타일끼리도 경계에서
@@ -150,76 +154,98 @@ def fbm(size, period, wave_x, wave_y=None, seed=0, octaves=2, gain=0.4):
 
 
 # ── 밑그림: 풀 / 바다 (둘 다 램프 단계 지도를 돌려준다) ────────────────────
-def _stroke(idx, x, y, length, tone, lean=0, vertical=True, under=None):
-    """획 하나. 타일 밖으로 나가면 반대편으로 감긴다(타일이 스스로 이음매가 없다).
+## 무늬 밀도 — **개수가 아니라 칸 넓이당(1000px²) 비율로 적는다.**
+## (2026-09-08, INBOX #60) 한때 포기·물결 개수를 상수 몇 개로 박아뒀는데, 칸이
+## 16 → 24 → 48px 로 커지는 동안 그 개수가 안 따라와서 **넓이당 무늬가 9분의 1** 로
+## 줄었다 — 땅 한가운데 칸 픽셀의 **98.9% 가 `#4d793c` 한 색**이 되어 풀밭이 점
+## 몇 개 흩뿌려진 초록 평면이 됐다. 넓이로 적어두면 칸 크기를 바꾼 바퀴가 잊어도
+## 밀도가 따라온다. 검사는 `qa_sprite_check.py` 의 「무늬」다.
+def _per_tile(per_kpx):
+    return int(round(per_kpx * TILE * TILE / 1000.0))
 
-    `under` 는 획 **아래에 한 줄** 깔리는 반대 명암이다 — 획을 찍는 루프 안에서
-    같이 찍으면 다음 픽셀이 앞 픽셀을 덮어써서 획이 1px 로 뭉개진다.
+
+## 풀포기 — (램프 단계, 아래 그늘, 1000px² 당 개수, 잎 길이, 잎 수).
+## **어두운 포기를 먼저, 밝은 포기를 나중에** 얹는다(겹치면 밝은 쪽이 위로 와야 한다).
+GRASS_TUFTS = ((2, None, 7.0, (4, 8), (3, 5)),
+               (0, 2, 4.8, (3, 6), (2, 4)),
+               (3, None, 1.7, (3, 6), (2, 3)))
+BLADE_GAP = 2           # 잎 사이 간격 — 붙여 그리면 포기가 삼각형(=먼 나무)이 된다
+
+## 물결 — (램프 단계, 아래 그늘, 1000px² 당 개수, 길이).
+SEA_RIPPLES = ((2, None, 8.7, (6, 14)),
+               (3, None, 3.0, (5, 11)),
+               (0, 3, 5.2, (4, 10)))
+
+
+def _blade(idx, x, y, height, tone, lean, under=None):
+    """풀잎 하나 — 밑동은 곧고 **끝으로 갈수록 휜다**. 타일 밖은 반대편으로 감긴다.
+
+    끝 한 칸만 밀면(옛 `_stroke` 의 `lean`) 4px 을 넘는 잎이 곧은 막대가 된다 —
+    48px 칸에서는 잎이 그만큼 길어져서 휘어짐이 필요해졌다.
     """
-    cells = []
-    for k in range(length):
-        shift = lean if k >= length - 1 else 0
-        if vertical:
-            cells.append(((x + shift) % TILE, (y - k) % TILE))
-        else:
-            cells.append(((x + k) % TILE, (y + shift) % TILE))
     if under is not None:
-        # 세로 획은 뿌리 한 칸만, 가로 획은 아래 줄 전체 — 광원이 왼쪽 위라
-        # 그늘은 언제나 아래쪽이다(STYLE_GUIDE 4번).
-        base = cells[:1] if vertical else cells
-        for px, py in base:
-            idx[(py + 1) % TILE, px] = under
-    for px, py in cells:
-        idx[py, px] = tone
+        # 뿌리 아래 한 칸이 그늘이다 — 광원이 왼쪽 위라 그늘은 언제나 아래다
+        # (STYLE_GUIDE 4번). 잎보다 **먼저** 찍어야 잎이 안 덮인다.
+        idx[(y + 1) % TILE, x % TILE] = under
+    for k in range(height):
+        bend = int(round(lean * (k / max(height - 1, 1)) ** 1.6))
+        idx[(y - k) % TILE, (x + bend) % TILE] = tone
+
+
+def _tuft(idx, rng, tone, under, height, blades):
+    """풀포기 — **사이를 띄운** 잎 몇 장. 붙여 그리면 삼각형(=멀리 있는 나무)이 된다."""
+    x, y = int(rng.integers(0, TILE)), int(rng.integers(0, TILE))
+    n = int(rng.integers(blades[0], blades[1] + 1))
+    for i in range(n):
+        dx = int(round((i - (n - 1) / 2.0) * BLADE_GAP))
+        _blade(idx, x + dx, y + int(rng.integers(0, 2)),
+               int(rng.integers(height[0], height[1] + 1)), tone,
+               lean=int(rng.integers(-1, 2)), under=under)
 
 
 def grass_index(seed):
-    """16×16 풀밭의 램프 단계 지도.
+    """풀밭 한 칸의 램프 단계 지도 (`TILE`×`TILE`).
 
-    바탕은 기본 단계 한 색이고, 그 위에 **풀포기**만 몇 개 얹는다. 얼룩(노이즈)으로
+    바탕은 기본 단계 한 색이고, 그 위에 **풀포기**만 얹는다. 얼룩(노이즈)으로
     바탕을 갈라놓는 쪽은 전부 위장무늬처럼 보여서 버렸다 — 도트에서는 바탕이
-    깨끗해야 얹은 획이 풀로 읽힌다.
+    깨끗해야 얹은 획이 풀로 읽힌다. **얹는 양은 `GRASS_TUFTS` 가 넓이로 정한다.**
     """
     idx = np.ones((TILE, TILE), np.int8)
     rng = np.random.default_rng(seed + 900)
-    # 어두운 포기 먼저, 밝은 포기를 나중에 — 겹치면 밝은 쪽이 위로 올라와야 한다.
-    _tuft(idx, rng, tone=2, under=None)
-    for _ in range(1 + seed % 2):
-        _tuft(idx, rng, tone=0, under=2)
-    if seed % 3 == 0:                      # 가끔 짙은 포기 하나 — 단조로움을 깬다
-        _tuft(idx, rng, tone=3, under=None)
+    for tone, under, per_kpx, height, blades in GRASS_TUFTS:
+        # 변주마다 한 포기씩 더 얹어 개수까지 갈라놓는다(자리는 시드가 이미 가른다).
+        for _ in range(_per_tile(per_kpx) + seed % 2):
+            _tuft(idx, rng, tone, under, height, blades)
     return idx
-
-
-def _tuft(idx, rng, tone, under):
-    """풀포기 — **사이를 띄운** 세로 획 2~3장. 붙여 그리면 삼각형이 된다."""
-    x, y = int(rng.integers(0, TILE)), int(rng.integers(0, TILE))
-    offsets = [-2, 0, 2][:int(rng.integers(2, 4))]
-    for dx in offsets:
-        _stroke(idx, x + dx, y, int(rng.integers(2, 5)), tone,
-                lean=int(rng.integers(-1, 2)), under=under)
 
 
 def sea_index(seed):
-    """16×16 바다의 램프 단계 지도 — 잔물결(가로 획) + 드문 물마루."""
+    """바다 한 칸의 램프 단계 지도 — 잔물결(가로 획) + 드문 물마루.
+
+    풀과 같은 밀도 규칙을 쓰되 **획이 가로**다 — 세로 획으로 채우면 물이 아니라
+    잔디가 되고, 등방 얼룩으로 채우면 자갈밭이 된다.
+    """
     idx = np.ones((TILE, TILE), np.int8)
     rng = np.random.default_rng(seed + 300)
-    for _ in range(2):
-        _ripple(idx, rng, tone=2, under=None)
-    if seed % 4 == 0:                      # 깊은 자리 — 넷 중 하나꼴
-        _ripple(idx, rng, tone=3, under=None)
-    for _ in range(1 + seed % 2):
-        _ripple(idx, rng, tone=0, under=3)
+    for tone, under, per_kpx, run in SEA_RIPPLES:
+        for _ in range(_per_tile(per_kpx) + seed % 2):
+            _ripple(idx, rng, tone, under, run)
     return idx
 
 
-def _ripple(idx, rng, tone, under):
+def _ripple(idx, rng, tone, under, run):
     """물결 한 줄 — 가로 획 + 끝을 한 칸 올려 굽힌다(직선이면 자막처럼 보인다)."""
     x, y = int(rng.integers(0, TILE)), int(rng.integers(0, TILE))
-    run = int(rng.integers(3, 7))
-    _stroke(idx, x, y, run, tone, vertical=False, under=under)
+    length = int(rng.integers(run[0], run[1] + 1))
+    lean = int(rng.integers(-1, 2))
+    for k in range(length):
+        shift = lean if k >= length - 1 else 0
+        py, px = (y + shift) % TILE, (x + k) % TILE
+        if under is not None:
+            idx[(py + 1) % TILE, px] = under
+        idx[py, px] = tone
     if rng.random() < 0.6:
-        idx[(y - 1) % TILE, (x + run) % TILE] = tone
+        idx[(y - 1) % TILE, (x + length) % TILE] = tone
 
 
 # ── 해안 ──────────────────────────────────────────────────────────────────
