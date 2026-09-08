@@ -2,9 +2,16 @@ extends Control
 
 ## 캐릭터 커스터마이징 화면 (docs/DESIGN.md "캐릭터 커스터마이징 항목").
 ##
-## 이름 입력 + 피부색/머리색/옷색(고정 팔레트) + 머리모양 4종을 고르고 확정하면
+## 이름 입력 + 피부색/머리색/옷색(고정 팔레트) + 머리모양을 고르고 확정하면
 ## 고른 슬롯에 저장되고 월드로 들어간다. 미리보기는 **실제 게임 스프라이트**이고,
 ## 고른 색은 팔레트 교체로 반영된다 (scripts/appearance_preview.gd).
+##
+## **선택지가 하나뿐인 항목은 좌/우 버튼을 잠근다** (2026-09-08, INBOX #57).
+## 2026-09-08 에 캐릭터 파이프라인이 바뀌면서 머리모양 시트가 `farmer` 한 벌만 남았는데
+## (`docs/CHARACTER.md` 8절), 그 상태로 화살표를 열어두면 눌러도 아무 일이 안 일어나서
+## **화면이 고장 난 것처럼 보인다.** 항목을 통째로 감추지 않는 이유는 무엇을 고를 수
+## 있는지(그리고 지금 무엇인지)는 여전히 보여야 하기 때문이다. 머리모양이 늘면
+## `character_appearance.gd` 의 목록이 늘어나는 것만으로 화살표가 저절로 살아난다.
 
 const SlotStore := preload("res://scripts/slot_store.gd")
 const Appearance := preload("res://scripts/character_appearance.gd")
@@ -22,6 +29,10 @@ func _ready() -> void:
 		(row.get_node("Name") as Label).text = Appearance.FIELD_LABELS[field]
 		(row.get_node("Prev") as Button).pressed.connect(_on_step.bind(field, -1))
 		(row.get_node("Next") as Button).pressed.connect(_on_step.bind(field, 1))
+		# 고를 것이 하나뿐이면 화살표는 눌러도 제자리다 — 잠가서 그렇다고 말한다.
+		var pickable := Appearance.options(field).size() > 1
+		(row.get_node("Prev") as Button).disabled = not pickable
+		(row.get_node("Next") as Button).disabled = not pickable
 		# 머리모양은 색이 아니라 모양이라 색 견본이 없다.
 		(row.get_node("Swatch") as ColorRect).visible = field != "hairstyle"
 

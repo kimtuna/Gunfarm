@@ -32,15 +32,25 @@ const _Inventory := preload("res://scripts/inventory.gd")
 const SlotStore := preload("res://scripts/slot_store.gd")
 const CharacterSprite := preload("res://scripts/character_sprite.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
+const Appearance := preload("res://scripts/character_appearance.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
 const SEED := 20260906
 
 ## 기준색과 먼 조합 — 걷기 시트를 칠하는 걸 빠뜨리면 그 순간 눈에 띄게 색이 튄다.
-const LOOK := {
-	"skin": "deep", "hair_color": "blond", "clothes_color": "ember", "hairstyle": "long",
-}
+## **머리모양은 이름을 박지 않는다**(2026-09-08, INBOX #57) — 없는 id 를 적으면
+## `sheet_path()` 가 없는 파일을 가리켜 모든 모션이 「시트를 못 읽었다」로 걸린다.
+const LOOK_COLORS := {"skin": "deep", "hair_color": "blond", "clothes_color": "ember"}
+
+
+## 위 색 + 마지막 머리모양(한 벌뿐이면 그것).
+static func look() -> Dictionary:
+	var out := LOOK_COLORS.duplicate()
+	var styles := Appearance.options("hairstyle")
+	out["hairstyle"] = String(styles[styles.size() - 1]["id"])
+	return out
+
 
 ## 방향 → 누를 키. `player_motion.gd` 의 방향 순서와 이름이 같아야 한다.
 const KEYS := {
@@ -66,8 +76,11 @@ const HOLD_SECONDS := 0.5
 ## 그리고 고정 틱(1/60초) 위에서 도는 로직이 실제로 몇 번 돌게 하려면 필요하다.
 const SETTLE_SECONDS := 0.15
 
-## 걷기 프레임 미리보기 배율. 17px 칸이라 그냥 저장하면 눈으로 판정할 수 없다.
-const STRIP_ZOOM := 8
+## 걷기 프레임 미리보기의 **목표 세로 크기(px)**. 배율을 직접 적지 않는 이유는
+## 커스터마이징 미리보기와 같다(`appearance_preview.gd`) — 칸이 17 → 32 → 96px 로
+## 오갔는데 배율을 손으로 적어두면 그때마다 그림이 터무니없이 커지거나(96px 칸 ×
+## 8배 = 세로 3072px) 눈으로 못 볼 만큼 작아진다. **크기를 적고 배율은 칸에서 고른다.**
+const STRIP_HEIGHT := 768.0
 
 var _fails: Array[String] = []
 var _steps: Array[Callable] = []
@@ -85,7 +98,7 @@ func _initialize() -> void:
 	# 이전 실행의 슬롯이 남아 거짓 결과를 내지 않게 지우고 시작한다 (docs/GOTCHAS.md).
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SlotStore.SAVE_PATH))
 	var slots := SlotStore.empty_slots()
-	slots[0] = SlotStore.make_character("걷는이", LOOK, SEED)
+	slots[0] = SlotStore.make_character("걷는이", look(), SEED)
 	SlotStore.save_slots(slots)
 	SlotStore.selected_slot = 0
 	# 첫 씬은 여기서 올린다 (docs/GOTCHAS.md — _steps 에 넣으면 영영 실행되지 않는다).
@@ -167,7 +180,7 @@ func _check_animations() -> void:
 	if sprite == null or sprite.sprite_frames == null:
 		_fails.append("플레이어에 SpriteFrames 가 없다")
 		return
-	var style := String(LOOK["hairstyle"])
+	var style := String(look()["hairstyle"])
 	var counted := 0
 	for motion: String in PlayerFrames.motions():
 		var sheet: Texture2D = load(PlayerFrames.sheet_path(motion, style))
@@ -215,11 +228,11 @@ func _check_recolored() -> void:
 		if not _check_recolored_motion(motion):
 			return
 	print("[qa] 모션 %d종 × 4방향 × 모든 프레임이 고른 외형(%s)으로 칠해져 있다"
-			% [PlayerFrames.motions().size(), LOOK["hairstyle"]])
+			% [PlayerFrames.motions().size(), look()["hairstyle"]])
 
 
 func _check_recolored_motion(motion: String) -> bool:
-	var want := CharacterSprite.motion_texture(LOOK, motion)
+	var want := CharacterSprite.motion_texture(look(), motion)
 	if want == null:
 		_fails.append("칠한 %s 텍스처를 못 만들었다" % motion)
 		return false
@@ -289,7 +302,11 @@ func _aim(dir: String) -> void:
 	# 창 크기로 잡으면 이미 창 픽셀인 값을 한 번 더 변환해서 조준 각도가 어긋난다
 	# (2026-09-08, INBOX #48 — 그 전에는 논리 해상도와 창 크기가 같아서 안 드러났다).
 	var size := root.get_visible_rect().size
-	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	# 화면 한가운데는 **발밑**이라 몸 절반만큼 위를 조준 기준점으로 잡는다. 화면에서
+	# 캐릭터가 몇 px 인지는 **시트의 칸에서** 나온다(`scale_of()` 가 칸마다 배율을
+	# 정한다) — 상수로 적어두면 칸이 바뀐 바퀴가 여기를 같이 안 고친다.
+	var cell := _cell_of("idle_down")
+	var origin := size * 0.5 - Vector2(0.0, cell * PlayerFrames.scale_of(cell) * 0.5)
 	Input.warp_mouse(_to_window(origin + Vector2.from_angle(AIM[dir]) * minf(size.x, size.y) * AIM_REACH))
 
 
@@ -326,17 +343,16 @@ func _save_strip() -> void:
 	var sprite := _sprite()
 	if sprite == null or sprite.sprite_frames == null:
 		return
-	var cell := PlayerFrames.CELL
 	var dirs: Array = PlayerFrames.DIR_NAMES
+	var cell := _cell_of("walk_%s" % dirs[0])
 	var columns := sprite.sprite_frames.get_frame_count("walk_%s" % dirs[0]) + 1
 	var strip := Image.create_empty(columns * cell, dirs.size() * cell, false, Image.FORMAT_RGBA8)
 	strip.fill(Color(0.12, 0.11, 0.13))
 	for row in dirs.size():
-		_blit(strip, sprite, "idle_%s" % dirs[row], 0, 0, row)
+		_blit(strip, sprite, "idle_%s" % dirs[row], 0, 0, row, cell)
 		for f in columns - 1:
-			_blit(strip, sprite, "walk_%s" % dirs[row], f, f + 1, row)
-	strip.resize(strip.get_width() * STRIP_ZOOM, strip.get_height() * STRIP_ZOOM,
-			Image.INTERPOLATE_NEAREST)
+			_blit(strip, sprite, "walk_%s" % dirs[row], f, f + 1, row, cell)
+	_zoom(strip)
 	var path := "%s/82_walk_frames.png" % SHOTS
 	strip.save_png(path)
 	print("[qa] shot %s (왼쪽 첫 칸이 idle, 나머지가 걷기 한 바퀴)" % path)
@@ -350,39 +366,54 @@ func _save_tool_strips() -> void:
 	var sprite := _sprite()
 	if sprite == null or sprite.sprite_frames == null:
 		return
-	var cell := PlayerFrames.CELL
 	var dirs: Array = PlayerFrames.DIR_NAMES
 	var shot := 84
 	for tool: String in PlayerFrames.TOOLS:
 		for motion in ["use_%s" % tool, "walk_%s" % tool]:
 			if not sprite.sprite_frames.has_animation("%s_%s" % [motion, dirs[0]]):
 				continue
+			var cell := _cell_of("%s_%s" % [motion, dirs[0]])
 			var frames := sprite.sprite_frames.get_frame_count("%s_%s" % [motion, dirs[0]])
 			var columns := frames + 2
 			var strip := Image.create_empty(columns * cell, dirs.size() * cell, false,
 					Image.FORMAT_RGBA8)
 			strip.fill(Color(0.12, 0.11, 0.13))
 			for row in dirs.size():
-				_blit(strip, sprite, "idle_%s" % dirs[row], 0, 0, row)
-				_blit(strip, sprite, "hold_%s_%s" % [tool, dirs[row]], 0, 1, row)
+				_blit(strip, sprite, "idle_%s" % dirs[row], 0, 0, row, cell)
+				_blit(strip, sprite, "hold_%s_%s" % [tool, dirs[row]], 0, 1, row, cell)
 				for f in frames:
-					_blit(strip, sprite, "%s_%s" % [motion, dirs[row]], f, f + 2, row)
-			strip.resize(strip.get_width() * STRIP_ZOOM, strip.get_height() * STRIP_ZOOM,
-					Image.INTERPOLATE_NEAREST)
+					_blit(strip, sprite, "%s_%s" % [motion, dirs[row]], f, f + 2, row, cell)
+			_zoom(strip)
 			var path := "%s/%d_%s_frames.png" % [SHOTS, shot, motion]
 			strip.save_png(path)
 			print("[qa] shot %s (왼쪽 두 칸이 맨손 idle · 도구를 들고 서 있기)" % path)
 			shot += 1
 
 
+## 이 애니메이션의 칸(px). 시트마다 다를 수 있어 상수로 믿지 않는다.
+func _cell_of(anim: String) -> int:
+	var sprite := _sprite()
+	if sprite == null:
+		return PlayerFrames.CELL
+	return PlayerFrames.anim_cell(sprite.sprite_frames, anim)
+
+
+## 눈으로 볼 크기까지 **정수 배율로만** 키운다 — 소수 배율이면 도트가 뭉개진다
+## (`docs/STYLE_GUIDE.md` 1번). 이미 충분히 크면 그대로 둔다.
+func _zoom(strip: Image) -> void:
+	var zoom := maxi(1, int(STRIP_HEIGHT / maxf(1.0, float(strip.get_height()))))
+	if zoom > 1:
+		strip.resize(strip.get_width() * zoom, strip.get_height() * zoom,
+				Image.INTERPOLATE_NEAREST)
+
+
 func _blit(strip: Image, sprite: AnimatedSprite2D, anim: String, frame: int,
-		column: int, row: int) -> void:
+		column: int, row: int, cell: int) -> void:
 	if not sprite.sprite_frames.has_animation(anim):
 		return
 	var texture := sprite.sprite_frames.get_frame_texture(anim, frame)
 	if texture == null:
 		return
-	var cell := PlayerFrames.CELL
 	strip.blend_rect(texture.get_image(), Rect2i(0, 0, cell, cell),
 			Vector2i(column * cell, row * cell))
 
