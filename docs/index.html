@@ -40,8 +40,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
   <div class="card"><b>1</b><span>남음</span></div>
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#71</span> [BUILD] **도구를 들면 캐릭터가 옆으로 6px 미끄러진다 (정면·뒷모습).** (2026-09-08, INBOX #69 의 (나)를 실측하다 나온 것.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>6841dd8  [INBOX #70] 바닥 자리표시 더미를 36 × 32px 로 다시 찍어 도트 결을 월드에 맞춘다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 16:19</p></section>
+<section><h2>마지막 커밋</h2><code>a83b03f  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 16:20</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #70 [DESIGN] 바닥 자리표시 더미를 36 × 32px · 배율 1 로 다시 찍었다.**
 월드에서 도트 결이 혼자 세 배 굵던 마지막 자리가 닫혔다.
 
@@ -73,7 +73,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908162025";
+  var STAMP = "20260908162047";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
