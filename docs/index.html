@@ -42,8 +42,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#68</span> [BUILD] **커스터마이징(피부색·머리색·옷색)이 다시 동작하게 한다.** (2026-09-08, `LATER.md` 에서 올림.)</li>
 <li><span class="num">#69</span> [BUILD] **바닥 아이템 Y정렬 검사가 헛돈다 — 겹친 픽셀이 83px 뿐이다.** (2026-09-08, INBOX #67 을 하다 발견. **#67 이전부터 있던 고장이고 #67 은 이 숫자를 한 톨도 안 바꿨다** — HEAD 에서도 83 이다.)</li>
 <li><span class="num">#70</span> [DESIGN] **바닥 자리표시 더미만 아직 도트가 3배 굵다.** (2026-09-08, INBOX #67 을 하다 남긴 것.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>3479ddf  [INBOX #67] 아이템 아이콘·바닥 그림·상자의 도트를 캐릭터·지형에 맞췄다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 14:38</p></section>
+<section><h2>마지막 커밋</h2><code>c4de96f  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 14:39</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #67 [DESIGN] 아이템 아이콘·바닥 그림·상자의 도트 크기를
 캐릭터·지형에 맞췄다.** 도트 하나가 화면에서 3px 이던 것이 **1px** 이 됐다.
 **화면 크기는 한 픽셀도 안 바뀌었다.**
@@ -74,7 +74,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908143902";
+  var STAMP = "20260908143924";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
