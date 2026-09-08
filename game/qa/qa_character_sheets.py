@@ -51,6 +51,13 @@ HEAD_SKIP = ("use_", "hold_")
 CHANGE_MIN, CHANGE_MAX = 0.02, 0.45
 EVEN_MAX = 3.5
 
+## **선 축** — 「다리 띠의 한가운데」가 시트끼리 얼마나 벌어져도 되는가(px).
+## 절대 위치가 아니라 **벌어짐**을 재는 이유는, 옆모습은 그림 자체가 칸 한가운데에서
+## 3px 쯤 비켜 서 있어도 되지만(사람이 그렇게 서 있다) **빈손 ↔ 도구를 오갈 때 움직이면**
+## 안 되기 때문이다. 2026-09-08(INBOX #71) 이전에는 정면이 8.0px 벌어져 있었다.
+AXIS_MAX = 2.5
+LEG_BAND = 0.22           # 실루엣 아래 22% = 다리·신발
+
 
 def cells(path):
     im = Image.open(path).convert("RGBA")
@@ -149,6 +156,48 @@ def head_bands(paths):
     return out
 
 
+def stand_axis(paths, fails):
+    """**22장이 같은 자리에 서는가** — 방향마다 「다리 띠의 한가운데」의 벌어짐을 본다.
+
+    `bake_rows` 가 자를 상자를 **테두리의 한가운데**에 맞추면, 도구를 든 자세는 뻗은
+    팔이 테두리에 들어가서 축이 팔 쪽으로 밀리고 **몸통·다리가 칸 안에서 반대로
+    밀린다.** 화면에서는 빈손 ↔ 도구를 오갈 때 캐릭터가 옆으로 순간이동한다
+    (2026-09-08, INBOX #71 — 정면 8.0px 벌어져 있었다).
+
+    **프레임 하나가 아니라 시트·방향마다의 평균을 견준다.** 낫질처럼 날이 발 옆까지
+    내려오는 모션은 띠에 도구가 들어와 한 프레임이 9px 씩 튀는데, 그건 몸이 밀린 것이
+    아니라 이 재는 법의 한계다. 평균은 그 흔들림을 지우고 **시트끼리의 어긋남**만 남긴다.
+    """
+    per_dir = {d: [] for d in DIRS}
+    for p in paths:
+        cell, _, rows = cells(p)
+        if cell != CELL:
+            continue
+        for r, frames in enumerate(rows):
+            mids = []
+            for c in frames:
+                op = body(c)
+                ys = np.flatnonzero(op.sum(1) > 0)
+                if not len(ys):
+                    continue
+                top, bot = int(ys.min()), int(ys.max())
+                band = op[bot - int(round((bot - top + 1) * LEG_BAND)):bot + 1]
+                xs = np.flatnonzero(band.sum(0) > 0)
+                mids.append((int(xs.min()) + int(xs.max()) + 1) * 0.5)
+            if mids:
+                per_dir[DIRS[r]].append((sum(mids) / len(mids), os.path.basename(p)))
+    for d in DIRS:
+        v = sorted(per_dir[d])
+        if len(v) < 2:
+            continue
+        if v[-1][0] - v[0][0] > AXIS_MAX:
+            fails.append("[선 축] %s 에서 시트끼리 %.1fpx 벌어졌다 "
+                         "(%s %.1f ↔ %s %.1f, %.1fpx 까지) — 도구를 들고 내릴 때 "
+                         "캐릭터가 옆으로 미끄러진다"
+                         % (d, v[-1][0] - v[0][0], v[0][1], v[0][0],
+                            v[-1][1], v[-1][0], AXIS_MAX))
+
+
 def check(path, fails, bands=None):
     name = os.path.basename(path)
     cell, cols, rows = cells(path)
@@ -229,6 +278,7 @@ def main():
     bands = head_bands(paths)
     for p in paths:
         check(p, fails, bands)
+    stand_axis(paths, fails)          # **시트끼리** 견주는 검사라 한 번만 돈다
     for f in fails:
         print("[qa] FAIL — %s" % f)
     print("[qa] 캐릭터 시트 %d장 — %s"

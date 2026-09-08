@@ -507,6 +507,7 @@
   22장을 다시 굽는다: `.venv/bin/python -c "import sys;sys.path.insert(0,'game/tools');import rig;rig.build_sheets()"` → `--import` → `qa_character_sheets.py` `qa_player_walk` `qa_player_world` `qa_character_sprite` `qa_ground_items`.
 
 - [ ] #72 [ASK] **가로로 넓은 도구를 들면 캐릭터가 8px 작아진다.** (2026-09-08, INBOX #71 을 고치며 실측한 것.)
+  읽을 것: `docs/CHARACTER.md`
   칸에서 사람 키(`gen_player._grid` 의 `th`)가 22장 중 대부분 **94px** 인데 **총 세 장(hold/walk/use)의 정면·뒷모습이 86px, `use_sickle` 의 정면·뒷모습이 87px** 이다. 화면에서는 **총을 꺼내는 순간 사람이 8% 작아진다** — `DESIGN.md` 「캐릭터 애니메이션」의 *"서로 다른 생성 호출로 만든 프레임끼리 캐릭터가 차지하는 크기가 달라지면 안 된다"* 를 깬다.
   원인은 한 줄이다: `_grid()` 는 상자를 칸에 맞출 때 **세로를 먼저 채우고 가로가 넘치면 세로를 깎는다.** 몸은 세로로 긴데 총은 가로로 길어서, 몸 중심을 축으로 좌우 같은 만큼 넓힌 상자가 **세로보다 넓어진다.** #71 이전에도 총은 85~86px 이었다(축이 팔 쪽으로 밀려 있어 상자가 좁았을 뿐이다).
   **사람이 정해야 하는 이유**: 어느 쪽을 골라도 다른 것들이 따라 바뀐다.
