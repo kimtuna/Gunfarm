@@ -24,17 +24,21 @@ const SHEET := preload("res://assets/sprites/death_box.png")
 const FRAME_CLOSED := 0
 const FRAME_OPEN := 1
 
-## 아트 픽셀 하나가 화면에서 차지하는 크기. 캐릭터·타일·바닥 아이템과 같은 3배다
-## (`docs/STYLE_GUIDE.md` 1번 — 월드에 놓이는 것은 전부 3배다).
-const DOT := 3.0
+## 아트 픽셀 하나가 화면에서 차지하는 크기. 캐릭터·타일·바닥 아이템과 같은 **1배**다
+## (2026-09-08, INBOX #67 — 전에는 셋 다 3배였다. `docs/STYLE_GUIDE.md` 1번).
+const DOT := 1.0
 
 ## 그림 한 칸(아트). `death_boxes.gd` 의 `BOX_SIZE`(48 × 42) ÷ `DOT` 이고,
 ## `gen_box.py` 의 `BOX_W`/`BOX_H` 와 같아야 한다 — `_ready()` 가 실제로 견준다.
-const ART := Vector2i(16, 14)
+const ART := Vector2i(48, 42)
 
-## 남은 시간 막대 — 상자 위에 두 도트 띄우고 한 도트 두께로 긋는다.
-const BAR_GAP_DOTS := 2
-const BAR_DOTS := 1
+## 남은 시간 막대 — 상자 위에 `BAR_GAP` 만큼 띄우고 `BAR_H` 두께로 긋는다.
+## **이 셋만 아트 도트가 아니라 화면 px 이다.** 막대는 그림이 아니라 값에 따라
+## 길이가 변하는 UI 라(위 설명), 도트 하나가 1px 이 된 뒤에도 눈에 보여야 한다 —
+## `DOT` 을 곱하면 1px 짜리 실선이 된다(2026-09-08, INBOX #67).
+const BAR_GAP := 6.0
+const BAR_H := 3.0
+const BAR_STEP_PX := 3.0
 
 const SHADOW_RX := 20.0
 const SHADOW_RY := 7.0
@@ -95,14 +99,13 @@ func _draw() -> void:
 func _draw_bar(left: float, top: float, width: float) -> void:
 	if _ratio < 0.0:
 		return
-	var y := top - float(BAR_GAP_DOTS + BAR_DOTS) * DOT
-	var height := float(BAR_DOTS) * DOT
-	draw_rect(Rect2(left, y, width, height), BAR_BG)
+	var y := top - (BAR_GAP + BAR_H)
+	draw_rect(Rect2(left, y, width, BAR_H), BAR_BG)
 	var fill := BAR_LOW if _ratio <= BAR_LOW_RATIO else BAR_FILL
-	# 칸 수를 도트로 끊는다 — 반 도트짜리 막대는 이 그림체에서 뭉개진다.
-	var dots := roundi(_ratio * width / DOT)
-	if dots > 0:
-		draw_rect(Rect2(left, y, float(dots) * DOT, height), fill)
+	# 길이를 `BAR_STEP_PX` 로 끊는다 — 반 칸짜리 막대는 이 그림체에서 뭉개진다.
+	var steps := roundi(_ratio * width / BAR_STEP_PX)
+	if steps > 0:
+		draw_rect(Rect2(left, y, float(steps) * BAR_STEP_PX, BAR_H), fill)
 
 
 ## 땅에 닿는 점의 납작한 그림자 (`ground_item_node.gd` 와 같은 방식).

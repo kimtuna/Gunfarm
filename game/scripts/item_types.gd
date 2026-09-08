@@ -137,9 +137,10 @@ static func icon_path(id: String) -> String:
 
 
 ## 바닥에 놓였을 때 쓸 그림. **아이콘과 다른 그림이다** (2026-09-07, INBOX #38) —
-## 아이콘은 17px 칸이라 월드에 3배로 놓으면 도구가 사람만 해지고, 2배로 놓으면
-## 크기는 맞지만 **아트 픽셀 하나가 2px** 이 되어 캐릭터·지형(3px)과 도트 결이
-## 갈린다. 그래서 12px 칸에 따로 굽는다(`gen_character.py` 의 `ground_icon()`).
+## 아이콘 칸을 그대로 월드에 놓으면 도구가 사람만 해진다. 크기를 맞추자고 배율을
+## 낮추면 이번에는 **아트 픽셀 하나의 화면 크기**가 캐릭터·지형과 갈린다. 그래서
+## 배율은 월드와 같이 두고 **더 작은 칸에 따로 굽는다**(`gen_character.py` 의
+## `ground_icon()` — 아이콘 `ICON_N` 51px, 바닥 `GROUND_N` 36px, 둘 다 배율 1이다).
 static func ground_path(id: String) -> String:
 	var name := String(of(id).get("ground", ""))
 	return "" if name.is_empty() else "res://assets/sprites/%s.png" % name

@@ -222,6 +222,11 @@ static func draw_item(canvas: CanvasItem, font: Font, slot: Rect2, stack: RefCou
 ## 픽셀 하나가 화면에서 2px, 3px 로 들쭉날쭉해져 도트가 뭉개진다. 칸(56px)에
 ## 들어가는 가장 큰 정수 배율을 쓰고, **자리도 정수로 반올림**한다(반 픽셀에
 ## 놓으면 같은 일이 벌어진다).
+##
+## **도구 아이콘은 지금 배율 1이다** (2026-09-08, INBOX #67 — 그림이 17 → 51px 이
+## 되면서 이 식이 3에서 1로 내려왔다). 화면 크기는 51px 그대로이고, 바뀐 것은 도트
+## 하나가 3px 에서 1px 이 되어 캐릭터·지형과 결이 같아진 것이다. **식은 안 고쳤다** —
+## 그림 크기에서 저절로 따라온다.
 static func _draw_icon(canvas: CanvasItem, icon: Texture2D, slot: Rect2, alpha: float) -> void:
 	var art := Vector2(icon.get_size())
 	var zoom := maxi(1, int(floor(minf(slot.size.x / art.x, slot.size.y / art.y))))

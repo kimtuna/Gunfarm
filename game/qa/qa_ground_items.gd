@@ -224,17 +224,25 @@ func _check_drop_starts_locked() -> void:
 
 
 ## 7) **도트 크기가 월드와 같다** (2026-09-07, INBOX #38 — 전에는 바닥 아이템만 2배라
-## 아트 픽셀 하나가 화면에서 2px 이었고, 캐릭터·지형(3px)과 결이 달랐다).
+## 아트 픽셀 하나가 화면에서 2px 이었고, 캐릭터·지형과 결이 달랐다).
 ##
 ## 화면 없이 잴 수 있는 검사라 코어 쪽에 둔다. 보는 것 셋:
-##   - 바닥 아이템의 배율이 **캐릭터와 같은가**(`PlayerFrames.SCALE`).
-##   - 그 배율이 **타일과도 같은가** — 타일은 아트 16px 이 화면 48px 이다.
+##   - 바닥 아이템의 배율이 **캐릭터와 같은가.**
+##   - 그 배율이 **타일과도 같은가** — 타일은 아트 `TILE_ART` 가 화면 `TILE_SIZE` 다.
 ##   - 구워진 그림의 칸이 **`ART` 와 같은가.** 생성기(`gen_character.py` 의 `GROUND_N`)만
 ##     고치고 게임 쪽 상수를 안 고치면 여기서 걸린다.
+##
+## **캐릭터 쪽 배율은 상수(`PlayerFrames.SCALE`)가 아니라 실제 시트에서 읽는다**
+## (2026-09-08, INBOX #67). 그 상수는 32px 칸 시절 값이라 지금 실려 있는 96px 시트의
+## 배율(1)과 다르다 — 상수를 믿으면 **그림은 맞는데 검사만 안 따라오는** 자리가 된다
+## (`qa_sprite_check.py` 가 지형 칸 크기를 생성기에서 읽게 된 것과 같은 이유다).
 func _check_dot_scale() -> void:
-	if GroundItemNode.ZOOM != PlayerFrames.SCALE:
+	var character_zoom := _character_zoom()
+	if character_zoom <= 0:
+		_fails.append("코어: 캐릭터 시트를 못 읽어 도트 배율을 못 쟀다")
+	elif GroundItemNode.ZOOM != character_zoom:
 		_fails.append("코어: 바닥 아이템 배율 %d 가 캐릭터 %d 와 다르다 — 도트 결이 갈린다"
-				% [GroundItemNode.ZOOM, PlayerFrames.SCALE])
+				% [GroundItemNode.ZOOM, character_zoom])
 	var tile_zoom := WorldGen.TILE_SIZE / TerrainTiles.TILE_ART
 	if GroundItemNode.ZOOM != tile_zoom:
 		_fails.append("코어: 바닥 아이템 배율 %d 가 타일 %d 와 다르다"
@@ -247,10 +255,21 @@ func _check_dot_scale() -> void:
 		if art.get_size() != Vector2(GroundItemNode.ART, GroundItemNode.ART):
 			_fails.append("코어: %s 의 바닥 그림이 %s — %dpx 한 칸이어야 한다"
 					% [id, art.get_size(), GroundItemNode.ART])
-	# 자리표시(그림이 없는 아이템)도 같은 격자 위에 있어야 한다.
-	if GroundItemNode.PLACEHOLDER % GroundItemNode.ZOOM != 0:
-		_fails.append("코어: 자리표시 %dpx 가 배율 %d 로 안 나눠떨어진다"
-				% [GroundItemNode.PLACEHOLDER, GroundItemNode.ZOOM])
+	# 자리표시(그림이 없는 아이템)도 제 격자 위에 있어야 한다. **`ZOOM` 이 아니라
+	# `PLACEHOLDER_DOT` 으로 나눈다** — 자리표시만 코드에 박힌 무늬라 결이 다르다
+	# (그 이유는 `ground_item_node.gd` 의 같은 상수 옆에 있다).
+	if GroundItemNode.PLACEHOLDER % GroundItemNode.PLACEHOLDER_DOT != 0:
+		_fails.append("코어: 자리표시 %dpx 가 한 칸 %d 로 안 나눠떨어진다"
+				% [GroundItemNode.PLACEHOLDER, GroundItemNode.PLACEHOLDER_DOT])
+
+
+## 지금 실려 있는 캐릭터 시트의 씬 배율. 시트에서 칸 크기를 읽어 `scale_of()` 에
+## 물어본다 — 읽을 수 없으면 0 이다.
+func _character_zoom() -> int:
+	var texture: Texture2D = load(PlayerFrames.sheet_path("idle", PlayerFrames.DEFAULT_HAIRSTYLE))
+	if texture == null:
+		return 0
+	return PlayerFrames.scale_of(PlayerFrames.cell_of(texture))
 
 
 ## 2) 버린 자리를 벗어나야 잠금이 풀린다.

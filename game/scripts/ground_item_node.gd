@@ -11,17 +11,18 @@ extends Node2D
 
 const ItemTypes := preload("res://scripts/item_types.gd")
 
-## **월드의 도트 배율은 3배 하나뿐이다** (2026-09-07, INBOX #38 — 전에는 2배였다).
-## 캐릭터(아트 17px)도 타일(아트 16px)도 3배라 아트 픽셀 하나가 화면에서 3px 인데,
-## 바닥 아이템만 2배면 **그 하나만 도트 결이 다르다**(`docs/STYLE_GUIDE.md` 1번).
-## 그래서 배율을 맞추고 **그림 쪽을 작은 칸(12px)에 따로 구웠다** —
-## `gen_character.py` 의 `ground_icon()`. 인벤토리 아이콘(17px)을 그대로 3배로
-## 그리면 도끼가 플레이어(51px)의 8할이 되어 사람만 해진다.
-const ZOOM := 3
+## **월드의 도트 배율은 1배 하나뿐이다** (2026-09-08, INBOX #67 — 전에는 3배였다).
+## 캐릭터(아트 96px 칸)도 타일(아트 48px 칸)도 배율 1이라 아트 픽셀 하나가 화면에서
+## 1px 인데, 바닥 아이템만 3배면 **그 하나만 도트 결이 다르다**
+## (`docs/STYLE_GUIDE.md` 1번 — *"배율이 이웃과 다르면 정수여도 어긋난다"*).
+## **화면 크기는 안 바뀐다**(36px 그대로): 배율을 내린 만큼 그림 쪽 칸을 12 → 36px 로
+## 키웠다(`gen_character.py` 의 `GROUND_N`). 「크기를 맞출 때 배율을 손대지 말고
+## 캔버스를 손댄다」는 INBOX #38 의 판단이 반대 방향으로 한 번 더 쓰인 것이다.
+const ZOOM := 1
 
 ## 바닥용 그림 한 칸(= `gen_character.py` 의 `GROUND_N`)과 그 화면 크기.
 ## `BOX` 는 자체 QA 가 "이 자리에 아이템이 그려졌는가"를 짚을 때 쓰는 사각형이다.
-const ART := 12
+const ART := 36
 const BOX := ART * ZOOM
 
 ## 그림을 원점보다 얼마나 내려 그리는가 — 물건 밑동이 그림자에 살짝 잠겨야 떠 있지 않다.
@@ -41,7 +42,7 @@ const SHADOW_COLOR := Color(0.03, 0.05, 0.02, 0.30)
 # 읽히고, 무엇이라고 주장하지 않아서 어떤 원재료에 붙어도 거짓말을 하지 않는다
 # (목이 달린 자루 모양도 그려봤는데 17px 격자에서 **밤톨**로 읽혔다).
 # 지키는 것 셋:
-#   1) 도트 결 — 아트 픽셀 하나를 화면 3px 짜리 사각형으로 찍는다(위 `ZOOM`).
+#   1) 도트 결 — 손으로 찍은 10 × 8 무늬라 한 칸이 화면 `PLACEHOLDER_DOT` px 이다.
 #   2) 외곽선은 공통 잉크색 `#261C2C` — 순검정을 쓰지 않는다(STYLE_GUIDE 2번).
 #   3) 광원은 왼쪽 위 — 아래 그림의 밝은 칸이 전부 왼쪽 위에 몰려 있다.
 # **아이템을 가르는 것은 여전히 색 하나다**(`item_types.gd` 의 `color`) — 창 안팎에서
@@ -60,9 +61,18 @@ const PLACEHOLDER_ART := [
 	".kkkkkkkk.",
 ]
 
-## 자리표시가 화면에서 차지하는 크기 (10 × 8 아트픽셀 × 3배 = 30 × 24px).
+## 자리표시 한 칸이 화면에서 몇 px 인가. **여기만 `ZOOM`(1)을 안 쓴다**
+## (2026-09-08, INBOX #67). 위 무늬는 손으로 찍은 10 × 8 짜리라, 배율을 1로 내리면
+## 더미가 화면에서 10 × 8px 이 되어 「아이템/오브젝트 크기 표준」의 32px 하한을 깬다.
+## 그림(`ground_<도구>.png`)은 칸을 3배로 키워 해결했지만 **이 무늬는 코드에 박힌
+## 도트라 같이 못 키웠다** — 30 × 24px 을 채우려면 무늬를 다시 찍어야 한다.
+## 그래서 이것만 옛 결(3px)로 남아 있다. **자리표시라서 남겨둔 것이지 맞아서가
+## 아니다** — 원재료 아이콘이 생기면 이 그림 자체가 안 쓰인다.
+const PLACEHOLDER_DOT := 3
+
+## 자리표시가 화면에서 차지하는 크기 (10 × 8 칸 × 3px = 30 × 24px).
 ## 도구 그림(36px)보다 조금 작다 — 원재료 한 뭉치는 도끼보다 작은 물건이다.
-const PLACEHOLDER := 10 * ZOOM
+const PLACEHOLDER := 10 * PLACEHOLDER_DOT
 
 ## 공통 잉크색. `gen_character.py` 의 `INK`(#261C2C)와 같은 값이어야 한다.
 const INK := Color8(38, 28, 44)
@@ -105,7 +115,7 @@ func _draw_shadow() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-## 자리표시 더미를 아트 픽셀 하나 = 화면 3px 로 찍는다.
+## 자리표시 더미를 한 칸 = 화면 `PLACEHOLDER_DOT` px 로 찍는다.
 func _draw_placeholder() -> void:
 	var base: Color = ItemTypes.color_of(_stack.id)
 	var ramp := [base.lightened(LIGHTEN), base, base.darkened(DARKEN),
@@ -113,7 +123,8 @@ func _draw_placeholder() -> void:
 	var rows: int = PLACEHOLDER_ART.size()
 	var cols: int = (PLACEHOLDER_ART[0] as String).length()
 	# 밑동이 원점 언저리에 오도록 왼쪽 위 모서리를 잡는다(그림과 같은 규칙).
-	var origin := Vector2(-cols * ZOOM * 0.5, SINK - rows * ZOOM).round()
+	var dot := float(PLACEHOLDER_DOT)
+	var origin := Vector2(-cols * dot * 0.5, SINK - rows * dot).round()
 	for y in rows:
 		var row: String = PLACEHOLDER_ART[y]
 		for x in cols:
@@ -121,4 +132,4 @@ func _draw_placeholder() -> void:
 			if cell == ".":
 				continue
 			var color: Color = INK if cell == "k" else ramp[cell.to_int()]
-			draw_rect(Rect2(origin + Vector2(x, y) * ZOOM, Vector2(ZOOM, ZOOM)), color)
+			draw_rect(Rect2(origin + Vector2(x, y) * dot, Vector2(dot, dot)), color)

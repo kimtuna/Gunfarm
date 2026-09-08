@@ -37,6 +37,7 @@ const SlotStore := preload("res://scripts/slot_store.gd")
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerHealth := preload("res://scripts/player_health.gd")
 const DeathBoxes := preload("res://scripts/death_boxes.gd")
+const DeathBoxNode := preload("res://scripts/death_box_node.gd")
 const WorldSettings := preload("res://scripts/world_settings.gd")
 const Inventory := preload("res://scripts/inventory.gd")
 const ItemStack := preload("res://scripts/item_stack.gd")
@@ -62,7 +63,13 @@ const HOLD_SECONDS := 0.6
 const BOX_SHEET := "res://assets/sprites/death_box.png"
 const BOX_FRAMES := 2
 
-## 화면과 시트를 견줄 아트 픽셀들. **나무 · 쇠 띠 · 그늘진 오른쪽**을 하나씩 골랐다 —
+## 짚는 자리는 **설계 칸(16 × 14)** 으로 적는다 — `gen_box.py` 의 형태 값이 쓰는 그
+## 단위다(2026-09-08, INBOX #67). 아트는 그 설계를 3배로 찍은 48 × 42 인데, 여기에
+## 아트 좌표를 박아두면 **칸이 다시 커질 때 짚는 자리가 그림에서 미끄러진다.**
+## `_design_dot()` 이 시트 크기에서 배율을 읽어 설계 칸의 한가운데 아트 픽셀로 옮긴다.
+const BOX_DESIGN := Vector2i(16, 14)
+
+## 화면과 시트를 견줄 설계 칸들. **나무 · 쇠 띠 · 그늘진 오른쪽**을 하나씩 골랐다 —
 ## 한 재질만 짚으면 그림이 통째로 한 칸 밀려도 같은 색이 나와서 통과한다.
 const SHEET_PROBES: Array[Vector2i] = [
 	Vector2i(2, 10),        # 몸통 왼쪽(밝은 나무)
@@ -477,14 +484,16 @@ func _check_box_matches_sheet() -> void:
 	if sheet == null:
 		return
 	var art := Vector2i(sheet.get_width() / BOX_FRAMES, sheet.get_height())
-	if Vector2(art) * 3.0 != DeathBoxes.BOX_SIZE:
-		_fails.append("구워진 칸 %s × 3배가 BOX_SIZE %s 와 다르다" % [art, DeathBoxes.BOX_SIZE])
+	if Vector2(art) * DeathBoxNode.DOT != DeathBoxes.BOX_SIZE:
+		_fails.append("구워진 칸 %s × %d배가 BOX_SIZE %s 와 다르다"
+				% [art, DeathBoxNode.DOT, DeathBoxes.BOX_SIZE])
 		return
 	var rect := DeathBoxes.box_rect(_box_position)
 	for probe: Vector2i in SHEET_PROBES:
-		var want := sheet.get_pixelv(probe)
+		var cell := _design_pixel(probe, art)
+		var want := sheet.get_pixelv(cell)
 		# 아트 픽셀 한가운데를 짚는다 — 모서리를 짚으면 반올림 한 칸에 옆 칸이 나온다.
-		var at := rect.position + (Vector2(probe) + Vector2(0.5, 0.5)) * 3.0
+		var at := rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * DeathBoxNode.DOT
 		var got := image.get_pixelv(_to_pixels(at, image))
 		if want.a < 1.0:
 			_fails.append("검사가 고른 아트 픽셀 %s 가 시트에서 비어 있다" % probe)
@@ -515,16 +524,24 @@ func _check_open_frame_on_screen() -> void:
 	if sheet == null:
 		return
 	var art := Vector2i(sheet.get_width() / BOX_FRAMES, sheet.get_height())
-	var want := sheet.get_pixelv(HOLE_PROBE + Vector2i(art.x, 0))
-	var closed := sheet.get_pixelv(HOLE_PROBE)
+	var cell := _design_pixel(HOLE_PROBE, art)
+	var want := sheet.get_pixelv(cell + Vector2i(art.x, 0))
+	var closed := sheet.get_pixelv(cell)
 	if _color_gap(want, closed) < 0.25:
 		_fails.append("시트의 열린 프레임과 닫힌 프레임이 이 자리에서 같다 — 검사가 무의미하다")
 		return
 	var rect := DeathBoxes.box_rect(_box_position)
-	var at := rect.position + (Vector2(HOLE_PROBE) + Vector2(0.5, 0.5)) * 3.0
+	var at := rect.position + (Vector2(cell) + Vector2(0.5, 0.5)) * DeathBoxNode.DOT
 	var got := image.get_pixelv(_to_pixels(at, image))
 	if _color_gap(want, got) > SHEET_TOLERANCE:
 		_fails.append("상자를 열었는데 그 자리가 %s 다 — 열린 프레임(%s)이 아니다" % [got, want])
+
+
+## 설계 칸 하나가 아트에서 차지하는 **한가운데 픽셀**. 배율은 시트 크기에서 읽는다 —
+## 칸이 다시 커져도 짚는 자리가 그림에서 미끄러지지 않는다.
+func _design_pixel(probe: Vector2i, art: Vector2i) -> Vector2i:
+	var dot := Vector2i(art.x / BOX_DESIGN.x, art.y / BOX_DESIGN.y)
+	return probe * dot + dot / 2
 
 
 func _sheet_image() -> Image:
@@ -532,7 +549,7 @@ func _sheet_image() -> Image:
 	if texture == null:
 		_fails.append("상자 스프라이트(%s)를 못 읽었다" % BOX_SHEET)
 		return null
-	# 칸은 정사각형이 아니다(16 × 14) — 크기는 `BOX_SIZE` 가 정한 것이라 그림 쪽에서
+	# 칸은 정사각형이 아니다 — 크기는 `BOX_SIZE` 가 정한 것이라 그림 쪽에서
 	# 고를 값이 아니다. 여기서는 **열 수만** 본다.
 	if texture.get_width() % BOX_FRAMES != 0:
 		_fails.append("상자 시트가 %s 다 — 칸 %d장으로 안 나뉜다"

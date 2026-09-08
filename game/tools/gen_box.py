@@ -14,13 +14,21 @@
 자루(나무)와 날(쇠)의 램프를 그대로 쓴다. 덤으로 도구 아이콘과 **정확히 같은
 나무색·쇠색**이 되어 바닥에 나란히 놓여도 어긋나지 않는다.
 
-## 칸이 정사각형이 아니다 (16 × 14)
+## 칸이 정사각형이 아니다 (48 × 42)
 
-상자 크기는 `death_boxes.gd` 의 `BOX_SIZE`(48 × 42)가 이미 정해뒀다 — 3배로 그리므로
-아트 16 × 14px 이다. `gen_character.canvas()` 는 정사각 캔버스만 만들 수 있으므로
-**16 × 16 에 굽고 아래 두 줄을 잘라낸다.** 그래서 그림은 y 1~12 안에 들어가야 한다
-(0 줄과 13 줄은 외곽선 자리다) — 잘라낸 줄에 무언가 남으면 `qa_sprite_check.py` 의
-「잘림」이 잡는다.
+상자 크기는 `death_boxes.gd` 의 `BOX_SIZE`(48 × 42)가 이미 정해뒀다 — **배율 1**이라
+아트도 48 × 42px 이다. `gen_character.canvas()` 는 정사각 캔버스만 만들 수 있으므로
+**48 × 48 에 굽고 아래 여섯 줄을 잘라낸다.** 그래서 그림은 설계 공간 y 1~12 안에
+들어가야 한다(0 줄과 13 줄은 외곽선 자리다) — 잘라낸 줄에 무언가 남으면
+`qa_sprite_check.py` 의 「잘림」이 잡는다.
+
+## 설계 공간은 16칸 그대로다 (2026-09-08, INBOX #67)
+
+그전에는 아트 16 × 14px 을 화면에서 3배로 그렸다 — 배율은 정수였지만 **아트 픽셀
+하나가 화면 3px** 이라 도트가 1px 인 캐릭터·지형·바닥 아이템 옆에서 상자만 뭉툭했다.
+지금은 같은 16칸짜리 설계를 `UNIT`(3) 배로 촘촘한 격자에 찍는다 — **아래 형태 값은
+한 줄도 안 바뀌었고** 화면 크기(48 × 42)도 그대로다. 「쇠 띠는 두 칸」·「자물쇠는
+띠 아래로 두 칸」 같은 실측은 전부 이 16칸 설계 단위의 값이라 그대로 산다.
 """
 
 import os
@@ -32,10 +40,16 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gen_character as gen                                     # noqa: E402
 
-## 아트 픽셀 칸. `death_boxes.gd` 의 `BOX_SIZE` ÷ 씬 스케일 3 이다.
-BOX_W, BOX_H = 16, 14
-## 굽는 캔버스 — 정사각이라 세로가 두 줄 남고, 그 두 줄은 잘라낸다.
-CANVAS = 16
+## 설계 공간 한 변(칸). 형태 값이 전부 이 단위로 적혀 있다 — 위 설명 참고.
+DESIGN = 16
+## 설계 단위 하나를 몇 px 로 찍는가. 캐릭터(96px 칸)·지형(48px 칸)과 같이 **배율 1**
+## 이므로 이 값이 곧 도트 하나의 화면 크기가 아니라 **설계 한 칸의 화면 크기**다.
+UNIT = 3
+
+## 아트 픽셀 칸. **`death_boxes.gd` 의 `BOX_SIZE` 와 같은 값이다**(배율 1).
+BOX_W, BOX_H = 16 * UNIT, 14 * UNIT      # 48 × 42
+## 굽는 캔버스 — 정사각이라 세로가 여섯 줄 남고, 그 줄들은 잘라낸다.
+CANVAS = DESIGN * UNIT
 
 ## 시트의 열 순서. `death_box_node.gd` 의 `FRAME_CLOSED`/`FRAME_OPEN` 과 같아야 한다.
 FRAMES = ("closed", "open")
@@ -152,14 +166,14 @@ BUILDS = {"closed": build_closed, "open": build_open}
 
 
 def frame(name="closed", pal=None):
-    """상자 한 프레임(16 × 14). `tool_icon()` 과 같은 파이프라인이다.
+    """상자 한 프레임(`BOX_W` × `BOX_H`). `tool_icon()` 과 같은 파이프라인이다.
 
     `BUILDS[name]` 이 **부위 id → 색** 을 돌려주면 그 부위를 그 색으로 덮는다
     (열린 상자의 구멍·안쪽 벽). `inner_lines()` **다음에** 덮는다 — 구멍 테두리에
     한 단계 어두운 줄을 또 그으면 구멍이 한 칸 커진다.
     """
     pal = pal or gen.palette()
-    with gen.canvas(CANVAS):
+    with gen.canvas(CANVAS, UNIT):
         b = gen.Build()
         paint = BUILDS[name](b) or {}
         lum = gen.light(b.hgt, b.mat, key=gen.CFG["key"], amb=gen.CFG["amb"],

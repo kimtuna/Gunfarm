@@ -24,7 +24,8 @@
   팔레트    램프에 없는 색이 섞이지 않았는지, 재질끼리 색이 겹치지 않는지
   외곽선    실루엣 가장자리가 잉크색인지, 순검정이 쓰이지 않았는지
   실루엣    떨어져 나온 조각이 없는지 (4-연결 요소 개수)
-  대비      맞닿은 재질끼리 **경계에서** 명도가 갈리는지 (셔츠/바지가 한 덩어리로
+  대비      맞닿은 재질끼리 **경계에서** 갈리는지 — 재는 축(명도/채도/색차)은 쌍마다
+            정한다 (셔츠/바지가 한 덩어리로
             뭉치는 것을 여기서 잡는다 — INBOX #9)
   명도분포  전체가 너무 어둡거나 너무 납작하지 않은지
 
@@ -86,7 +87,8 @@ SPRITES = os.path.join(ROOT, "assets", "sprites")
 
 
 def luma(rgb):
-    """지각 명도(Rec.601). 재질이 구분되는지는 색상이 아니라 이 값이 정한다."""
+    """지각 명도(Rec.601). 재질이 구분되는지는 **대개** 색상이 아니라 이 값이 정한다
+    — 다만 나무와 쇠처럼 램프가 명도로 겹치는 쌍은 채도가 정한다(「대비」의 `색차`)."""
     a = np.asarray(rgb, dtype=np.float32)
     return a[..., 0] * 0.299 + a[..., 1] * 0.587 + a[..., 2] * 0.114
 
@@ -436,7 +438,12 @@ def _tool_spec(motion, tool, style):
 
 
 def _icon_spec(**over):
-    """도구 아이템 아이콘 한 장(`item_<도구>.png`, 17px 한 칸).
+    """도구 아이템 아이콘 한 장(`item_<도구>.png`, `gen_character.ICON_N` px 한 칸).
+
+    **칸 크기를 여기 적지 않는다** (2026-09-08, INBOX #67 — 지형 스펙이 같은 이유로
+    `gen_terrain.TILE` 을 읽게 된 것과 같은 자리다). 아트가 17 → 51px 이 되는 동안
+    검사에만 옛 숫자가 남아 있으면 **그림은 멀쩡한데** 시트가 「규격」에서 통째로
+    불합격한다.
 
     캐릭터 시트와 **같은 램프·같은 잉크·같은 광원**을 쓰므로 앞쪽 검사(팔레트 /
     색충돌 / 잉크아래 / 순검정 / 외곽선 / 잘림 / 실루엣 / 재질 / 대비)가 그대로
@@ -449,8 +456,10 @@ def _icon_spec(**over):
     """
     return dict(_player_spec(
         kind="icon",
+        cell=_gen().ICON_N,
         rows=["icon"],
-        contrast=[("helve", "blade", 18.0)],
+        # **명도가 아니라 「색차」로 잰다** — 근거는 `check_sheet()` 의 「대비」 옆에 있다.
+        contrast=[("helve", "blade", 18.0, "색차")],
         # 도구는 쇠(무채색)와 나무 둘뿐이라 사람 기준을 그대로 쓸 수 없다.
         # 실측(도끼): 평균 156 / 명암폭 73 / 어두운비율 0% / 채도 44.
         luma_mean=(120.0, 190.0),
@@ -542,7 +551,7 @@ def _tool_motions(tool):
     return ("hold", "use", "walk") if _gen().has_use(tool) else ("hold", "walk")
 
 def _ground_spec(**over):
-    """바닥에 놓인 도구 한 장(`ground_<도구>.png`, 12px 한 칸 — INBOX #38).
+    """바닥에 놓인 도구 한 장(`ground_<도구>.png`, `gen_character.GROUND_N` px 한 칸).
 
     아이콘과 **같은 도형을 작은 칸에 그대로 축소한 것**이라(`gen_character.shrink()`)
     검사도 아이콘 것을 그대로 쓴다 — **칸 크기 한 줄만 다르다.** 숫자를 늦추지
@@ -557,7 +566,7 @@ def _ground_spec(**over):
 
 
 def _box_spec(**over):
-    """데스드롭 상자 시트(`death_box.png`, **16 × 14px** 칸 × 2프레임 — INBOX #40).
+    """데스드롭 상자 시트(`death_box.png`, **48 × 42px** 칸 × 2프레임 — INBOX #40).
 
     상자도 도구 아이콘과 **같은 램프(나무 `helve` / 쇠 `blade`) · 같은 광원 · 같은
     잉크**로 굽는다(`gen_box.py`) — 그래서 스펙도 아이콘 것을 그대로 쓰고 **칸 크기
@@ -565,7 +574,8 @@ def _box_spec(**over):
     「어울림」이 그대로 깨진다.
 
     **칸이 정사각형이 아닌 첫 시트다** — 크기는 그림 사정이 아니라 `death_boxes.gd`
-    의 `BOX_SIZE`(48 × 42)가 정한 것이라 그림 쪽에서 고를 값이 아니다.
+    의 `BOX_SIZE`(48 × 42)가 정한 것이라 그림 쪽에서 고를 값이 아니다. 2026-09-08
+    (INBOX #67) 에 배율이 3에서 1로 내려오면서 **아트가 그 값과 같아졌다.**
 
     **숫자는 한 줄도 늦추지 않았다** — 실측이 아이콘과 같은 자리에 모였다
     (평균명도 126 / 명암폭 78 / 채도 69 / 쇠 161 · 나무 121). 바닥 그림
@@ -669,6 +679,13 @@ def _neighbors(mask):
     out[:, 1:] |= mask[:, :-1]
     out[:, :-1] |= mask[:, 1:]
     return out
+
+
+def _chroma(rgb):
+    """채도(가장 밝은 채널 - 가장 어두운 채널). 파일 전체가 쓰는 정의다
+    (`chroma_mean` 과 같다) — 「대비」의 `색차` 축도 이 값으로 잰다."""
+    f = np.asarray(rgb, dtype=np.float32)[..., :3]      # 알파는 빼고 본다
+    return f.max(axis=-1) - f.min(axis=-1)
 
 
 def _hue(rgb):
@@ -943,13 +960,31 @@ def check_sheet(path, spec):
     # 부분이 평균을 끌어올려서 "맞닿은 자리는 붙어 보이는데 통과"가 된다.
     # **안 맞닿는 쌍은 건너뛴다**(리포트에 `-` 로 남는다) — 예를 들어 긴 머리는
     # 목을 덮어서 피부와 셔츠가 어디서도 닿지 않는다. 그건 불합격이 아니다.
+    #
+    # **재는 축은 쌍마다 정한다** (2026-09-08, INBOX #67). 기본은 명도인데,
+    # **자루(나무)와 날(쇠)은 명도로 안 갈린다** — 두 램프가 148/118/95/74 와
+    # 192/152/121/96 이라 가운데 두 단계가 사실상 겹쳐 있다. 그래서 맞닿은 자리의
+    # 명도차는 조명이 어느 쪽을 비추느냐에 따라 2에서 72까지 흔들린다(실측: 도끼
+    # 26.7 · 곡괭이 11.9 · 괭이 4.1 · 총 42.6). **그 둘을 실제로 가르는 것은 채도**다
+    # (나무 78 / 쇠 13 — 맞닿은 자리에서 53~70 으로 일곱 도구가 다 모인다).
+    # 명도만 요구하면 「괭이 목의 그늘진 아랫면을 억지로 밝게 칠하라」가 되는데,
+    # 그건 그림을 고치는 게 아니라 **음영에 거짓말을 시키는 것**이다.
+    # `inner_lines()` 가 *"재질이 다르면 램프가 이미 갈라놓았다"* 며 재질 경계에
+    # 선을 안 긋는 것도 같은 전제인데, 이 쌍에서는 그 「갈라놓음」이 채도 쪽에 있다.
+    # **숫자(18)는 늦추지 않았다 — 어느 축에서 재는가만 바로잡았다.**
+    axes = {"명도": L, "채도": _chroma(rgb)}
     gaps = []
-    for m1, m2, need in spec["contrast"]:
+    for pair in spec["contrast"]:
+        m1, m2, need = pair[:3]
+        axis = pair[3] if len(pair) > 3 else "명도"
         a1, a2 = matmap == m1, matmap == m2
         t1, t2 = a1 & _neighbors(a2), a2 & _neighbors(a1)
         n = min(int(t1.sum()), int(t2.sum()))
-        gaps.append((None if n < 4 else abs(float(L[t1].mean()) - float(L[t2].mean())),
-                     m1, m2, need, n))
+        # `색차` 는 **둘 중 갈리는 축 하나면 된다** — 사람 눈도 그렇게 본다.
+        names = ("명도", "채도") if axis == "색차" else (axis,)
+        got = None if n < 4 else max(
+            abs(float(axes[k][t1].mean()) - float(axes[k][t2].mean())) for k in names)
+        gaps.append((got, m1, m2, need, n))
     bad = ["%s|%s %.0f<%.0f" % (m1, m2, g, need)
            for g, m1, m2, need, n in gaps if g is not None and g < need]
     rep.add(not bad, "대비", " ".join(bad),
