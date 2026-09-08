@@ -58,10 +58,20 @@ const WOOD_COUNT := 64
 
 ## Y정렬 검사에서 아이템을 플레이어 위/아래로 얼마나 옮기는가. 그림이 겹칠 만큼
 ## 가깝고, 줍히는 거리(36) 안이라 **잠긴 채로 남는다**.
+##
+## **위와 아래가 같은 값일 수 없다** (2026-09-08, INBOX #69). 플레이어 그림은 원점
+## (발밑)보다 **위쪽에만** 있다 — 그래서 아이템을 위로 옮기면 아이템 그림이 정강이·
+## 무릎으로 올라가 넓게 겹치지만, 아래로 옮기면 발목만 스치고 그 아래는 아무것도
+## 없는 땅이다. 아래쪽은 **1px 내려갈 때마다 겹친 픽셀이 12px 씩 준다**
+## (실측: +1→195, +4→150, +6→126, +10→75, +14→34, +22→0). 반대로 위쪽은 멀어질수록
+## 는다(-6→276, -10→281, -30→429). 한 값으로 맞추면 한쪽이 반드시 굶는다.
+##
 ## **2026-09-07(INBOX #38)에 14 → 10 으로 줄였다** — 바닥 아이템 그림이 34px 짜리
 ## 정사각형에서 자루(30 × 27px)로 바뀌면서 캐릭터와 겹치는 픽셀이 아래 하한 근처로
-## 내려왔다. 검사가 헛돌지 않게 더 가까이 놓는다(하한을 낮추는 쪽이 아니다).
-const SORT_OFFSET := 10.0
+## 내려왔다. 검사가 헛돌지 않게 더 가까이 놓는다(하한을 낮추는 쪽이 아니다) —
+## 아래 두 값도 같은 판단을 방향마다 따로 한 것이다.
+const SORT_OFFSET_BEHIND := 10.0
+const SORT_OFFSET_FRONT := 4.0
 
 ## Y정렬 검사가 "겹쳤다"고 인정하는 최소 픽셀 수 — 이보다 적으면 검사가 헛돈 것이다.
 const SORT_MIN_PIXELS := 100
@@ -112,8 +122,8 @@ func _initialize() -> void:
 		_check_drawn_after_drop,
 	]
 	# 11) 앞뒤(Y) 정렬 — 위에 놓으면 플레이어 뒤, 아래에 놓으면 플레이어 앞
-	_steps.append_array(_sort_steps(-SORT_OFFSET, false, "71_ground_behind"))
-	_steps.append_array(_sort_steps(SORT_OFFSET, true, "72_ground_front"))
+	_steps.append_array(_sort_steps(-SORT_OFFSET_BEHIND, false, "71_ground_behind"))
+	_steps.append_array(_sort_steps(SORT_OFFSET_FRONT, true, "72_ground_front"))
 	_steps.append_array([
 		# 12) 버린 자리에 서 있는 동안은 안 주워진다
 		_move_item_onto_player,
@@ -560,7 +570,10 @@ func _check_sort_order(item_in_front: bool, offset_y: float) -> void:
 			if not _same(both.get_pixelv(at), winner):
 				wrong += 1
 	if contested < SORT_MIN_PIXELS:
-		_fails.append("Y정렬 검사가 헛돌았다 — 겹친 픽셀이 %d px 뿐이다" % contested)
+		# **어느 쪽이 굶었는지 같이 적는다** — 위/아래는 겹치는 양이 딴판이라
+		# (위 상수 참고) 숫자만으로는 어느 값을 손봐야 하는지 알 수 없다.
+		_fails.append("Y정렬 검사가 헛돌았다 — %s 로 %.1f px 옮겼는데 겹친 픽셀이 %d px 뿐이다"
+				% ["아래(앞)" if offset_y > 0.0 else "위(뒤)", absf(offset_y), contested])
 		return
 	if wrong > 0:
 		_fails.append("Y정렬이 어긋났다 — 겹친 %d px 중 %d px 에서 %s 가 안 이겼다"
