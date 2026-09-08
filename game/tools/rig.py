@@ -122,6 +122,18 @@ PARTS = [
 Z_ORDER = ["legL_upper", "legL_lower", "legR_upper", "legR_lower",
            "torso", "armL_upper", "armL_lower", "armR_upper", "armR_lower", "head"]
 
+## 도구는 **부품 하나다 — 아래팔의 자식** (2026-09-08, INBOX #66 (2)).
+## 손 좌표에 얹고 끝내면 팔이 도는 동안 도끼가 제자리에 뜬 채로 남는다. 사슬에
+## 매달아두면 `compose()` 가 팔 변환을 그대로 물려주므로 **자루가 팔과 따로 놀 수가
+## 없다** — 새로 쓴 코드가 아니라 이미 있는 규칙(자식은 부모를 물려받는다)이다.
+TOOL_PART = ("tool", None, "armR_lower", "handR", None)
+
+## **뒷모습에서는 도구가 몸 뒤로 간다** (INBOX #66 (3)). 뒤에서 본 사람이 앞으로 든
+## 도구는 몸에 가려야 자연스럽다. 그렇다고 통째로 숨기지는 않는다 — 손이 몸 밖에
+## 있어서 자루와 머리는 어깨 옆·위로 그대로 보인다(`DESIGN.md` 「새 도구를 추가하는
+## 절차」 5: *"뒷모습에서 도구가 몸에 완전히 가려지면 무엇을 들었는지 알 수 없다"*).
+TOOL_BEHIND = ("up",)
+
 
 def _seg_dist(px, py, a, b):
     """점에서 선분까지의 거리."""
@@ -196,7 +208,21 @@ def _apply(img, M):
                          tuple(Mi[0]) + tuple(Mi[1]), resample=Image.NEAREST)
 
 
-def compose(layers, J, xf):
+def _chain(layers, behind=False):
+    """이번 장에 그릴 부품들의 (부모·축) 표와 그리는 순서.
+
+    `layers` 에 `tool` 이 있으면 **아래팔의 자식**으로 사슬에 끼운다(`TOOL_PART`).
+    `behind` 면 맨 뒤에 그린다 — 뒷모습에서 도구가 몸에 가리는 자리다.
+    """
+    parts = list(PARTS)
+    order = list(Z_ORDER)
+    if "tool" in layers:
+        parts.append(TOOL_PART)
+        order = ["tool"] + order if behind else order + ["tool"]
+    return {n: (par, piv) for n, _, par, piv, _ in parts}, order
+
+
+def compose(layers, J, xf, behind=False):
     """부품 변환 → 한 장.
 
     `xf` 는 `{부품이름: {"rot":도, "scale":배, "dy":px, "dx":px}}`.
@@ -211,8 +237,8 @@ def compose(layers, J, xf):
     """
     size = next(iter(layers.values())).size
     out = Image.new('RGBA', size, (0, 0, 0, 0))
-    meta = {n: (par, piv) for n, _, par, piv, _ in PARTS}
-    for name in Z_ORDER:
+    meta, order = _chain(layers, behind)
+    for name in order:
         chain = []
         n = name
         while n is not None:
@@ -337,11 +363,23 @@ NO_USE = ["fishing_rod"]
 SWING = [-1.0, -0.5, 0.3, 1.0, 0.55, -0.25]
 
 
-def hold_front(raise_=26.0, elbow=30.0, grow=0.06):
-    """도구를 든 자세 (정면·뒷모습). **오른팔만 든다** — 도구는 오른손에 쥔다.
-    정면에서 「앞으로 든다」는 화면에서 **위로 조금 · 크게**다(원근 축약)."""
-    return {"armR_upper": {"dy": -raise_, "scale": 1 + grow},
-            "armR_lower": {"dy": -elbow,  "scale": 1 + grow}}
+## 도구를 든 팔 (정면·뒷모습). **여기만 정면에서도 회전을 쓴다.**
+## 정면 걷기가 회전을 금지하는 것은 「깊이 축의 흔들림을 회전으로 그리면
+## 팔벌려뛰기가 된다」는 이유인데, 도구를 든 자세는 깊이가 아니라 **화면 안에서
+## 실제로 어깨를 벌리고 팔꿈치를 접는 것**이다. 그리고 접지 않으면 안 된다
+## (2026-09-08, INBOX #66 실측): 팔을 곧게 내린 채로는 자루가 팔뚝과 **같은 선 위에
+## 서서** 팔을 통째로 덮는다 — 손이 어디인지 안 보이니 「쥐고 있다」가 아니라
+## 「팔에 판자를 붙였다」로 읽힌다. 팔꿈치를 접으면 팔과 자루가 손에서 갈라지는
+## **V 자**가 되고, 그 갈라짐이 곧 손이다. (옛 17px 생성기가 `reach` 로 손만
+## 한 칸 밀면 됐던 것은 거기서 손이 1px 짜리 점이었기 때문이다 —
+## `docs/STYLE_GUIDE.md` 「도구를 든 손은 몸에서 한 칸 바깥으로 내보낸다」.)
+HOLD_OUT, HOLD_ELBOW, HOLD_RAISE, HOLD_GROW = 10.0, 34.0, 18.0, 0.05
+
+
+def hold_front():
+    """도구를 든 자세 (정면·뒷모습). **오른팔만 든다** — 도구는 오른손에 쥔다."""
+    return {"armR_upper": {"rot": HOLD_OUT, "dy": -HOLD_RAISE, "scale": 1 + HOLD_GROW},
+            "armR_lower": {"rot": HOLD_ELBOW, "scale": 1 + HOLD_GROW}}
 
 
 def hold_side(shoulder=-32.0, elbow=-24.0):
@@ -350,17 +388,77 @@ def hold_side(shoulder=-32.0, elbow=-24.0):
             "armL_upper": {"rot": shoulder*0.35}}
 
 
-def use_front(swing=34.0, elbow=40.0, grow=0.10):
-    """휘두르기 (정면·뒷모습). 들어올렸다 내려친다 — 화면에서는 위아래 + 크기다."""
-    return [{"armR_upper": {"dy": swing*s,  "scale": 1 + grow*(-s)},
-             "armR_lower": {"dy": elbow*s,  "scale": 1 + grow*(-s)},
-             "armL_upper": {"dy": swing*s*0.3}} for s in SWING]
+## 휘두르기는 **`hold` 자세에서 출발한다** (2026-09-08, INBOX #66). 전에는 두 자세가
+## 서로 모르는 값이라 `hold` → `use` 로 넘어가는 순간 팔이 튀었다 — `DESIGN.md`
+## 「캐릭터 애니메이션」의 *"idle 에서 사용 모션으로 바뀔 때 자세가 갑자기 다른
+## 캐릭터처럼 변하면 안 된다"* 가 도구 쪽에서 같은 말을 한다. `s = 0` 이 곧 `hold` 다.
+## **「쓴다」는 도구마다 다르다** — `DESIGN.md` 「캐릭터 애니메이션」이 도구를 붙일
+## 때마다 적어둔 것이고, 자세(`hold`)가 도구를 안 가리는 것과는 다른 자리다.
+## 값은 **(자루가 도는 양 ÷ 기본, 손이 뒤로 밀리는 px)** 이고, 없으면 (1.0, 0) = 내리찍기다.
+##   · 총 — **되튐이지 휘두르기가 아니다**(INBOX #28): *"`hold` 자세에서 뒤로 밀렸다
+##     돌아올 뿐"* 이고 **돌지 않는다.** 돌리면 총구가 땅을 보고(탑다운에 「위로 튀는」
+##     반동은 없다), 앞으로도 나가게 두면 노를 젓는 것처럼 보인다.
+##   · 물뿌리개 — **붓기**(INBOX #30). 통을 기울이는 것뿐이라 각이 작다.
+USE_STYLE = {"gun": (0.0, 26.0), "watering_can": (0.62, 0.0)}
 
 
-def use_side(shoulder=62.0, elbow=38.0):
-    """휘두르기 (옆모습). 어깨를 크게 돌린다 — 도끼질이 안 보이면 패는 게 아니다."""
-    return [{"armR_upper": {"rot": shoulder*s}, "armR_lower": {"rot": max(0.0, elbow*s)},
-             "armL_upper": {"rot": shoulder*s*0.3}} for s in SWING]
+def _strike(s, wind=0.15):
+    """휘두르기의 진행도 — **`hold` 에서 시작해 한쪽으로만 간다** (0 → 1).
+
+    도끼·괭이는 「든 자세」가 곧 들어올린 자세다. `hold` 를 가운데 두고 위아래로
+    왕복하면 **위로 더 들 자리가 없어서**(칸 위 테두리) 진폭을 못 키우고, `hold` →
+    `use` 로 넘어가는 순간 자세가 튄다. 총의 되튐(`swing_bias`)과 같은 모양이다.
+    `wind` 만큼만 반대로 먼저 간다 — 그게 없으면 내려치기에 반동이 없어 보인다.
+    """
+    t = (s + 1.0) * 0.5
+    return (1.0 + wind) * t - wind
+
+
+def use_front(name=None, swing=34.0, elbow=26.0, grow=0.09, tool=66.0):
+    """휘두르기 (정면·뒷모습). 들어올렸다 내려친다 — 화면에서는 위아래 + 크기다.
+
+    **도구만은 여기서도 돈다**(`tool`). 팔을 회전으로 흔들면 팔벌려뛰기가 되지만
+    (위 `compose`), 도끼가 위아래로 평행이동만 하면 **패는 게 아니라 승강기**다 —
+    손목은 실제로 돌고, 도구는 그 손목에 매달린 막대라 각도가 곧 동작이다.
+    팔 회전과 달리 이건 어깨선을 건드리지 않는다.
+    """
+    turn, back = USE_STYLE.get(name, (1.0, 0.0))
+    out = []
+    for s in SWING:
+        k = _strike(s)
+        out.append({"armR_upper": {"rot": HOLD_OUT, "dy": -HOLD_RAISE + swing*turn*k,
+                                   "scale": 1 + HOLD_GROW - grow*turn*k},
+                    "armR_lower": {"rot": HOLD_ELBOW - elbow*turn*k,
+                                   "dx": -back*k,
+                                   "scale": 1 + HOLD_GROW - grow*turn*k},
+                    "armL_upper": {"dy": swing*turn*k*0.3},
+                    "tool": {"rot": -tool*turn*k}})
+    return out
+
+
+def use_side(name=None, shoulder=26.0, elbow=14.0, tool=104.0):
+    """휘두르기 (옆모습). **크게 도는 것은 어깨가 아니라 도구다.**
+
+    옆에서 본 도끼질에서 화면을 가로지르는 것은 **날이 그리는 호**이지 어깨가 아니다 —
+    사람의 어깨는 그렇게 못 돈다(뒤로 들어올리려면 회전이 120도를 넘어야 하고, 그
+    각도에서는 소매가 어깨에서 떨어져 나간다). 어깨는 조금 돌리고 손목 = 도구를 크게
+    돌리면 날이 **머리 뒤에서 발 앞까지** 큰 호를 그린다. 정면(`use_front`)이 도구를
+    따로 돌리는 것과 같은 자리다.
+
+    **도는 쪽이 정면과 반대다**(`+tool*s`). 옆모습은 그림이 좌우로 뒤집혀 있어서
+    날이 화면 왼쪽 위를 보는데, 회전은 뒤집히지 않은 캔버스에서 돌기 때문이다.
+    """
+    h = hold_side()
+    turn, back = USE_STYLE.get(name, (1.0, 0.0))
+    out = []
+    for s in SWING:
+        k = _strike(s)
+        out.append({"armR_upper": {"rot": h["armR_upper"]["rot"] + shoulder*turn*k},
+                    "armR_lower": {"rot": h["armR_lower"]["rot"] + elbow*turn*k,
+                                   "dx": back*k},
+                    "armL_upper": {"rot": h["armL_upper"]["rot"] + shoulder*turn*k*0.3},
+                    "tool": {"rot": tool*turn*k}})
+    return out
 
 
 def _merge(a, b):
@@ -375,33 +473,157 @@ def hold(front=True):
     return [hold_front() if front else hold_side()]
 
 
-def use(front=True):
-    return use_front() if front else use_side()
+def use(front=True, name=None):
+    """`name` 은 도구 이름 — 「쓴다」가 도구마다 다르다(`USE_STYLE`)."""
+    return use_front(name) if front else use_side(name)
 
 
 def walk_tool(front=True):
-    """도구를 든 채 걷기 — 걷기에 「든 팔」을 덮는다."""
+    """도구를 든 채 걷기 — 걷기에 「든 팔」을 덮는다.
+
+    **덮는 것이지 겹치는 것이 아니다.** 걷기가 그 팔에 준 값을 통째로 버리고 `hold`
+    자세를 놓는다 — 키마다 덮으면 `hold` 에 없는 키(`dy`)만 살아남아 **도구가 걸음마다
+    위아래로 흔들린다.** 도구는 머리 옆·위까지 올라오는 물건이라 그 흔들림이 그대로
+    「머리가 움직인다」가 된다(2026-09-08, INBOX #66 — 실측 낫 18.8%, 상한 8%).
+    """
     base = walk_front() if front else walk_side()
     h = hold_front() if front else hold_side()
-    return [_merge(f, h) for f in base]
+    return [_merge({k: v for k, v in f.items() if not k.startswith("armR")}, h)
+            for f in base]
 
 
-def hand_point(J, xf, side="R"):
-    """도구 그림을 얹을 자리 — 변환을 다 거친 뒤의 손 좌표(1024px 원본 기준).
+# ── 도구 그림 ───────────────────────────────────────────────────────────────
+## **도구 7종을 새로 그리지 않는다 — `gen_character.py` 것을 더 큰 격자에 찍는다**
+## (2026-09-08, INBOX #66 (1)). 원시 도형·램프·광원·자루 각도가 전부 거기 있고,
+## **손 · 인벤토리 칸 · 바닥의 도끼가 같은 도끼여야 한다**(`docs/STYLE_GUIDE.md`
+## 「같은 도구가 사는 자리는 이제 셋이다」). 형태를 여기서 다시 정의하면 그 셋이
+## 갈린다 — 바꾸는 것은 **칸 크기 하나뿐**이고, 그건 `canvas(n, unit)` 이 이미 하는
+## 일이다(*"같은 그림을 더 촘촘한 격자에 찍는다"*).
+##
+## **줄이는 것은 맨 마지막 한 번뿐이다.** 도구를 96px 도트로 먼저 구워서 손에 붙이면
+## 팔 각도만큼 돌리는 순간 뭉갠다(`docs/CHARACTER.md` 「자르고 → 돌리고 → 맨 마지막에
+## 줄인다」). 그래서 여기서 굽는 것은 **리그 공간(1024px) 해상도**이고, 도트는
+## `bake_rows` 의 축소 한 번에서만 생긴다.
+TOOL_UNIT = 4.4     # 도구 설계 단위 하나가 **캐릭터 칸(96px)에서 몇 px** 인가.
+## 17px 캐릭터가 쥐던 도끼는 설계 단위 하나가 1px 이었다(칸의 1/17). 96px 칸에서
+## 같은 비를 지키면 5.65 인데, 그 값이면 총(가로 8.15단위)이 칸 폭을 넘고 도끼머리가
+## 머리 위로 올라간다 — **칸 밖으로 나가면 외곽선이 잘린다**(`qa_character_sheets.py`
+## 의 「잘림」이 잡는다). 4.4 면 도끼가 21 × 28 · 총이 42 × 12 라 일곱 도구가 전부
+## **몸 중심에서 좌우 47px · 위아래 94px** 안에 들어간다.
+TOOL_BOX = 15.0     # 도구를 그릴 설계 공간 한 변 (일곱 도구가 다 들어가는 크기)
+TOOL_SS = 6         # 슈퍼샘플 — **칸이 크면 낮춘다**(`gen_objects.py` 와 같은 이유).
+## 재는 것은 캔버스 크기가 아니라 출력 픽셀당 샘플 수다: 36 샘플로 구운 리그 px 가
+## 마지막 축소에서 다시 25:1 로 평균나므로, 도트 하나는 900 샘플에서 나온다.
 
-    아직 쓰이지 않는다(도구 그림이 96px 판으로 없다). **도구 그림이 생기면**
-    여기서 받은 좌표에 얹고 나서 `bake_rows` 로 넘기면 손에 쥔 것이 된다.
+_TOOL_CACHE = {}
+
+
+def gen_tools():
+    """도구 7종의 설정(`gen_character.TOOLS`). 이름 목록인 `rig.TOOLS` 와 다르다."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_character as gen
+    return gen.TOOLS
+
+
+def tool_sprite(name, angle, sx=1.0, per_cell=5.0):
+    """도구 한 자루 → (RGBA, 그림 안의 손 자리). **리그 공간 해상도**로 굽는다.
+
+    `angle` 은 자루가 가리키는 각도(도), `sx` -1 이면 좌우가 뒤집힌다 —
+    `gen_character.draw_tool()` 의 규약 그대로다. `per_cell` 은 **리그 px ÷ 칸 px**
+    (약 5)로, 이 값이 곧 "도구를 얼마나 촘촘히 찍을 것인가"다.
+
+    **외곽선(`outline`)을 두르지 않는다.** 잉크는 `bake_rows` 뒤의 `add_ink()` 가
+    합쳐진 실루엣에 한 번 두른다 — 여기서 미리 두르면 도구와 몸이 겹치는 자리에
+    잉크가 끼어 도구가 몸에 붙인 스티커로 보인다(옛 생성기도 도구를 몸과 **같은
+    Build 에** 그려서 외곽선을 마지막에 한 번만 둘렀다).
     """
-    meta = {n: (par, piv) for n, _, par, piv, _ in PARTS}
+    key = (name, round(angle, 3), sx, round(per_cell, 4))
+    if key in _TOOL_CACHE:
+        return _TOOL_CACHE[key]
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_character as gen
+    unit = TOOL_UNIT * per_cell               # 설계 단위 하나 = 리그 px
+    n = int(round(TOOL_BOX * unit))
+    grip = (TOOL_BOX * 0.5, TOOL_BOX * 0.5)
+    keep_ss = gen.SS
+    gen.SS = TOOL_SS
+    try:
+        with gen.canvas(n, unit):
+            b = gen.Build()
+            gen.draw_tool(b, grip[0], grip[1], angle, sx, gen.TOOLS[name], lift=0.0)
+            lum = gen.light(b.hgt, b.mat, key=gen.CFG["key"], amb=gen.CFG["amb"],
+                            rim=gen.CFG["rim"])
+            m, l = gen.downsample(b.mat, lum)
+            pm = gen.downsample_part(b.part)
+            rgba = gen.inner_lines(gen.quantize(m, l, gen.palette(), 0.0), m, pm,
+                                   gen.palette())
+    finally:
+        gen.SS = keep_ss
+    out = (rgba, (grip[0] * unit, grip[1] * unit))
+    _TOOL_CACHE[key] = out
+    return out
+
+
+def tool_layer(name, angle, J, size, sx=1.0, per_cell=5.0, side="R"):
+    """도구 그림을 **손 관절 위에** 얹은 리그 크기 레이어.
+
+    자세는 안 준다 — 팔이 도는 것은 `compose()` 가 사슬로 물려준다. 여기서 하는
+    일은 "쉬는 자세의 손에 쥐여주는 것"뿐이다.
+    """
+    art, grip = tool_sprite(name, angle, sx, per_cell)
+    lay = np.zeros((size[1], size[0], 4), np.uint8)
+    hx, hy = J["hand%s" % side]
+    x0 = int(round(hx - grip[0]))
+    y0 = int(round(hy - grip[1]))
+    h, w = art.shape[:2]
+    sx0, sy0 = max(0, x0), max(0, y0)
+    sx1, sy1 = min(size[0], x0 + w), min(size[1], y0 + h)
+    if sx1 > sx0 and sy1 > sy0:
+        lay[sy0:sy1, sx0:sx1] = art[sy0-y0:sy1-y0, sx0-x0:sx1-x0]
+    return Image.fromarray(lay, 'RGBA')
+
+
+## 자루가 화면에서 **실제로** 몇 도로 서 있을 것인가. 도구 설정의 `hold` 가 그 값이고
+## (`gen_character.py` 의 도구마다 있다 — 도끼 80도 · 총 4도 · 물뿌리개 -86도),
+## 여기 표는 방향마다 거기서 얼마나 더 눕힐 것인가다.
+##
+## **옆모습만 더 눕힌다.** 옆모습은 팔을 앞으로 들어 손이 얼굴 앞에 오는데, 거기서
+## 자루를 세우면 **자루가 얼굴을 가로지른다**(낚싯대가 실제로 그랬다 — 옛 생성기가
+## `swing_fwd` 로 겪은 *"자루가 눈을 덮는다"* 와 같은 자리다).
+TOOL_LEAN = {"down": 0.0, "up": 0.0, "left": -16.0}
+
+
+def tool_draw_angle(kit, direction, pose, sx=1.0):
+    """`tool_sprite` 에 넘길 자루 각도 — **팔이 이미 돌아 있는 만큼을 빼둔다.**
+
+    도구는 아래팔의 자식이라 `hold` 자세의 어깨·팔꿈치 회전을 그대로 물려받는다.
+    그림을 그 각도 그대로 그리면 자루가 그만큼 더 누워버리므로, 물려받을 양을
+    미리 빼고 그린다 — 그러면 **어떤 방향에서도 자루가 `hold` 각도로 선다.**
+
+    **좌우를 뒤집으면 회전의 방향도 뒤집힌다**(`sx`). `draw_tool` 의 `sx=-1` 은 그림을
+    거울에 비추는 것이라 화면 각도가 `180 - a` 가 되는데, 팔 회전은 거울과 무관하게
+    캔버스 좌표에서 돈다 — 그래서 뺄 것이 더할 것이 된다. 부호를 안 뒤집으면 옆모습에서
+    자루가 **가슴을 가로지르는 가로 막대**가 된다(실제로 그렇게 나왔다).
+    """
+    arm = sum((pose.get(p) or {}).get("rot", 0.0)
+              for p in ("armR_upper", "armR_lower"))
+    return kit["hold"] + TOOL_LEAN[direction] - sx*arm
+def hand_point(J, xf, side="R"):
+    """변환을 다 거친 뒤의 손 좌표(1024px 원본 기준).
+
+    **도구를 얹는 데는 이제 안 쓴다** — 도구는 `TOOL_PART` 로 사슬에 매달려
+    `compose()` 가 같은 변환을 물려주므로, 좌표를 밖에서 다시 계산할 필요가 없다
+    (2026-09-08, INBOX #66). 손이 어디로 가는지 **재보는** 자리로 남긴다.
+    """
+    meta, _ = _chain({})
     name = "arm%s_lower" % side
     chain = []
     n = name
     while n is not None:
         par, piv = meta[n]
         chain.append((n, piv)); n = par
-    chain.reverse()
     M = np.eye(3)
-    for nm, piv in chain:
+    for nm, piv in chain:                     # `compose()` 와 **같은 순서**여야 한다
         t = xf.get(nm) or {}
         M = _mat(J[piv], t.get("rot", 0.0), t.get("scale", 1.0),
                  t.get("dy", 0.0), t.get("dx", 0.0)) @ M
@@ -410,7 +632,7 @@ def hand_point(J, xf, side="R"):
     return (float(q[0]), float(q[1]))
 
 
-def bake_rows(rows, layers, J, cell=96):
+def bake_rows(rows, layers, J, cell=96, behind=False):
     """방향별 자세 목록 → 방향별 칸 목록.
 
     **시트 한 장의 모든 칸이 같은 테두리와 같은 팔레트를 쓴다.**
@@ -418,18 +640,29 @@ def bake_rows(rows, layers, J, cell=96):
         들썩이고, 방향마다 크기가 달라진다.
       - 같은 팔레트: 프레임마다 색을 따로 줄이면 팔레트가 미세하게 달라져 **모든
         픽셀이 조금씩 변한다** — 그건 걷기가 아니라 깜빡임이다(실측 56%).
+
+    **테두리의 세로는 도구를 빼고 잰다** (2026-09-08, INBOX #66). 도구를 넣고 재면
+    도끼를 들었다는 이유로 테두리가 높아져 **캐릭터가 그만큼 작아진다** — 시트마다
+    사람 크기가 달라지는 것은 `DESIGN.md` 「캐릭터 애니메이션」이 못 박아 금지한
+    것이다(*"서로 다른 생성 호출로 만든 프레임끼리 캐릭터가 차지하는 크기가 달라지면
+    안 된다"*). 가로는 **몸 중심을 축으로 좌우 같은 만큼** 넓혀서 도구를 담는다 —
+    한쪽만 넓히면 칸 안에서 캐릭터가 옆으로 밀려 발밑이 노드 원점에서 벗어난다.
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from gen_player import downscale
     flat = [x for r in rows for x in r]
-    bigs = [compose(layers, J, a) for a in flat]
+    bigs = [compose(layers, J, a, behind) for a in flat]
+    body = {k: v for k, v in layers.items() if k != "tool"}
+    bodies = bigs if len(body) == len(layers) \
+        else [compose(body, J, a) for a in flat]
     # **발을 땅에 맞춘다 — 밀지 말고 넘친 것을 자른다.**
     # 프레임을 통째로 밀면 96px 로 줄일 때 그 밀린 양(1024px 에서 몇 px)이 위쪽 한 줄의
     # 커버리지를 뒤집어서 **머리가 1px 흔들린다**(실측: 옆모습 걷기에서 아랫줄 편차가
     # 5px 이었고, 그 탓에 변화의 14%가 머리에 있었다). 제일 높은 아랫줄에 맞춰 그
     # 아래를 잘라내면 머리는 한 픽셀도 안 움직인다 — 잘려나가는 것은 흔드는 발의
     # 신발 끝 몇 px 뿐이라 96px 에서는 보이지 않는다.
-    bots = [int(np.flatnonzero((np.asarray(b)[..., 3] > 0).sum(1) > 0).max()) for b in bigs]
+    # **발은 몸으로 맞춘다** — 매달린 도구(물뿌리개)가 바닥을 정하면 안 된다.
+    bots = [int(np.flatnonzero((np.asarray(b)[..., 3] > 0).sum(1) > 0).max()) for b in bodies]
     floor = min(bots)
     clipped = []
     for b in bigs:
@@ -441,8 +674,19 @@ def bake_rows(rows, layers, J, cell=96):
     union = keeps[0].copy()
     for k in keeps[1:]:
         union |= k
+    body_union = union
+    if bodies is not bigs:
+        body_union = np.zeros_like(union)
+        for b in bodies:
+            a = np.asarray(b)[..., 3] > 0
+            a[floor + 1:] = False
+            body_union |= a
+    bys, bxs = np.where(body_union)
     ys, xs = np.where(union)
-    box = (int(ys.min()), int(ys.max())+1, int(xs.min()), int(xs.max())+1)
+    W = union.shape[1]
+    cx = (int(bxs.min()) + int(bxs.max()) + 1) * 0.5      # 몸의 좌우 한가운데
+    r = min(max(cx - int(xs.min()), int(xs.max()) + 1 - cx), cx, W - cx)
+    box = (int(bys.min()), int(bys.max())+1, int(round(cx - r)), int(round(cx + r)))
     cells = [downscale(Image.fromarray(np.asarray(b)[..., :3]), k, cell=cell, box=box)
              for b, k in zip(bigs, keeps)]      # **색은 아직 안 줄인다** — 부르는 쪽이 한 번에 한다
     out = []; at = 0
@@ -530,6 +774,13 @@ def build_sheets(src=None, style="farmer", cell=96):
     rigs = load_sheet(src) if (src or SHEET) else load_dirs()
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_dir = os.path.join(here, "assets", "sprites")
+    # **리그 px ÷ 칸 px** — 도구를 얼마나 촘촘히 찍을지 여기서 정한다. 방향마다
+    # 다르다(옆모습이 조금 작다): 몸 하나가 칸의 세로를 다 채우게 굽기 때문이다.
+    per_cell = {}
+    for d, (layers, J) in rigs.items():
+        op = np.asarray(compose(layers, J, {}))[..., 3] > 0
+        ys = np.flatnonzero(op.sum(1) > 0)
+        per_cell[d] = (int(ys.max()) - int(ys.min()) + 1) / float(cell - 2)
     plans = {
         "idle": {"down": idle(), "left": idle(), "up": idle()},
         "walk": {"down": walk_front(), "left": walk_side(), "up": walk_front()},
@@ -541,14 +792,26 @@ def build_sheets(src=None, style="farmer", cell=96):
         plans["walk_%s" % t] = {"down": walk_tool(True), "left": walk_tool(False),
                                 "up": walk_tool(True)}
         if t not in NO_USE:
-            plans["use_%s" % t] = {"down": use(True), "left": use(False), "up": use(True)}
+            plans["use_%s" % t] = {"down": use(True, t), "left": use(False, t),
+                                   "up": use(True, t)}
     for motion, per_dir in plans.items():
         # **방향마다 원본이 다르므로 따로 굽는다.** 그래도 크기는 맞아야 하니
         # 칸 안에서 발밑이 아랫줄에 오게 굽는 규칙(`bake_rows`)이 그대로 맞춰준다.
+        tool = motion.split("_", 1)[1] if "_" in motion else None
         baked = {}
         for d, frames in per_dir.items():
             layers, J = rigs[d]
-            baked[d] = bake_rows([frames], layers, J, cell)[0]
+            if tool:
+                # **자루 각도는 방향마다 다르다** — 팔이 이미 돌아 있는 만큼을 뺀다.
+                sx = -1.0 if d == "left" else 1.0
+                angle = tool_draw_angle(gen_tools()[tool], d,
+                                        hold_side() if d == "left" else hold_front(), sx)
+                layers = dict(layers)
+                layers["tool"] = tool_layer(
+                    tool, angle, J, next(iter(layers.values())).size,
+                    sx=sx, per_cell=per_cell[d])
+            baked[d] = bake_rows([frames], layers, J, cell,
+                                 behind=(tool is not None and d in TOOL_BEHIND))[0]
         # **정면의 팔레트를 네 방향에 씌운다** — 방향마다 그림을 따로 뽑아서 옷 색이
         # 조금씩 다른데(뒷모습이 청바지가 되는 식), 이렇게 하면 색이 맞는다.
         from gen_player import quantize_all

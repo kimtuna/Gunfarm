@@ -14,6 +14,8 @@
 무엇을 보는가 (전부 `docs/CHARACTER.md` 「합격 기준」의 항목이다):
   규격      칸이 정사각이고 행이 4개(방향)인가 / 칸 크기가 시트마다 같은가
   알파      반투명 픽셀이 없는가 (도트는 알파 0 아니면 255)
+  잘림      칸 테두리에 **잉크가 아닌 픽셀**이 닿지 않았는가 — 닿으면 그림이 칸을
+            넘어 외곽선이 끊긴 것이다 (도구가 생기면서 필요해졌다, INBOX #66)
   발밑      한 줄(방향) 안의 모든 프레임에서 실루엣 아랫줄이 같은가
             — 다르면 캐릭터가 걸으며 들썩인다
   머리      프레임 사이 변화 중 **위 30%** 에서 일어난 비율. 걷기에서 머리는 움직이면
@@ -90,6 +92,31 @@ def neck_row(op):
     return lo + int(np.argmin(w[lo:hi]))  # 잘록한 데가 없으면 예전대로 최솟값
 
 
+def clipped(c):
+    """칸 테두리에 **잉크가 아닌 픽셀**이 닿은 수 = 그림이 칸을 넘어 잘렸다.
+
+    도구가 생기면서 필요해졌다(2026-09-08, INBOX #66) — 낫처럼 위로 넓은 날이나
+    총처럼 가로로 긴 도구는 **손 위치가 조금만 밖으로 나가도 칸을 넘는다.** 넘으면
+    그 자리에서 외곽선이 끊겨 도구가 잘린 것으로 보인다.
+
+    **잉크색을 상수로 적지 않는다**(`docs/CHARACTER.md` 8절) — 팔레트가 ComfyUI
+    그림에서 나오므로 적어두면 그림을 바꾼 바퀴가 반드시 잊는다. 실루엣 테두리에서
+    가장 많이 쓰인 색을 잉크로 삼는다. 테두리 한 줄은 원래 잉크가 차지하는 자리라
+    (`gen_player.add_ink`) 잉크는 닿아도 된다.
+    """
+    op = c[..., 3] > 0
+    if not op.any():
+        return 0
+    pad = np.pad(op, 1)
+    rim = op & ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
+    cols, cnt = np.unique(c[rim][:, :3], axis=0, return_counts=True)
+    ink = cols[cnt.argmax()].astype(int)
+    edge = np.zeros(op.shape, bool)
+    edge[0] = edge[-1] = True
+    edge[:, 0] = edge[:, -1] = True
+    return int((op & edge & (np.abs(c[..., :3].astype(int) - ink).max(2) > 10)).sum())
+
+
 def change(p, q):
     dp, dq = body(p), body(q)
     diff = (dp != dq) | ((dp & dq) &
@@ -97,7 +124,32 @@ def change(p, q):
     return diff.sum() / max(1, (dp | dq).sum())
 
 
-def check(path, fails):
+def head_bands(paths):
+    """방향마다 「머리」 띠(윗줄 ~ 목) — **맨손 idle 시트에서 잰다.**
+
+    시트마다 제 첫 프레임에서 재면 **도구가 목을 옮긴다**(2026-09-08, INBOX #66).
+    낫이나 낚싯대는 날 끝이 머리 위로 나가서 `top` 을 끌어올리고, 자루가 어깨 옆에
+    서서 폭 곡선의 골짜기를 지운다 — 그러면 띠가 어깨·팔까지 삼켜서 **팔만 흔들어도
+    "머리가 움직인다"로 잡힌다**(낫 17.0%). 머리가 어디까지인지는 **사람의 성질**이지
+    무엇을 들었느냐가 아니고, 모든 시트가 같은 테두리로 구워지므로(`rig.bake_rows`)
+    맨손 idle 에서 한 번 재면 22장에 그대로 쓸 수 있다.
+    """
+    idle = [p for p in paths if os.path.basename(p).startswith("player_idle_")]
+    if not idle:
+        return {}
+    _, _, rows = cells(idle[0])
+    out = {}
+    for r, frames in enumerate(rows):
+        op = body(frames[0])
+        ys = np.flatnonzero(op.sum(1) > 0)
+        top, bot = int(ys.min()), int(ys.max())
+        nk = neck_row(op)
+        out[DIRS[r]] = slice(top, nk if nk is not None
+                             else top + int((bot - top + 1) * HEAD_BAND))
+    return out
+
+
+def check(path, fails, bands=None):
     name = os.path.basename(path)
     cell, cols, rows = cells(path)
     if cell != CELL:
@@ -110,6 +162,11 @@ def check(path, fails):
         if alpha - {0, 255}:
             fails.append("%s [%s] 알파 반투명 픽셀이 있다: %s"
                          % (name, d, sorted(alpha - {0, 255})[:4]))
+        cut = [(i, clipped(f)) for i, f in enumerate(frames)]
+        cut = [(i, n) for i, n in cut if n]
+        if cut:
+            fails.append("%s [%s] 그림이 칸을 넘었다 — 테두리에 닿은 픽셀 %s"
+                         % (name, d, ", ".join("%d번 %dpx" % x for x in cut[:3])))
         bottoms = {int(np.flatnonzero(body(f).sum(1) > 0).max()) for f in frames}
         if len(bottoms) > 1:
             fails.append("%s [%s] 발밑 아랫줄이 프레임마다 다르다: %s"
@@ -131,12 +188,14 @@ def check(path, fails):
                          % (name, d, even, EVEN_MAX))
         if any(name.startswith("player_" + k) for k in HEAD_SKIP):
             continue                      # 팔이 머리 위로 가는 것이 이 모션의 내용이다
-        op = body(frames[0])
-        ys = np.flatnonzero(op.sum(1) > 0)
-        top, bot = int(ys.min()), int(ys.max())
-        nk = neck_row(op)
-        head = slice(top, nk if nk is not None
-                     else top + int((bot - top + 1) * HEAD_BAND))
+        head = (bands or {}).get(d)
+        if head is None:
+            op = body(frames[0])
+            ys = np.flatnonzero(op.sum(1) > 0)
+            top, bot = int(ys.min()), int(ys.max())
+            nk = neck_row(op)
+            head = slice(top, nk if nk is not None
+                         else top + int((bot - top + 1) * HEAD_BAND))
         hd = tot = 0
         for i in range(1, cols):
             dd = (np.abs(frames[i][..., :3].astype(int) - frames[0][..., :3].astype(int)).max(2) > 24) \
@@ -167,8 +226,9 @@ def main():
         print("[qa] FAIL — 검사할 캐릭터 시트가 없다 (%s)" % SPRITES)
         return 1
     fails = []
+    bands = head_bands(paths)
     for p in paths:
-        check(p, fails)
+        check(p, fails, bands)
     for f in fails:
         print("[qa] FAIL — %s" % f)
     print("[qa] 캐릭터 시트 %d장 — %s"
