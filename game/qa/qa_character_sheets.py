@@ -153,8 +153,16 @@ def check(path, fails):
                      % (name, len(union), biggest))
 
 
+## 이 검사가 맡는 파일. **`qa_sprite_check.py` 가 폴더를 훑을 때 이 목록을 그대로
+## 불러다 건너뛴다**(2026-09-08, INBOX #58) — 두 곳에 패턴을 따로 적어두면, 여기
+## 패턴에 안 걸리는 캐릭터 시트(예: 머리모양이 늘어 `player_idle_ponytail.png`)가
+## 생겼을 때 양쪽에서 동시에 빠져 **아무도 안 보는 PNG** 가 된다.
+def sheet_paths():
+    return sorted(glob.glob(os.path.join(SPRITES, "player_*_farmer.png")))
+
+
 def main():
-    paths = sorted(glob.glob(os.path.join(SPRITES, "player_*_farmer.png")))
+    paths = sheet_paths()
     if not paths:
         print("[qa] FAIL — 검사할 캐릭터 시트가 없다 (%s)" % SPRITES)
         return 1

@@ -11,6 +11,13 @@
 시트는 두 갈래다 — **캐릭터 시트**(칸 = 방향×프레임, 배경 투명)와 **지형 타일
 시트**(칸 = 지형 배치, 배경 없음). 스펙의 `kind` 가 어느 검사를 돌릴지 정한다.
 
+**지금 이 스크립트가 실제로 보는 것은 지형 · 아이템 아이콘 · 바닥 그림 · 상자다**
+(2026-09-08, INBOX #58). **캐릭터 시트는 `qa_character_sheets.py` 로 넘어갔다** —
+이 파일의 캐릭터 스펙은 절차 생성기(`gen_character.py`)의 램프를 원본으로 삼는데
+캐릭터가 ComfyUI 그림 + 리그로 바뀌면서 그 원본이 사라졌기 때문이다. 자세한 것은
+아래 `SPECS` 옆과 `docs/CHARACTER.md` 6절. 아래 「캐릭터 시트」 설명은 그 스펙을
+되살릴 때를 위해 남겨둔 것이다.
+
 무엇을 보는가 — 캐릭터 시트 (전부 기계가 판정할 수 있는 것만):
   규격      캔버스 칸 크기 / 행(방향) 수 / 방향 4개의 바운딩박스가 어긋나지 않는지
   알파      반투명 픽셀이 없는지 (도트는 알파 0 아니면 255)
@@ -221,6 +228,12 @@ def _player_spec(**over):
     ), **over)
 
 
+# ── 아래 셋(`_idle_spec` / `_walk_spec` / `_tool_spec`)은 지금 **아무 시트에도
+# 등록돼 있지 않다** (2026-09-08, INBOX #58 — 아래 `SPECS` 옆 설명). 캐릭터가
+# ComfyUI 그림 + 리그로 바뀌면서 이 값들이 전제하던 것(절차 생성기의 램프, 17px/32px
+# 칸)이 없어졌다. **지우지 않고 두는 이유**는 여기 적힌 숫자가 전부 실측이라
+# 그렇다 — 다만 **되살릴 때 그대로 쓰지 말 것.** 지금 캐릭터를 보는 검사는
+# `qa_character_sheets.py` 이고, 기준은 `docs/CHARACTER.md` 「합격 기준」이다.
 def _idle_spec(**over):
     """**32px idle 시트** — 2026-09-08, INBOX #49 에 **참고 자료가 바뀌면서** 다시 잡았다.
 
@@ -388,7 +401,10 @@ def _icon_spec(**over):
 # 캐릭터가 풀밭에 서 있을 때 묻히지 않아야 한다(DESIGN.md 「그래픽 파이프라인」 1).
 TERRAIN_SPEC = dict(
     kind="tile",
-    cell=16,
+    # **칸 크기를 여기 적지 않는다** (2026-09-08, INBOX #58). 한때 `cell=16` 이라고
+    # 박아뒀는데 지형 아트가 48px 이 되면서(`gen_terrain.TILE`) 그 한 줄 때문에
+    # 시트가 「규격」에서 통째로 불합격이었다 — **그림은 멀쩡했고 검사만 안 따라온
+    # 것이다.** 지금은 `check_tiles()` 가 생성기에서 읽는다.
     palette=_terrain_palette,
     # 같은 지형끼리 이어붙였을 때, 타일 경계의 명도차가 안쪽보다 이만큼 넘게
     # 크면 격자가 비치는 것이다.
@@ -448,24 +464,23 @@ SPECS = {"terrain_tiles.png": TERRAIN_SPEC, "death_box.png": _box_spec()}
 for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
     SPECS["ground_%s.png" % _tool] = _ground_spec()
-# **긴머리 idle 만 「채도」를 늦춘다**(2026-09-08, INBOX #49). 기준색 머리가 검정
-# (무채색)이라 머리가 길수록 시트가 탁해지는데, `#49` 로 머리가 캐릭터의 절반이
-# 되면서 그 차이가 다시 벌어졌다 — 실측 short 40 / bob 34 / ponytail 37 / **long 32**.
-# 34px 때 같은 자리에서 같은 완화를 썼다(STYLE_GUIDE 6번 「머리 길이가 다른 시트는
-# 평균명도/어두운비율/채도가 실제로 다르다 — 그 셋만 시트마다 따로 잡는다」).
-# **그 셋 말고는 한 줄도 늦추지 않는다.**
-_IDLE_CHROMA = {"long": 31.0}
 
-for _style in ("short", "bob", "long", "ponytail"):     # gen_character.HAIR_STYLES
-    SPECS["player_idle_%s.png" % _style] = _idle_spec(
-        **({"chroma_mean": _IDLE_CHROMA[_style]} if _style in _IDLE_CHROMA else {}))
-    SPECS["player_walk_%s.png" % _style] = _walk_spec(_style)
-    # 도구별 모션 3종 (DESIGN.md 「새 도구를 추가하는 절차」 4 — 안 넓히면 새 모션은
-    # 아무도 검사하지 않는다). 도구가 늘면 이 줄의 목록만 늘린다.
-    for _tool in TOOL_NAMES:
-        for _motion in _tool_motions(_tool):
-            SPECS["player_%s_%s_%s.png" % (_motion, _tool, _style)] = \
-                _tool_spec(_motion, _tool, _style)
+# **캐릭터 시트(`player_*.png`)는 여기 없다** (2026-09-08, INBOX #58).
+# 이 파일의 캐릭터 스펙은 절차 생성기(`gen_character.py`)가 굽던 17px/32px 시트를
+# 전제로 했고 **팔레트도 그 생성기의 램프를 원본으로 삼았다.** 2026-09-08 에
+# 캐릭터가 ComfyUI 그림 + 리그(`game/tools/rig.py`)로 바뀌면서 시트는 96px 이 됐고
+# 색은 그림에서 나온다 — 되살릴 원본이 없다. `docs/CHARACTER.md` 6절이
+# *"`qa_sprite_check.py` 는 캐릭터 시트를 못 본다"* 고 이미 정해뒀다.
+#
+# **지금 캐릭터 시트를 보는 것은 `qa_character_sheets.py` 다** — 그쪽은 "무슨
+# 색인가"를 묻지 않고 프레임이 애니메이션으로 성립하는지만 본다(규격/알파/발밑/
+# 머리/이어짐/고르게/색맞음). 아래 `main()` 이 그 스크립트가 실제로 맡는 파일만
+# 훑기에서 뺀다 — **패턴을 여기 다시 적지 않는다**(양쪽에서 동시에 빠지는 PNG 가
+# 생긴다).
+#
+# 아이템 아이콘(`item_*.png`)·바닥 그림(`ground_*.png`)·상자(`death_box.png`)는
+# **여전히 옛 생성기가 굽는다** — 그래서 그것들은 그대로 여기 남아 있다
+# (`docs/CHARACTER.md` 8절: "아이템 아이콘과 바닥 그림은 아직 옛 17px/12px 이다").
 
 
 # ── 검사 ──────────────────────────────────────────────────────────────────
@@ -1171,11 +1186,13 @@ def check_tiles(path, spec):
     rep = Report(name)
     gen = spec["palette"]()
     a = np.array(Image.open(path).convert("RGB"), dtype=np.int32)
-    cell = spec["cell"]
+    # **칸 크기는 생성기가 원본이다** (2026-09-08, INBOX #58). 스펙에 손으로 적어두면
+    # 그림을 다시 구운 바퀴가 반드시 잊는다 — 실제로 16 에서 48 로 바뀌는 동안
+    # 여기만 안 따라와서 지형 검사가 첫 줄에서 멈춰 있었다.
+    cell = gen.TILE
     h, w = a.shape[:2]
 
-    want = gen.TILE_ART if hasattr(gen, "TILE_ART") else gen.TILE
-    ok_size = (cell == want and h % cell == 0 and w % cell == 0
+    ok_size = (h % cell == 0 and w % cell == 0
                and (h // cell) * (w // cell) == gen.TILE_COUNT)
     rep.add(ok_size, "규격", "%dx%d 는 %dpx 칸 %d개가 아니다" % (w, h, cell, gen.TILE_COUNT),
             "%dpx × %d칸" % (cell, gen.TILE_COUNT))
@@ -1246,17 +1263,46 @@ def check_tiles(path, spec):
     return rep
 
 
+def _handed_over():
+    """`qa_character_sheets.py` 가 맡는 파일 이름들 (2026-09-08, INBOX #58).
+
+    **패턴을 베껴 적지 않고 그 스크립트에서 불러온다.** 여기에 `player_*` 같은
+    글로브를 다시 적으면, 저쪽 패턴에는 안 걸리는데 이쪽 패턴에는 걸리는 시트가
+    생겼을 때(예: 머리모양이 늘어 `player_idle_ponytail.png`) **양쪽에서 동시에
+    빠져 아무도 안 보는 PNG** 가 된다. 저쪽이 실제로 여는 파일만 넘긴다.
+    """
+    if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import qa_character_sheets
+    return {os.path.basename(p) for p in qa_character_sheets.sheet_paths()}
+
+
 def main(argv):
     # **인자가 없으면 폴더를 훑는다** — SPECS 만 돌면 등록을 잊은 새 PNG 가
     # 조용히 검사에서 빠진다(STYLE_GUIDE 7번 "등록되지 않은 PNG 는 불합격").
     paths = argv[1:] or sorted(os.path.join(SPRITES, n) for n in os.listdir(SPRITES)
                                if n.endswith(".png"))
+    # 캐릭터 시트는 `qa_character_sheets.py` 로 넘어갔다 (위 SPECS 옆 설명).
+    # **건너뛴다는 것을 찍는다** — 조용히 넘어가면 "공짜로 통과한 검사"가 된다.
+    handed = _handed_over()
+    skipped = [p for p in paths if os.path.basename(p) in handed]
+    if skipped:
+        print("skip 캐릭터 시트 %d장 — qa_character_sheets.py 가 본다"
+              " (docs/CHARACTER.md 6절)" % len(skipped))
     failed = False
     for p in paths:
-        spec = SPECS.get(os.path.basename(p))
+        if os.path.basename(p) in handed:
+            continue
+        name = os.path.basename(p)
+        spec = SPECS.get(name)
         if spec is None:
-            print("FAIL %s — 등록된 스펙이 없다 (qa_sprite_check.py 의 SPECS 에 추가할 것)"
-                  % os.path.basename(p))
+            # 캐릭터 시트인데 여기까지 왔다는 것은 **저쪽 패턴에 안 걸렸다**는
+            # 뜻이다 — 이 파일에 스펙을 다시 만들 자리가 아니라, 그쪽이 맡는
+            # 범위를 넓힐 자리다.
+            where = ("qa_character_sheets.py 의 sheet_paths() 가 이 이름을 못 잡는다"
+                     if name.startswith("player_")
+                     else "qa_sprite_check.py 의 SPECS 에 추가할 것")
+            print("FAIL %s — 등록된 스펙이 없다 (%s)" % (name, where))
             failed = True
             continue
         check = check_tiles if spec.get("kind") == "tile" else check_sheet
