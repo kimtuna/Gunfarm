@@ -20,8 +20,13 @@ extends SceneTree
 ##   8) **해안선이 그냥 동그란 원이 아니다** — 노이즈보다 섬 마스크가 세면 시드를 바꿔도
 ##      똑같이 생긴 원형 섬만 나온다. 실제로 한 번 그렇게 됐던 자리라 수치로 막아둔다.
 ##   9) 생성이 충분히 빠르다(입장할 때 눈에 띄게 멈추면 안 된다).
+##  10) **월드 오브젝트(나무·바위·덤불)가 규칙대로 놓인다** (INBOX #63):
+##      바다 위에 없고, 물가(이웃 8칸에 바다가 있는 칸)에 없고, 스폰 둘레를 안 막고,
+##      같은 시드면 같은 자리에 같은 종류가 나고, 밀도가 기록해둔 범위 안이다.
+##      그림 시트가 실제로 있고 칸 크기가 `world_objects.gd` 의 표와 맞는지도 본다.
 
 const WorldGen := preload("res://scripts/world_gen.gd")
+const WorldObjects := preload("res://scripts/world_objects.gd")
 
 ## 실행 사이에 같은 결과가 나오는지 비교하려고 남기는 지문 파일.
 const FINGERPRINT_PATH := "user://qa_world_fingerprints.json"
@@ -42,6 +47,15 @@ const COAST_VS_CIRCLE_MIN := 1.60
 ## 땅이 지도 테두리에서 최소한 이만큼은 떨어져 있어야 한다(칸). 실측 11~12.
 const OCEAN_MARGIN_MIN := 6
 
+## 오브젝트가 땅 칸에서 차지하는 비율. **아래가 있는 이유**가 위만큼 중요하다 —
+## 화면에 크기를 견줄 것이 없으면 캐릭터가 거인처럼 보인다(docs/DESIGN.md
+## 「카메라 / 해상도」). 2026-09-08 실측: 시드 10개에서 23.1~24.4%.
+const OBJECT_SHARE_MIN := 0.15
+const OBJECT_SHARE_MAX := 0.32
+## 나무가 오브젝트에서 차지하는 비율 — 바위·덤불만 남으면 「크기를 견줄 것」이
+## 사라진다(둘 다 타일 한 칸이라 캐릭터보다 작다). 실측 0.72~0.76.
+const TREE_SHARE_MIN := 0.50
+
 var _fails: Array[String] = []
 
 
@@ -58,11 +72,13 @@ func _initialize() -> void:
 		_check_spawn(seed_value, world)
 		_check_island_shape(seed_value, world)
 		_check_one_island_surrounded_by_sea(seed_value, world)
+		_check_objects(seed_value, world)
 	var elapsed := Time.get_ticks_msec() - started
 	print("[qa] 월드 %d개 생성에 %dms (한 개당 약 %dms)" % [SEEDS.size(), elapsed, elapsed / SEEDS.size()])
 	if elapsed / SEEDS.size() > 500:
 		_fails.append("월드 하나 만드는 데 %dms — 입장할 때 눈에 띄게 멈춘다" % (elapsed / SEEDS.size()))
 
+	_check_object_sheets()
 	_check_seeds_differ(fingerprints)
 	_check_across_runs(fingerprints)
 
@@ -84,6 +100,82 @@ func _check_same_seed_is_same_world(seed_value: int, world: RefCounted) -> void:
 	if again.spawn_tile != world.spawn_tile:
 		_fails.append("시드 %d: 같은 시드인데 스폰이 %s / %s 로 다르다" % [
 			seed_value, world.spawn_tile, again.spawn_tile])
+	# **오브젝트도 같이 본다** (INBOX #63) — 지형만 견주면 나무 자리가 매번 달라져도
+	# "같은 월드"로 통과한다.
+	if again.objects != world.objects:
+		_fails.append("시드 %d: 같은 시드로 두 번 만들었는데 오브젝트 배치가 다르다" % seed_value)
+
+
+## 10) 월드 오브젝트 배치.
+##
+## **같은 시드면 같은 배치**는 위 1)이 이미 본다 — `_check_same_seed_is_same_world`
+## 가 `objects` 까지 견주고, 실행 사이의 재현성은 `fingerprint()` 가 오브젝트를 함께
+## 해싱하므로 아래 `_check_across_runs` 가 본다.
+func _check_objects(seed_value: int, world: RefCounted) -> void:
+	var counts := {}
+	for kind in WorldObjects.ALL:
+		counts[kind] = 0
+	var land := 0
+	var bad_sea := 0
+	var bad_shore := 0
+	var bad_kind := 0
+	var bad_spawn := 0
+	var spawn: Vector2i = world.spawn_tile
+	for y in WorldGen.MAP_TILES:
+		for x in WorldGen.MAP_TILES:
+			if world.is_land(x, y):
+				land += 1
+			var kind: int = world.object_at(x, y)
+			if kind == WorldObjects.NONE:
+				continue
+			if not counts.has(kind):
+				bad_kind += 1
+				continue
+			counts[kind] += 1
+			if not world.is_land(x, y):
+				bad_sea += 1
+			elif not world._is_open(x, y):
+				bad_shore += 1
+			if maxi(absi(x - spawn.x), absi(y - spawn.y)) <= world.OBJECT_SPAWN_CLEAR:
+				bad_spawn += 1
+	var total: int = counts[WorldObjects.TREE] + counts[WorldObjects.ROCK] \
+			+ counts[WorldObjects.BUSH]
+	print("[qa] 시드 %d → 나무 %d / 바위 %d / 덤불 %d (땅 칸의 %.1f%%)" % [
+		seed_value, counts[WorldObjects.TREE], counts[WorldObjects.ROCK],
+		counts[WorldObjects.BUSH], 100.0 * float(total) / maxf(float(land), 1.0)])
+	if bad_sea > 0:
+		_fails.append("시드 %d: 오브젝트 %d개가 바다 위에 있다" % [seed_value, bad_sea])
+	if bad_shore > 0:
+		_fails.append("시드 %d: 오브젝트 %d개가 물가에 있다 — 이웃 8칸이 전부 땅인 칸에만 둔다" % [seed_value, bad_shore])
+	if bad_spawn > 0:
+		_fails.append("시드 %d: 오브젝트 %d개가 스폰 둘레 %d칸 안에 있다" % [seed_value, bad_spawn, world.OBJECT_SPAWN_CLEAR])
+	if bad_kind > 0:
+		_fails.append("시드 %d: 알 수 없는 오브젝트 종류가 %d칸 있다" % [seed_value, bad_kind])
+	var share := float(total) / maxf(float(land), 1.0)
+	if share < OBJECT_SHARE_MIN or share > OBJECT_SHARE_MAX:
+		_fails.append("시드 %d: 오브젝트가 땅의 %.1f%% — 기록해둔 %.0f~%.0f%% 밖이다" % [
+			seed_value, share * 100.0, OBJECT_SHARE_MIN * 100.0, OBJECT_SHARE_MAX * 100.0])
+	var tree_share := float(counts[WorldObjects.TREE]) / maxf(float(total), 1.0)
+	if tree_share < TREE_SHARE_MIN:
+		_fails.append("시드 %d: 오브젝트 중 나무가 %.0f%%뿐이다 — 캐릭터보다 큰 것이 있어야 크기가 읽힌다" % [
+			seed_value, tree_share * 100.0])
+
+
+## 그림 시트가 실제로 있고, 칸 크기가 `world_objects.gd` 의 표와 맞는가.
+## **어긋나면 시트를 엉뚱한 자리에서 잘라 쓴다** — 그림 생성기(`gen_objects.py`)의
+## `SIZES`/`VARIANTS` 를 바꾼 바퀴가 게임 쪽 표를 안 고치면 여기서 잡힌다.
+func _check_object_sheets() -> void:
+	for kind in WorldObjects.ALL:
+		var path: String = WorldObjects.sheet_path(kind)
+		var texture: Texture2D = load(path) as Texture2D
+		if texture == null:
+			_fails.append("오브젝트 시트를 못 읽었다: %s — `--import` 를 안 돌렸을 수 있다" % path)
+			continue
+		var cell: Vector2i = WorldObjects.CELL[kind]
+		var want := Vector2i(cell.x * WorldObjects.VARIANTS, cell.y)
+		if texture.get_size() != Vector2(want):
+			_fails.append("%s 이 %s — %s 여야 한다 (칸 %s × 변주 %d)" % [
+				path, texture.get_size(), want, cell, WorldObjects.VARIANTS])
 
 
 ## 2) 지도 테두리는 전부 바다.

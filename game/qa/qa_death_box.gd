@@ -376,6 +376,12 @@ func _check_hit_test() -> void:
 
 ## 스폰에서 멀리 떨어진 땅으로 옮긴다 — 거기서 죽어야 "죽은 자리에 생겼는가"를
 ## 리스폰 지점과 구별할 수 있다.
+##
+## **나무 그늘을 피해서 고른다** (2026-09-08, INBOX #63). 월드에 나무가 놓이면서
+## 처음 만나는 땅 칸에 그냥 두었더니 상자가 잎에 통째로 가려서, 아래 「상자 아트」가
+## 화면에서 잎 색을 읽고 불합격했다. **그건 상자가 잘못 그려진 게 아니라 검사가
+## 볼 수 없는 자리를 고른 것이다** — 나무는 밑동에서 위로 세 칸을 덮고(그림 144px),
+## 밑동이 상자보다 아래에 있으면 Y정렬로 상자 **앞에** 그려진다.
 func _go_far() -> void:
 	var world := _world()
 	var spawn: Vector2i = world.spawn_tile
@@ -385,11 +391,21 @@ func _go_far() -> void:
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
 				var tile := spawn + Vector2i(dx, dy)
-				if world.is_land(tile.x, tile.y):
+				if world.is_land(tile.x, tile.y) and _clear_of_objects(world, tile):
 					_far_position = WorldGen.tile_center(tile)
 					_player().place_at(_far_position)
 					return
-	_fails.append("스폰에서 %d칸 떨어진 땅을 못 찾았다" % FAR_TILES)
+	_fails.append("스폰에서 %d칸 떨어진, 나무에 안 가린 땅을 못 찾았다" % FAR_TILES)
+
+
+## 이 칸 둘레에 상자를 가릴 오브젝트가 없는가. 나무 한 그루가 가로 두 칸 · 세로
+## 세 칸을 덮으므로 **아래로 세 칸까지** 본다(위쪽 나무는 상자 뒤에 그려져서 안 가린다).
+func _clear_of_objects(world: RefCounted, tile: Vector2i) -> bool:
+	for dy in range(-1, 4):
+		for dx in range(-1, 2):
+			if world.object_at(tile.x + dx, tile.y + dy) != 0:
+				return false
+	return true
 
 
 func _remember_inventory() -> void:

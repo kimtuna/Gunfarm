@@ -70,6 +70,8 @@ func _initialize() -> void:
 
 	_steps = [
 		_settle,
+		_pin_cursor,
+		_check_cursor_pinned,
 		_check_first_entry,
 		_check_view_range,
 		_check_spawn_is_land,
@@ -80,6 +82,7 @@ func _initialize() -> void:
 		_check_other_seed_differs,
 		func(): _enter_world_with_seed(SEED_A),
 		_settle,
+		_pin_cursor,
 		_check_same_seed_repeats,
 		_check_seed_saved_on_old_slot,
 		func(): _overview_shot(),
@@ -178,22 +181,36 @@ func _check_view_range() -> void:
 
 
 ## 스폰 주변이 땅이어야 한다. 화면 한가운데는 플레이어가 덮고 있으므로 조금 비켜서 본다.
+##
+## **"전부 풀색"을 요구하지 않는다** (2026-09-08, INBOX #63). 나무·바위·덤불이
+## 놓이면서 표본 몇 개가 그 위에 떨어지는데, 그건 바다가 아니라 **땅 위에 선
+## 오브젝트**다(`world_gen.gd` 은 이웃 8칸이 다 땅인 칸에만 놓는다). 묻는 것은
+## 처음부터 *"바다 한가운데서 시작하지 않는가"* 였으므로 **바닷물이 한 점이라도
+## 보이면** 불합격이고, 지형이 아예 안 그려진 경우는 「땅이 절반 미만」으로 잡는다.
 func _check_spawn_is_land() -> void:
 	var image := _capture()
 	if image == null:
 		return
 	var size := image.get_size()
 	var land := 0
+	var sea := 0
 	var total := 0
 	for dx: float in [-0.18, -0.09, 0.09, 0.18]:
 		for dy: float in [-0.18, -0.09, 0.09, 0.18]:
 			var at := size / 2 + Vector2i(int(size.x * dx), int(size.y * dy))
 			total += 1
-			if _nearest(image.get_pixelv(at)) == "land":
-				land += 1
-	print("[qa] 스폰 주변 표본 %d개 중 땅 %d개" % [total, land])
-	if land < total:
-		_fails.append("스폰 주변 %d/%d 칸이 바다다 — 바다 한가운데서 시작하면 안 된다" % [total - land, total])
+			match _nearest(image.get_pixelv(at)):
+				"land":
+					land += 1
+				"sea":
+					sea += 1
+	print("[qa] 스폰 주변 표본 %d개 → 땅 %d / 바다 %d / 오브젝트 %d"
+			% [total, land, sea, total - land - sea])
+	if sea > 0:
+		_fails.append("스폰 주변 %d/%d 칸이 바다다 — 바다 한가운데서 시작하면 안 된다" % [sea, total])
+	if land * 2 < total:
+		_fails.append("스폰 주변 표본 %d개 중 풀이 %d개뿐이다 — 지형이 안 그려졌을 수 있다"
+				% [total, land])
 
 
 ## 해안으로 플레이어를 옮기면(카메라가 따라간다) 한 화면에 땅과 바다가 같이 보여야 한다
@@ -414,6 +431,44 @@ func _press_escape() -> void:
 	event.action = "ui_cancel"
 	event.pressed = true
 	Input.parse_input_event(event)
+
+
+## **마우스 자리를 못 박는다** (2026-09-08, INBOX #64).
+##
+## 아래 「같은 시드 재입장」은 두 캡처의 **바이트가 같은지**로 재현성을 판정하는데,
+## 화면에는 **조준선(빨간 선)** 이 같이 찍히고 그 방향은 마우스가 정한다. 커서를 한
+## 번도 안 옮기면 「그 순간 사람 손이 놓아둔 자리」가 결과를 정하고(docs/GOTCHAS.md),
+## 두 캡처 사이에 커서가 조금만 움직이면 *"같은 시드로 다시 들어왔는데 화면이
+## 다르다"* 는 **거짓 실패**가 난다 — 실제로 지형은 픽셀 하나까지 같은데 조준선만
+## 다른 실행이 여러 번 났다. 거짓 실패는 성가신 정도가 아니라, 다음 바퀴가 자기
+## 변경이 무언가를 깼다고 믿고 엉뚱한 데를 파게 만든다.
+##
+## 캐릭터 **바로 아래**에 둔다 — 조준 각도가 정확히 90도(아래)라 4방향 스냅의
+## 경계에서 멀고, 앞모습이 찍혀서 참고 자료로 쓰기에도 좋다.
+const CURSOR_AT := Vector2(0.5, 0.9)
+## 창 픽셀로 옮긴 커서가 논리 좌표에서 이만큼 안에 들어와야 warp 가 먹은 것이다.
+const CURSOR_TOLERANCE := 8.0
+
+
+func _pin_cursor() -> void:
+	Input.warp_mouse(_to_window(root.get_visible_rect().size * CURSOR_AT))
+
+
+## **warp 가 실제로 먹었는지까지 본다**(docs/GOTCHAS.md — 헤드리스나 창이 없으면
+## 커서가 안 움직이는데, 그러면 위 못 박기가 조용히 아무 일도 안 한 것이 된다).
+func _check_cursor_pinned() -> void:
+	var want := root.get_visible_rect().size * CURSOR_AT
+	var got := root.get_mouse_position()
+	print("[qa] 커서를 %s 에 못 박음 (실제 %s)" % [want, got])
+	if got.distance_to(want) > CURSOR_TOLERANCE:
+		_fails.append("커서가 %s 로 안 옮겨졌다(%s) — 조준선이 마우스를 따라가므로 같은 시드 재입장 비교가 흔들린다" % [want, got])
+
+
+## 논리 좌표 → 창 픽셀. `Input.warp_mouse` 는 OS 가 주는 것과 같은 창 픽셀을 받는데
+## `Viewport.get_mouse_position()` 은 논리 좌표라 stretch 배율만큼 어긋난다
+## (docs/GOTCHAS.md).
+func _to_window(point: Vector2) -> Vector2:
+	return root.get_screen_transform() * point
 
 
 ## 다음 단계까지 넉넉히 쉰다 (위 SETTLE_SECONDS 주석 참고).

@@ -1,4 +1,4 @@
-[gd_scene load_steps=14 format=3 uid="uid://bgunfarmworld0"]
+[gd_scene load_steps=15 format=3 uid="uid://bgunfarmworld0"]
 
 [ext_resource type="Script" path="res://scripts/world.gd" id="1_world"]
 [ext_resource type="Script" path="res://scripts/terrain_view.gd" id="2_terrain"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/aim_line.gd" id="8_aim"]
 [ext_resource type="Script" path="res://scripts/gun_hud.gd" id="9_gunhud"]
 [ext_resource type="Script" path="res://scripts/death_boxes_view.gd" id="10_dboxes"]
+[ext_resource type="Script" path="res://scripts/world_objects_view.gd" id="11_wobj"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hotbar"]
 content_margin_left = 10.0
@@ -49,6 +50,11 @@ y_sort_enabled = true
 unique_name_in_owner = true
 y_sort_enabled = true
 script = ExtResource("6_ground")
+
+[node name="WorldObjectsView" type="Node2D" parent="Entities"]
+unique_name_in_owner = true
+y_sort_enabled = true
+script = ExtResource("11_wobj")
 
 [node name="DeathBoxesView" type="Node2D" parent="Entities"]
 unique_name_in_owner = true

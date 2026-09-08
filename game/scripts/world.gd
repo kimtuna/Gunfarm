@@ -170,6 +170,9 @@ func _ready() -> void:
 		inventory.from_data(stored_inventory)
 
 	(%TerrainView as Node2D).set_world(world)
+	# 나무·바위·덤불은 지형과 같은 시드에서 나온다 — 그리는 쪽은 배치를 비추기만
+	# 한다(docs/DESIGN.md 「월드 오브젝트」).
+	(%WorldObjectsView as Node2D).set_world(world)
 	(%GroundItemsView as Node2D).setup(ground_items)
 	(%DeathBoxesView as Node2D).setup(death_boxes)
 	# **총알 코어는 월드(지형)를 받지 않는다** — 물은 걸어서 못 건너지만 총알은

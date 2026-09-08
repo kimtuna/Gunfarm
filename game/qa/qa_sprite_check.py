@@ -116,6 +116,18 @@ def _gen_box():
     return gen_box
 
 
+def _gen_objects():
+    """월드 오브젝트 생성기(`game/tools/gen_objects.py`) — 칸 크기와 램프를 불러온다."""
+    _gen()
+    import gen_objects
+    return gen_objects
+
+
+def _object_palette():
+    """오브젝트가 쓰는 램프(잎 · 돌 · 나무 자루)를 생성기에서 그대로 가져온다."""
+    return _gen_objects().palette(), _gen().INK, _gen().GLINT
+
+
 def _cloth_accents(over=None):
     """생성기가 그 시트에 켜 둔 옷 포인트 이름들 (허리띠/옷깃/소맷부리).
 
@@ -563,7 +575,50 @@ def _box_spec(**over):
                       rows=["box"], **over)
 
 
+def _object_spec(kind, **over):
+    """월드 오브젝트 한 장(`object_<종류>.png`, 열 = 변주 — INBOX #63).
+
+    **도구 아이콘 스펙에서 갈래를 그대로 물려받는다**(규격 / 알파 / 색충돌 / 잉크아래 /
+    팔레트 / 순검정 / 외곽선 / 잘림 / 실루엣 / 바운딩 / 대비 / 재질명도 / 명암폭).
+    상자(`_box_spec()`)가 그랬던 것과 같은 자리다 — 같은 원시 도형·같은 광원·같은
+    잉크로 굽기 때문이다(`gen_objects.py`).
+
+    **숫자는 세 갈래만 다시 잡았다.** 실측(변주 3벌씩):
+
+    | | 평균명도 | 명암폭 | 채도 | 재질 |
+    |---|---|---|---|---|
+    | 나무 | 106 | 66 | 55~56 | 자루 121 · 잎 104 |
+    | 바위 | 130~131 | 82 | 19 | 돌 130~131 |
+    | 덤불 | 94~95 | 80 | 51 | 잎 94~95 |
+
+    - **평균명도**: 아이콘 밴드(120~190)는 쇠붙이 도구를 전제한 값이다. 잎은 목표
+      명도가 88 이라(풀 101 보다 확실히 어두워야 나무가 풀밭 위에서 덩어리로 읽힌다)
+      그 밴드에 들어갈 수가 없다 — **그림을 밝게 고치면 지형과 안 갈린다.**
+    - **채도**: 바위만 19 다. 돌은 **원래 무채색에 가까운 재질**이고(쇠 램프와 같은
+      자리다), 밝은면까지 색을 넣은 후보는 바위가 아니라 모래·빵덩어리가 됐다
+      (실측 6 / 13 / **19** / 17 — `gen_objects.palette()` 옆 표).
+    - **어두운비율**은 셋 다 0% 라 아이콘 값(0.22)을 그대로 둔다.
+    """
+    objects = _gen_objects()
+    cell = objects.SIZES[kind]
+    return _icon_spec(cell=cell[0], cell_h=cell[1], rows=[kind],
+                      palette=_object_palette, **over)
+
+
+OBJECT_SPECS = {
+    "tree": _object_spec("tree", luma_mean=(95.0, 120.0), chroma_mean=45.0,
+                         # 줄기와 잎이 색으로 갈려야 나무로 읽힌다. 실측 17.
+                         contrast=[("helve", "leaf", 12.0)],
+                         mat_luma=dict(helve=(110.0, 135.0), leaf=(95.0, 115.0))),
+    "rock": _object_spec("rock", luma_mean=(118.0, 145.0), chroma_mean=15.0,
+                         contrast=[], mat_luma=dict(stone=(118.0, 145.0))),
+    "bush": _object_spec("bush", luma_mean=(85.0, 108.0), chroma_mean=42.0,
+                         contrast=[], mat_luma=dict(leaf=(85.0, 108.0))),
+}
+
 SPECS = {"terrain_tiles.png": TERRAIN_SPEC, "death_box.png": _box_spec()}
+for _kind, _spec in OBJECT_SPECS.items():
+    SPECS["object_%s.png" % _kind] = _spec
 for _tool in TOOL_NAMES:
     SPECS["item_%s.png" % _tool] = _icon_spec()
     SPECS["ground_%s.png" % _tool] = _ground_spec()
