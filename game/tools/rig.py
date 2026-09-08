@@ -632,7 +632,301 @@ def hand_point(J, xf, side="R"):
     return (float(q[0]), float(q[1]))
 
 
-def bake_rows(rows, layers, J, cell=96, behind=False):
+# ── 재질 나누기 — 커스터마이징이 갈아끼울 단위 ──────────────────────────────
+## **AI 그림에는 램프가 없다.** 색이 그림에 구워져 있어서 「이 픽셀이 피부인가 옷인가」를
+## 색만 보고는 모른다 — 그래서 2026-09-08 아침까지 커스터마이징이 죽어 있었다
+## (`docs/CHARACTER.md` 8절). 리그는 그 답을 이미 갖고 있다: **부품을 우리가 나눴으므로
+## 어느 픽셀이 머리·몸통·팔·다리인지 안다.** 거기서 「이 부품의 색들」을 뽑아 재질을
+## 가르고, 마지막 축소 때 그 재질의 **기준색 램프**로 갈아 끼운다(2026-09-08, INBOX #68).
+##
+## 그래서 구워지는 PNG 는 문서가 줄곧 말해온 그대로 **기준색 1벌**이 된다
+## (`docs/DESIGN.md` 「캐릭터 커스터마이징 항목」: *"시트는 기준색 1벌로만 굽고 나머지
+## 색은 그 PNG 의 색을 바꿔치기해서 만든다"*). 게임 쪽(`character_sprite.gd`)은 한 줄도
+## 안 고친다 — 없던 램프가 생긴 것뿐이다.
+MATS = ["skin", "hair", "shirt", "pants", "boot", "eye", "helve", "blade"]
+BODY_MATS = ["skin", "hair", "shirt", "pants", "boot"]     # 커스터마이징이 바꾸는 것
+PART_NAMES = tuple(n for n, _, _, _, _ in PARTS)
+
+## **재질마다 나올 수 있는 부품이 정해져 있다.** 색만으로 가르면 어두운 빨강 머리와
+## 어두운 갈색 신발이 섞인다 — 부품이 그 둘을 애초에 갈라놓는다.
+## 「머리」가 몸통·위팔까지 도는 것은 긴 머리가 어깨에 내려오기 때문이고,
+## 「신발」이 몸통에 있는 것은 **멜빵의 가죽끈**이 신발과 같은 가죽이기 때문이다.
+MAT_PARTS = {
+    "skin": PART_NAMES,
+    "hair": ("head", "torso", "armL_upper", "armR_upper"),
+    # **셔츠가 머리 부품에도 난다** — 머리 뼈가 목에서 끝나므로 **깃**이 머리 부품에
+    # 들어온다. 안 열어두면 깃이 「피부도 머리도 아닌 것」이 되어 눈으로 칠해진다
+    # (실제로 턱 밑에 검은 띠가 생겼다).
+    "shirt": ("head", "torso", "armL_upper", "armR_upper", "armL_lower", "armR_lower"),
+    "pants": ("torso", "legL_upper", "legR_upper", "legL_lower", "legR_lower"),
+    "boot": ("torso", "legL_lower", "legR_lower"),
+}
+
+## 씨앗 = (부품, 세로 범위, 가로 범위) — **그 부품 테두리 상자에 대한 비율**이다.
+## 확실히 그 재질뿐인 자리만 고른다. 나머지는 아래 `material_protos()` 가 씨앗에서
+## 뽑은 색으로 전체를 분류하고, 분류 결과로 색을 다시 뽑기를 몇 바퀴 돌려 넓힌다.
+SEEDS = {
+    "hair": [("head", 0.00, 0.28)],
+    "skin": [("head", 0.55, 0.85, 0.32, 0.68),
+             ("armL_lower", 0.15, 1.00), ("armR_lower", 0.15, 1.00)],
+    "shirt": [("torso", 0.03, 0.20, 0.30, 0.70)],
+    "pants": [("torso", 0.60, 0.95)],
+    "boot": [("legL_lower", 0.72, 1.00), ("legR_lower", 0.72, 1.00)],
+}
+
+## 눈은 **겨루지 않고 덮어쓴다** — 「얼굴 띠 안에서 피부도 머리도 아닌 것」이다.
+## 대표색으로 겨루게 두면 흰 반짝임이 흰 셔츠와, 청록 눈동자가 멜빵과 붙는다.
+## **눈을 안 갈라두면 눈이 머리색을 따라간다** — 금발을 고르면 눈이 사라진다.
+## 뒷모습에는 얼굴이 없지만 따로 끌 필요가 없다: 거기는 띠 안이 전부 머리라
+## 「머리에서 멀다」가 성립하지 않아 저절로 아무것도 안 잡힌다(실측).
+EYE_BAND = (-0.058, 0.012)   # 코 관절에서 위아래로 (인물 키에 대한 비율)
+EYE_HALF = 0.075             # 머리 한가운데에서 좌우로
+EYE_FAR = 45.0               # 피부·머리색에서 **둘 다** 이만큼 멀면 눈
+
+MAT_PROTOS = 10              # 재질 하나에서 뽑는 대표색 수
+MAT_ROUNDS = 4               # 씨앗 → 전체 분류 → 대표색 다시 뽑기, 몇 바퀴
+
+
+def _part_band(layer, r0, r1, c0=0.0, c1=1.0):
+    """부품 테두리 상자 안의 띠 하나."""
+    a = np.asarray(layer)
+    m = a[..., 3] > 0
+    if not m.any():
+        return m
+    ys, xs = np.where(m)
+    y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+    h, w = y1 - y0 + 1, x1 - x0 + 1
+    out = np.zeros_like(m)
+    out[int(y0 + r0*h):int(y0 + r1*h) + 1, int(x0 + c0*w):int(x0 + c1*w) + 1] = True
+    return out & m
+
+
+def _protos(cols, k=MAT_PROTOS):
+    """색 무더기 → 대표색 몇 개 (중앙절단)."""
+    cols = np.asarray(cols, np.uint8).reshape(-1, 3)
+    if len(cols) <= k:
+        return np.unique(cols, axis=0).astype(float)
+    q = Image.fromarray(cols.reshape(-1, 1, 3)).quantize(
+        colors=k, method=Image.MEDIANCUT, dither=Image.NONE)
+    pal = np.array(q.getpalette()[:k*3]).reshape(k, 3)
+    return pal[np.unique(np.asarray(q))].astype(float)
+
+
+def _flatten(layers):
+    """부품 레이어들 → (한 장의 RGBA, 픽셀마다 부품 번호)."""
+    shape = np.asarray(next(iter(layers.values()))).shape[:2]
+    full = np.zeros(shape + (4,), np.uint8)
+    part = np.full(shape, -1, np.int8)
+    for i, name in enumerate(PART_NAMES):
+        if name not in layers:
+            continue
+        a = np.asarray(layers[name])
+        m = a[..., 3] > 0
+        full[m] = a[m]; part[m] = i
+    return full, part
+
+
+def _nearest(cols, protos):
+    """색마다 대표색까지의 **가장 가까운 거리**."""
+    if len(protos) == 0:
+        return np.full(len(cols), np.inf)
+    return np.sqrt(((cols[:, None, :] - protos[None, :, :])**2).sum(2)).min(1)
+
+
+def material_protos(rigs, ref="down"):
+    """**정면 한 장에서** 재질마다 「이 재질의 색들」을 뽑는다.
+
+    옆·뒷모습에서 씨앗을 따로 뽑으면 안 된다 — 옆모습은 어깨를 덮은 머리가 소매
+    자리에 있고, 뒷모습에는 얼굴이 없다(실측: 씨앗이 통째로 빨강이 됐다). 인물이
+    한 명이고 `build_sheets()` 가 이미 **정면의 팔레트를 네 방향에 씌우므로**,
+    정면에서 뽑은 대표색이 세 방향에 그대로 맞는다.
+    """
+    layers, J = rigs[ref]
+    full, part = _flatten(layers)
+    pure = {}
+    for mat, seeds in SEEDS.items():
+        mask = np.zeros(full.shape[:2], bool)
+        for s in seeds:
+            name, r0, r1 = s[0], s[1], s[2]
+            c0, c1 = (s[3], s[4]) if len(s) > 3 else (0.0, 1.0)
+            if name in layers:
+                mask |= _part_band(layers[name], r0, r1, c0, c1)
+        pure[mat] = _protos(full[mask][:, :3])
+    # 씨앗은 작다 — 전체를 한 번 나눠보고 그 결과에서 대표색을 다시 뽑기를 되풀이하면
+    # 재질마다 실제로 쓰인 색이 다 들어온다(그늘·밝은면까지).
+    # **씨앗 쪽(`pure`)은 안 넓힌다** — 눈을 가르는 「피부도 머리도 아니다」는 그늘이
+    # 섞이지 않은 순수한 색이라야 성립한다.
+    protos = dict(pure)
+    for _ in range(MAT_ROUNDS):
+        lab = classify(layers, protos, J, pure)
+        for i, mat in enumerate(MATS):
+            if mat not in protos:
+                continue
+            m = lab == i + 1
+            if m.sum() >= MAT_PROTOS:
+                protos[mat] = _protos(full[m][:, :3])
+    return protos, pure
+
+
+def _eye_mask(layers, J, full, pure):
+    """얼굴 띠 안에서 **피부도 머리도 아닌 것** = 눈(눈동자·속눈썹·반짝임)."""
+    m = np.zeros(full.shape[:2], bool)
+    if "head" not in layers or not pure:
+        return m
+    h = float(comfy_fig_h())
+    nx, ny = J["nose"]
+    band = np.zeros_like(m)
+    band[int(ny + EYE_BAND[0]*h):int(ny + EYE_BAND[1]*h) + 1,
+         int(nx - EYE_HALF*h):int(nx + EYE_HALF*h) + 1] = True
+    face = band & (np.asarray(layers["head"])[..., 3] > 0)
+    if not face.any():
+        return m
+    cols = full[face][:, :3].astype(float)
+    m[face] = ((_nearest(cols, pure["skin"]) > EYE_FAR)
+               & (_nearest(cols, pure["hair"]) > EYE_FAR))
+    return m
+
+
+def comfy_fig_h():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import comfy
+    return comfy.FIG_H
+
+
+def classify(layers, protos, J=None, pure=None):
+    """부품 레이어들 → 픽셀마다 **재질 번호**(0 = 없음, 1.. = `MATS` 순서).
+
+    가장 가까운 대표색이 이기되, **그 부품에 날 수 있는 재질끼리만** 겨룬다
+    (`MAT_PARTS`). 그래서 어두운 빨강 머리가 신발이 되는 일이 없다.
+    눈만은 겨루지 않고 마지막에 덮어쓴다 (`_eye_mask`).
+    """
+    full, part = _flatten(layers)
+    op = full[..., 3] > 0
+    out = np.zeros(full.shape[:2], np.uint8)
+    if not op.any():
+        return out
+    cols = full[op][:, :3].astype(float)
+    pid = part[op]
+    best = np.full(len(cols), np.inf)
+    who = np.zeros(len(cols), np.uint8)
+    for i, mat in enumerate(MATS):
+        if mat not in protos or len(protos[mat]) == 0 or mat not in MAT_PARTS:
+            continue
+        ok = np.isin(pid, [PART_NAMES.index(p) for p in MAT_PARTS[mat]])
+        d = np.where(ok, _nearest(cols, protos[mat]), np.inf)
+        take = d < best
+        best[take] = d[take]; who[take] = i + 1
+    out[op] = who
+    if J is not None:
+        out[_eye_mask(layers, J, full, pure or {})] = MATS.index("eye") + 1
+    return out
+
+
+def classify_tool(art):
+    """도구 픽셀 → 자루(`helve`) 냐 날(`blade`) 이냐.
+
+    도구는 **커스터마이징을 따라가지 않는다**(`docs/DESIGN.md` 「캐릭터 애니메이션」) —
+    그래서 몸 재질과 겨루게 두지 않고, 고정색 램프 둘 중 가까운 쪽으로만 가른다.
+    """
+    a = np.asarray(art)
+    op = a[..., 3] > 0
+    out = np.zeros(a.shape[:2], np.uint8)
+    if not op.any():
+        return out
+    cols = a[op][:, :3].astype(float)
+    ramps = base_ramps()
+    dh = _nearest(cols, np.array(ramps["helve"], float))
+    db = _nearest(cols, np.array(ramps["blade"], float))
+    out[op] = np.where(dh <= db, MATS.index("helve") + 1, MATS.index("blade") + 1)
+    return out
+
+
+def label_images(layers, body_lab):
+    """부품마다 「재질 번호를 R 채널에 적은」 레이어.
+
+    **라벨이 픽셀을 따라다녀야 한다** — `compose()` 가 색과 똑같은 변환으로 옮겨주므로,
+    팔이 어디로 돌든 그 픽셀이 무슨 재질이었는지가 축소 뒤에도 남는다. (색을 먼저
+    갈아끼우고 옮기는 길은 막혀 있다: 마지막 축소가 이웃을 평균 내므로 램프에 없는
+    중간색이 생긴다.)
+    """
+    out = {}
+    for name, img in layers.items():
+        a = np.asarray(img)
+        m = a[..., 3] > 0
+        lay = np.zeros(a.shape[:2] + (4,), np.uint8)
+        if name == "tool":
+            lay[..., 0] = np.where(m, classify_tool(a), 0)
+        else:
+            lay[..., 0] = np.where(m, body_lab, 0)
+        lay[..., 3] = a[..., 3]
+        out[name] = Image.fromarray(lay, 'RGBA')
+    return out
+
+
+_RAMPS = {}
+
+
+def base_ramps():
+    """재질별 **기준색 램프** — `game/scripts/character_palettes.gd` 의 BASE 와 같은 원본.
+
+    값을 여기에 적지 않고 `gen_character.palette()` 를 그대로 부른다. 그 함수가
+    `export_palettes()` 로 GDScript 상수를 내려보내는 바로 그 함수라, **시트에 구운 색과
+    게임이 「출발점」으로 아는 색이 어긋날 자리가 없다.**
+    """
+    if _RAMPS:
+        return _RAMPS
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_character as gen
+    pal = gen.palette()
+    for m in ("skin", "hair", "shirt", "pants", "boot", "helve", "blade"):
+        _RAMPS[m] = [tuple(int(round(v)) for v in c) for c in pal[m]]
+    # 눈은 **잉크 + 반짝임 한 점**이다(옛 생성기가 눈을 그리던 방식 그대로).
+    # 램프가 아니라 고정색이라 커스터마이징이 건드리지 않는다.
+    _RAMPS["eye"] = [tuple(gen.GLINT), tuple(gen.INK), tuple(gen.INK), tuple(gen.INK)]
+    return _RAMPS
+
+
+def recolor_cells(cells, labels):
+    """축소된 칸들 → **재질마다 딱 4단계**로 줄인 칸들 + 테두리.
+
+    `gen_player.quantize_all()`(그림 전체를 32색으로 줄이던 것)을 대신한다. 색을
+    통째로 줄이면 셔츠 밝은면과 피부 그늘이 **한 색으로 합쳐질 수** 있는데, 그러면
+    옷색을 바꿀 때 얼굴이 같이 변한다. 재질별로 줄이면 그 일이 정의상 안 생기고,
+    덤으로 **22장이 전부 같은 색을 쓴다**(램프가 상수라서) — 방향마다 옷 색이
+    달라지던 것도 여기서 함께 닫힌다.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gen_player import add_ink
+    ramps = base_ramps()
+    out = [c.copy() for c in cells]
+    for i, mat in enumerate(MATS):
+        ramp = np.array(ramps[mat], float)
+        masks = [(l == i + 1) & (c[..., 3] > 0) for c, l in zip(cells, labels)]
+        total = sum(int(m.sum()) for m in masks)
+        if total == 0:
+            continue
+        cols = np.concatenate([c[m][:, :3] for c, m in zip(cells, masks) if m.any()])
+        levels = _levels(cols, len(ramp))
+        order = np.argsort(-(levels @ np.array([0.299, 0.587, 0.114])))  # 밝은 것부터
+        table = ramp[np.argsort(order)]        # 무리 번호 → 램프 단계
+        for c, m in zip(out, masks):
+            if not m.any():
+                continue
+            v = c[m][:, :3].astype(float)
+            k = ((v[:, None, :] - levels[None, :, :])**2).sum(2).argmin(1)
+            c[m, :3] = table[k]
+    return [add_ink(c) for c in out]
+
+
+def _levels(cols, k):
+    """색 무더기 → 단계 `k` 개. 램프의 단 수만큼만 남긴다."""
+    lv = _protos(cols, k)
+    while len(lv) < k:                          # 색이 모자라면 마지막 것을 늘린다
+        lv = np.vstack([lv, lv[-1:]])
+    return lv[:k]
+
+
+def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
     """방향별 자세 목록 → 방향별 칸 목록.
 
     **시트 한 장의 모든 칸이 같은 테두리와 같은 팔레트를 쓴다.**
@@ -689,10 +983,21 @@ def bake_rows(rows, layers, J, cell=96, behind=False):
     box = (int(bys.min()), int(bys.max())+1, int(round(cx - r)), int(round(cx + r)))
     cells = [downscale(Image.fromarray(np.asarray(b)[..., :3]), k, cell=cell, box=box)
              for b, k in zip(bigs, keeps)]      # **색은 아직 안 줄인다** — 부르는 쪽이 한 번에 한다
-    out = []; at = 0
+    labs = None
+    if labels is not None:
+        # **라벨은 색과 같은 변환·같은 격자를 지난다** — 그래야 축소 뒤에도 이 도트가
+        # 무슨 재질이었는지 알 수 있다(`recolor_cells()` 가 그걸로 램프를 고른다).
+        from gen_player import downscale_labels
+        lbig = [np.asarray(compose(labels, J, a, behind))[..., 0] for a in flat]
+        labs = [downscale_labels(np.where(k, l, 0), k, cell=cell, box=box, top=len(MATS))
+                for l, k in zip(lbig, keeps)]
+    out = []; lout = []; at = 0
     for r in rows:
-        out.append(cells[at:at+len(r)]); at += len(r)
-    return out
+        out.append(cells[at:at+len(r)])
+        if labs is not None:
+            lout.append(labs[at:at+len(r)])
+        at += len(r)
+    return out if labels is None else (out, lout)
 
 
 def _only_figure(rgba, J):
@@ -770,6 +1075,11 @@ def build_sheets(src=None, style="farmer", cell=96):
     **행 = 방향(down/left/right/up), 열 = 프레임** — `game/scripts/player_frames.gd`
     가 쥔 규칙이다. 걷기는 **방향마다 흔드는 축이 다르다**: 정면·뒷모습(down/up)은
     원근 축약, 옆모습(left/right)은 회전이다.
+
+    **색은 22장을 다 구운 뒤 한 번에 줄인다** (2026-09-08, INBOX #68). 시트마다 따로
+    줄이면 시트마다 팔레트가 미세하게 달라지는데, 색 바꿔치기는 **색이 정확히 같아야**
+    걸리므로 그러면 걷기 시트만 옷을 안 갈아입는다. 재질별 램프는 상수라 22장이
+    저절로 같은 색을 쓴다 — `recolor_cells()` 참고.
     """
     rigs = load_sheet(src) if (src or SHEET) else load_dirs()
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -794,11 +1104,18 @@ def build_sheets(src=None, style="farmer", cell=96):
         if t not in NO_USE:
             plans["use_%s" % t] = {"down": use(True, t), "left": use(False, t),
                                    "up": use(True, t)}
+    # **재질은 정면 한 장에서 한 번만 나눈다** — 세 방향이 같은 사람이다.
+    protos, pure = material_protos(rigs)
+    body_lab = {d: classify(layers, protos, J, pure) for d, (layers, J) in rigs.items()}
+
+    order = ["down", "left", "up"]
+    baked = {}                       # 모션 → 방향 → 칸들 (색을 아직 안 줄인 것)
+    labeled = {}                     # 같은 자리의 재질 번호
     for motion, per_dir in plans.items():
         # **방향마다 원본이 다르므로 따로 굽는다.** 그래도 크기는 맞아야 하니
         # 칸 안에서 발밑이 아랫줄에 오게 굽는 규칙(`bake_rows`)이 그대로 맞춰준다.
         tool = motion.split("_", 1)[1] if "_" in motion else None
-        baked = {}
+        baked[motion] = {}; labeled[motion] = {}
         for d, frames in per_dir.items():
             layers, J = rigs[d]
             if tool:
@@ -810,18 +1127,24 @@ def build_sheets(src=None, style="farmer", cell=96):
                 layers["tool"] = tool_layer(
                     tool, angle, J, next(iter(layers.values())).size,
                     sx=sx, per_cell=per_cell[d])
-            baked[d] = bake_rows([frames], layers, J, cell,
-                                 behind=(tool is not None and d in TOOL_BEHIND))[0]
-        # **정면의 팔레트를 네 방향에 씌운다** — 방향마다 그림을 따로 뽑아서 옷 색이
-        # 조금씩 다른데(뒷모습이 청바지가 되는 식), 이렇게 하면 색이 맞는다.
-        from gen_player import quantize_all
-        order = ["down", "left", "up"]
-        flat = [c for d in order for c in baked[d]]
-        q = quantize_all(flat, ref_cells=baked["down"])
-        at = 0
+            cells, labs = bake_rows([frames], layers, J, cell,
+                                    behind=(tool is not None and d in TOOL_BEHIND),
+                                    labels=label_images(layers, body_lab[d]))
+            baked[motion][d] = cells[0]; labeled[motion][d] = labs[0]
+
+    # **22장을 한 번에 줄인다.** 여기서 비로소 도트의 색이 정해지고, 그 색이 곧
+    # `character_palettes.gd` 의 기준색 램프다 — 게임이 그걸 갈아끼운다.
+    flat_cells = [c for m in plans for d in order for c in baked[m][d]]
+    flat_labs = [l for m in plans for d in order for l in labeled[m][d]]
+    done = recolor_cells(flat_cells, flat_labs)
+    at = 0
+    for m in plans:
         for d in order:
-            n = len(baked[d]); baked[d] = q[at:at+n]; at += n
-        rows_out = [baked["down"], baked["left"], mirror_cells(baked["left"]), baked["up"]]
+            n = len(baked[m][d]); baked[m][d] = done[at:at+n]; at += n
+
+    for motion in plans:
+        rows_out = [baked[motion]["down"], baked[motion]["left"],
+                    mirror_cells(baked[motion]["left"]), baked[motion]["up"]]
         cols = max(len(r) for r in rows_out)
         sheet = np.zeros((cell*4, cell*cols, 4), np.uint8)
         for r, cells in enumerate(rows_out):

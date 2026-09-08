@@ -118,6 +118,24 @@ def add_ink(body, ink=INK):
     return out
 
 
+def _grid(keep, cell, pad, box):
+    """축소 격자 — (자를 상자, 세로칸, 가로칸, 칸 안 왼쪽 여백, 칸 안 위 여백).
+
+    **색과 라벨이 같은 격자를 써야 한다** — 한 칸이라도 어긋나면 「이 픽셀이 무슨
+    재질인가」가 옆 픽셀 것이 되어 색 바꿔치기가 엉뚱한 자리를 칠한다.
+    """
+    if box is None:
+        ys, xs = np.where(keep)
+        box = (int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1)
+    y0, y1, x0, x1 = box
+    ch, cw = y1 - y0, x1 - x0
+    th = cell - 2*pad
+    tw = max(1, round(cw * th / ch))
+    if tw > cell - 2*pad:
+        tw = cell - 2*pad; th = max(1, round(ch * tw / cw))
+    return box, th, tw, (cell - tw)//2, (cell - pad) - th
+
+
 def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
     """큰 그림 → 칸 크기의 RGBA. **색은 아직 줄이지 않는다.**
 
@@ -127,19 +145,13 @@ def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
     `quantize_all()` 이 **시트 한 장을 한 팔레트로** 한 번에 한다.
     """
     a = np.asarray(rgb).astype(float)
-    if box is None:
-        ys, xs = np.where(keep)
-        box = (int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1)
     # **여러 프레임을 구울 때는 같은 `box` 를 넘긴다** — 프레임마다 제 몸에 맞춰 자르면
     # 다리를 들 때 축소 배율이 달라져 캐릭터가 프레임마다 들썩인다.
+    box, th, tw, ox, oy = _grid(keep, cell, pad, box)
     y0, y1, x0, x1 = box
     a = a[y0:y1, x0:x1]
     k = keep[y0:y1, x0:x1].astype(float)
     ch, cw = k.shape
-    th = cell - 2*pad
-    tw = max(1, round(cw * th / ch))
-    if tw > cell - 2*pad:
-        tw = cell - 2*pad; th = max(1, round(ch * tw / cw))
     small = np.zeros((th, tw, 4), np.uint8)
     for y in range(th):
         for x in range(tw):
@@ -152,7 +164,34 @@ def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
             small[y, x, :3] = ((a[ya:yb, xa:xb] * w[..., None]).sum((0, 1)) / w.sum()).round()
             small[y, x, 3] = 255
     out = np.zeros((cell, cell, 4), np.uint8)
-    ox = (cell - tw)//2; oy = (cell - pad) - th
+    out[oy:oy+th, ox:ox+tw] = small
+    return out
+
+
+def downscale_labels(labels, keep, cell=CELL, pad=PAD, box=None, top=255):
+    """재질 라벨(정수) → 칸 크기. **`downscale()` 과 같은 격자에서 최빈값**을 고른다.
+
+    색은 평균이 맞지만 라벨은 평균이 뜻이 없다 — 피부 3px 과 옷 1px 의 「평균」은
+    아무 재질도 아니다. 블록에서 **가장 넓은 재질**이 그 도트의 재질이다.
+    """
+    box, th, tw, ox, oy = _grid(keep, cell, pad, box)
+    y0, y1, x0, x1 = box
+    lab = np.asarray(labels)[y0:y1, x0:x1]
+    k = keep[y0:y1, x0:x1]
+    ch, cw = k.shape
+    small = np.zeros((th, tw), np.uint8)
+    for y in range(th):
+        for x in range(tw):
+            ya, yb = int(y*ch/th), max(int(y*ch/th)+1, int((y+1)*ch/th))
+            xa, xb = int(x*cw/tw), max(int(x*cw/tw)+1, int((x+1)*cw/tw))
+            w = k[ya:yb, xa:xb]
+            if w.sum() < 0.5 * w.size:
+                continue
+            v = lab[ya:yb, xa:xb][w]
+            v = v[v > 0]
+            if v.size:
+                small[y, x] = np.bincount(v, minlength=top + 1).argmax()
+    out = np.zeros((cell, cell), np.uint8)
     out[oy:oy+th, ox:ox+tw] = small
     return out
 
