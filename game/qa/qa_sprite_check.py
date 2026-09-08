@@ -61,7 +61,8 @@
             둔 픽셀쌍의 명도차를 타일 안쪽의 명도차와 견준다. 격자가 비치면 여기서
             숫자로 잡힌다 (INBOX #12 의 "인접한 같은 지형끼리 이어져 보여야 한다")
   변주      무늬 변주들이 실제로 서로 다른지 (같으면 벽지가 된다)
-  캐릭터대비 풀 위에 선 캐릭터가 배경에 묻히지 않는지 — 풀과 셔츠의 명도차
+  캐릭터대비 풀 위에 선 캐릭터가 배경에 묻히지 않는지 — **실제 캐릭터 시트**의 몸
+            픽셀 중 풀과 명도로 갈리는 넓이가 얼마나 되는지 (2026-09-08, INBOX #59)
 
 **팔레트의 원본은 그림을 만든 생성기다** — 스펙이 `gen_character.palette()` 를 그대로
 불러온다. 그래서 "램프 밖의 색" 검사는 곧 "PNG 가 지금 생성기와 같은 상태인가"까지
@@ -121,6 +122,66 @@ def _cloth_accents(over=None):
         sys.path.insert(0, TOOLS)
     import gen_character as gen
     return gen.cloth_accents(dict(gen.CFG, **(over or {})))
+
+
+def _character_sheets():
+    """지금 게임에 실려 있는 캐릭터 시트의 경로 (`qa_character_sheets.py` 가 원본).
+
+    **패턴을 여기에 베껴 적지 않는다** (2026-09-08, INBOX #58) — 아래
+    `_handed_over()` 옆 설명 그대로다. 폴더를 훑을 때 건너뛸 목록도, 아래
+    「캐릭터대비」가 실제로 열어볼 그림도 전부 이 한 함수에서 나온다.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import qa_character_sheets
+    return qa_character_sheets.sheet_paths()
+
+
+def _character_fill():
+    """캐릭터 시트의 **외곽선을 뺀 몸 픽셀**의 명도와 그 잉크색.
+
+    (2026-09-08, INBOX #59) 「캐릭터대비」가 견줄 값을 **그림에서 잰다.** 전에는
+    절차 생성기의 셔츠 램프(`gen_character.palette()["shirt"][1]`)를 썼는데, 캐릭터가
+    ComfyUI 그림 + 리그로 바뀌면서 그 생성기는 더 이상 캐릭터를 굽지 않는다
+    (`docs/CHARACTER.md`) — **없는 캐릭터를 상대로 여유를 보고하고 있었다.**
+
+    무엇을 「캐릭터의 색」으로 볼 것인가:
+
+    - **몸 픽셀 전체의 평균은 쓸 수 없다.** 잉크(명도 19)와 하이라이트(251)를 같이
+      평균 내는 값이라 실제로 눈에 보이는 색이 아니다 — 지금 그림에서 94.5 가 나오는데
+      풀(101)과 6.5 밖에 안 떨어져 있어서, 그대로 기준을 삼으면 **멀쩡한 그림이
+      불합격**한다(INBOX #59 의 실측).
+    - **중앙값도 아니다.** 그러면 캐릭터의 *전부* 가 풀과 갈리라는 요구가 되는데,
+      옛 검사가 물었던 것은 셔츠 **한 벌**이었다. 신발이 풀과 비슷한 명도인 것은
+      결함이 아니다.
+    - **그래서 넓이로 잰다** — 몸 픽셀 하나하나가 풀과 명도로 갈리는지 세어서,
+      **갈리는 넓이가 몸의 몇 %인가**를 본다. 옛 검사(셔츠 한 색 대 풀)를 색 하나가
+      아니라 명도 히스토그램으로 넓힌 것이고, 잉크·하이라이트가 값을 끌고 다니지
+      않는다.
+
+    **외곽선(잉크)은 뺀다.** 몸의 15%를 차지하면서 어떤 배경과도 항상 갈리는 색이라,
+    넣어두면 어떤 그림이든 15% 를 공짜로 얻는다. 잉크색은 **상수로 적지 않고**
+    실루엣 테두리에서 가장 많이 쓰인 색으로 찾는다(`docs/CHARACTER.md` 8절 — 팔레트가
+    ComfyUI 그림에서 나오므로 적어두면 그림을 바꾼 바퀴가 반드시 잊는다. 지금 시트
+    22장의 테두리는 `#1a0f18` **한 색이다**).
+    """
+    body, edge = [], []
+    paths = _character_sheets()
+    for p in paths:
+        a = np.asarray(Image.open(p).convert("RGBA"))
+        on = a[..., 3] > 0
+        pad = np.pad(on, 1)
+        inner = pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:]
+        body.append(a[..., :3][on])
+        edge.append(a[..., :3][on & ~inner])
+    if not body:
+        return None, None, 0
+    body, edge = np.concatenate(body), np.concatenate(edge)
+    colors, counts = np.unique(edge.reshape(-1, 3), axis=0, return_counts=True)
+    ink = colors[int(np.argmax(counts))]
+    fill = body[(body != ink).any(1)].astype(np.float32)
+    return luma(fill), tuple(int(v) for v in ink), len(paths)
 
 
 def _terrain_palette():
@@ -397,8 +458,10 @@ def _icon_spec(**over):
 # 평균명도 102~110 / 어두운비율 4~8% / 채도 36~42 로 모였다. 그래서 머리모양별로
 # 늦추는 표는 없앴다 — **네 머리모양이 같은 스펙을 그대로 통과한다.**
 
-# 지형 타일 시트. 캐릭터와 견주는 기준(`shirt_gap`)은 **기준색 1벌의 셔츠**다 —
-# 캐릭터가 풀밭에 서 있을 때 묻히지 않아야 한다(DESIGN.md 「그래픽 파이프라인」 1).
+# 지형 타일 시트. 캐릭터와 견주는 값은 **지금 게임에 실려 있는 캐릭터 시트**에서
+# 잰다(2026-09-08, INBOX #59 — 그전에는 절차 생성기의 셔츠 램프였는데 캐릭터가
+# 거기서 안 나온다). 캐릭터가 풀밭에 서 있을 때 묻히지 않아야 한다
+# (DESIGN.md 「그래픽 파이프라인」 1 / 「월드 생성」의 "캐릭터와의 명도차").
 TERRAIN_SPEC = dict(
     kind="tile",
     # **칸 크기를 여기 적지 않는다** (2026-09-08, INBOX #58). 한때 `cell=16` 이라고
@@ -411,7 +474,13 @@ TERRAIN_SPEC = dict(
     seam_ratio=1.35,
     luma_mean={"grass": (90.0, 115.0), "sea": (45.0, 70.0)},
     chroma_mean={"grass": 28.0, "sea": 30.0},
-    shirt_gap=35.0,
+    # 한 픽셀이 "풀과 갈렸다"고 칠 명도차. **옛 `shirt_gap` 과 같은 35 다** — 바뀐
+    # 것은 무엇을 견주는가이지 얼마나 갈려야 하는가가 아니다.
+    char_gap=35.0,
+    # 그 명도차를 넘는 몸 픽셀이 **최소 이만큼**은 돼야 한다(외곽선 제외).
+    # 실측한 두 극단의 가운데다 — 지금 그림 59.7% / 멜빵과 머리를 둘 다 풀색으로
+    # 칠해본 것 16.5%(아래 `_character_fill` 옆 설명).
+    char_share=0.40,
 )
 
 # 도구가 늘면 이 줄만 늘린다 (`gen_character.TOOLS` 와 같아야 한다) —
@@ -1251,13 +1320,23 @@ def check_tiles(path, spec):
                 "%s %.0f < %.0f — 탁하다" % (what, stats[what][1], spec["chroma_mean"][what]),
                 "%s %.0f" % (what, stats[what][1]))
 
-    # 캐릭터가 풀밭에 묻히지 않는가 — 기준색 셔츠와 풀의 명도차.
-    pal, _ink, _glint = _player_palette()
-    shirt = float(luma(np.array(pal["shirt"][1], dtype=np.float32)))
-    gap = abs(shirt - stats["grass"][0])
-    rep.add(gap >= spec["shirt_gap"], "캐릭터대비",
-            "셔츠 %.0f vs 풀 %.0f — 차이 %.0f < %.0f 면 캐릭터가 배경에 묻힌다"
-            % (shirt, stats["grass"][0], gap, spec["shirt_gap"]), "%.0f" % gap)
+    # 캐릭터가 풀밭에 묻히지 않는가 — **실제 시트**의 몸 픽셀 중 풀과 명도로 갈리는
+    # 넓이 (2026-09-08, INBOX #59. 무엇을 재고 왜 그것을 재는지는 `_character_fill`).
+    fill, ink, sheets = _character_fill()
+    if fill is None or not fill.size:
+        # **조용히 넘어가지 않는다.** 캐릭터가 없으면 "묻히는가"는 답이 없는 물음이고,
+        # 답이 없는 물음에 초록불을 주면 공짜로 통과한 검사가 굳는다.
+        rep.add(False, "캐릭터대비",
+                "캐릭터 시트가 없어 잴 수가 없다 — qa_character_sheets.sheet_paths()")
+    else:
+        split = float((np.abs(fill - stats["grass"][0]) >= spec["char_gap"]).mean())
+        rep.add(split >= spec["char_share"], "캐릭터대비",
+                "몸의 %.0f%% 만 풀(%.0f)과 명도 %.0f 이상 갈린다 (하한 %.0f%%) — "
+                "캐릭터가 배경에 묻힌다. **합격선을 늦출 자리가 아니라** 지형 색이나 "
+                "옷 색을 사람이 정할 자리다(INBOX #59)"
+                % (split * 100, stats["grass"][0], spec["char_gap"],
+                   spec["char_share"] * 100),
+                "%.0f%% (시트 %d장, 잉크 #%02x%02x%02x)" % ((split * 100, sheets) + ink))
 
     rep.dump()
     return rep
@@ -1271,10 +1350,7 @@ def _handed_over():
     생겼을 때(예: 머리모양이 늘어 `player_idle_ponytail.png`) **양쪽에서 동시에
     빠져 아무도 안 보는 PNG** 가 된다. 저쪽이 실제로 여는 파일만 넘긴다.
     """
-    if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import qa_character_sheets
-    return {os.path.basename(p) for p in qa_character_sheets.sheet_paths()}
+    return {os.path.basename(p) for p in _character_sheets()}
 
 
 def main(argv):
