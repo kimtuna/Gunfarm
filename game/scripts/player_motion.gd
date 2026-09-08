@@ -248,12 +248,18 @@ func facing_direction() -> Vector2:
 ##
 ## 바라보는 방향으로 한 칸 앞이되, **물 위에는 놓지 않는다** — 걸어 들어갈 수 없는
 ## 자리에 놓이면 영영 못 줍고, 그건 「인벤토리 안전」의 *"아이템이 조용히 사라지면
-## 안 된다"* 와 같은 말이 된다. 앞으로 한 걸음씩 나아가며 **땅인 마지막 자리**를
-## 고르므로, 물가에서 물을 보고 버리면 발밑에 놓인다(그 경우만 예전과 같다).
+## 안 된다"* 와 같은 말이 된다. 앞으로 한 걸음씩 나아가며 **걸어 들어갈 수 있는
+## 마지막 자리**를 고르므로, 물가에서 물을 보고 버리면 발밑에 놓인다(그 경우만
+## 예전과 같다).
 ##
-## **물인지는 몸통 상자가 아니라 떨어진 칸으로 판정한다** — 놓이는 것은 걸어다니는
-## 몸이 아니라 점 하나다(「낚시」의 *"물 위인가는 찌가 떨어진 칸으로 판정한다"* 와
-## 같은 자리다).
+## **나무·바위 칸도 물과 같이 피한다** (2026-09-08, INBOX #65 — 그전에는 `is_land()`
+## 만 봤다). 나무에 둘러싸인 칸에 떨어지면 다가갈 수가 없어서, 물 위와 **똑같이**
+## 영영 못 줍는 아이템이 된다 — 규칙이 늘어난 게 아니라 「걸어 들어갈 수 없는 곳」의
+## 목록이 늘어난 것이다.
+##
+## **걸을 수 있는지는 몸통 상자가 아니라 떨어진 칸으로 판정한다** — 놓이는 것은
+## 걸어다니는 몸이 아니라 점 하나다(「낚시」의 *"물 위인가는 찌가 떨어진 칸으로
+## 판정한다"* 와 같은 자리다).
 ##
 ## **코어에 있는 이유**: 나중에 서버가 "이 버리기가 유효한가"를 판정하려면 같은
 ## 계산을 화면 없이 해야 한다 (docs/DESIGN.md 「서버 권위」).
@@ -264,7 +270,7 @@ func drop_position() -> Vector2:
 	while travelled <= DROP_DISTANCE + SKIN:
 		var next := position + direction * travelled
 		var t := WorldGen.world_to_tile(next)
-		if not _world.is_land(t.x, t.y):
+		if not _world.is_walkable(t.x, t.y):
 			break
 		at = next
 		travelled += DROP_STEP
@@ -358,14 +364,21 @@ func body_at(p: Vector2) -> Rect2:
 	return Rect2(p - BODY_HALF, BODY_HALF * 2.0)
 
 
-## 몸통 상자가 바다 칸에 걸치는가. 지도 밖도 바다다(`world_gen.gd` 의 `at()`).
+## 몸통 상자가 **걸을 수 없는 칸**에 걸치는가. 바다(지도 밖도 바다다 — `world_gen.gd`
+## 의 `at()`)와, **걷기를 막는 월드 오브젝트가 선 칸**(나무·바위 — `world_objects.gd` 의
+## `BLOCKS_WALK`)이 그것이다. 둘을 한 물음으로 묶는 것이 `world_gen.gd` 의
+## `is_walkable()` 이다.
+##
+## **이건 「걸을 수 있는가」만 답하는 자리다** — 총알은 이 판정을 쓰지 않는다(물을
+## 통과한다, docs/DESIGN.md 「전투」). 총알을 막는 것은 `bullets.gd` 의 `blocks_bullet`
+## 에 따로 꽂힌다.
 func blocked_at(p: Vector2) -> bool:
 	var box := body_at(p)
 	var from := WorldGen.world_to_tile(box.position)
 	var to := WorldGen.world_to_tile(box.end - Vector2(SKIN, SKIN))
 	for ty in range(from.y, to.y + 1):
 		for tx in range(from.x, to.x + 1):
-			if not _world.is_land(tx, ty):
+			if not _world.is_walkable(tx, ty):
 				return true
 	return false
 

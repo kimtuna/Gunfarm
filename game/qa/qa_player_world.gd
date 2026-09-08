@@ -11,6 +11,9 @@ extends SceneTree
 ##      2) 속도 상한 — 한 틱에 `MAX_STEP` 보다 멀리 못 간다. 대각선이 더 빠르지 않다.
 ##      3) 바다에 못 들어간다. 물가에 닿으면 **틈 없이 붙어서** 멈춘다.
 ##      4) 벽을 비스듬히 밀면 미끄러진다(막힌 축만 멈추고 나머지 축은 간다).
+##      4-1) **나무·바위는 걷기를 막고 덤불은 안 막는다**(INBOX #65). 막는 것은 그
+##         오브젝트가 **선 칸 하나**이고(잎 아래는 지나간다), 밑동에 틈 없이 붙고,
+##         비스듬히 밀면 해안과 똑같이 미끄러진다.
 ##      5) 한 틱 이동량이 타일보다 훨씬 작다 — 바다 한 칸을 통째로 건너뛸 수 없다.
 ##      6) **바라보는 방향은 이동이 아니라 조준이 정한다**(INBOX #16) — 4방향 스냅,
 ##         경계에서 마우스가 떨려도 안 흔들림(히스테리시스), 스냅해도 **원본 각도는
@@ -22,6 +25,7 @@ extends SceneTree
 ##     10) **실제 마우스 좌표**(`Input.warp_mouse`)가 애니메이션 방향을 정한다 —
 ##         이동과 조준을 일부러 어긋나게(왼쪽으로 걸으며 오른쪽 조준) 넣어서 확인한다.
 ##     11) 서 있어도 마우스만 돌리면 캐릭터가 그쪽을 본다.
+##     12) **나무를 향해 실제로 걸어도 통과하지 못한다**(INBOX #65 (3) — 캡처로도 본다).
 ##
 ## 눈으로 볼 몫은 `user://qa_shots/` 에 캡처로 남긴다.
 
@@ -30,6 +34,7 @@ const _Inventory := preload("res://scripts/inventory.gd")
 
 const WorldGen := preload("res://scripts/world_gen.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
+const WorldObjects := preload("res://scripts/world_objects.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 const PlayerInput := preload("res://scripts/player_input.gd")
 const SlotStore := preload("res://scripts/slot_store.gd")
@@ -77,6 +82,9 @@ var _wait_time := 0.0
 var _world: RefCounted = null
 var _before := Vector2.ZERO
 
+## 화면 쪽에서 걸어가 볼 나무 칸. `_walk_into_a_tree` 가 정하고 다음 단계가 읽는다.
+var _tree_tile := Vector2i(-1, -1)
+
 
 func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(SHOTS)
@@ -93,6 +101,7 @@ func _initialize() -> void:
 	_check_speed_limit()
 	_check_step_smaller_than_tile()
 	_check_sea_blocks()
+	_check_objects_block()
 	_check_wall_slide()
 	_check_facing_follows_aim()
 
@@ -125,6 +134,8 @@ func _initialize() -> void:
 		_check_aim_jitter_on_screen,
 		_walk_into_the_sea,
 		_check_stopped_on_land,
+		_walk_into_a_tree,
+		_check_stopped_at_tree,
 	]
 
 
@@ -207,27 +218,30 @@ func _check_step_smaller_than_tile() -> void:
 
 
 ## 네 방향 모두 오래 밀어도 바다에 못 들어간다. 그리고 물가에 **틈 없이** 붙는다.
+##
+## **출발점은 스폰이 아니라 그 방향의 물가다** (2026-09-08, INBOX #65). 나무·바위가
+## 걷기를 막게 되면서 스폰에서 밀면 대개 나무에 먼저 막히는데, 그러면 이 검사는
+## *"바다에 못 들어간다"* 가 아니라 *"무언가에 막힌다"* 를 재게 된다 — 나무 앞에서
+## 멈춰도 초록불이라 **물가 판정이 통째로 사라져도 모른다.** 물가 칸은 이웃에 바다가
+## 있어 오브젝트가 놓이지 않으므로(`world_gen.gd` 의 `_can_hold_object`), 거기서
+## 밀면 막는 것은 반드시 물이다.
 func _check_sea_blocks() -> void:
 	var blocked_somewhere := false
 	for move: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var shore := _find_shore(move)
+		if shore.x < 0:
+			print("[qa] %s 쪽이 바다인 물가를 못 찾았다 — 판정은 다른 방향에서 본다" % move)
+			continue
 		var motion := PlayerMotion.new(_world)
-		motion.place_at_tile(_world.spawn_tile)
-		var last := motion.position
-		var stalled := 0
-		for i in 4000:
+		motion.place_at_tile(shore)
+		for i in 60:
 			motion.tick(PlayerInput.new(move))
-			if motion.position.is_equal_approx(last):
-				stalled += 1
-			else:
-				stalled = 0
-			last = motion.position
-			if stalled > 2:
-				break
 		if motion.blocked_at(motion.position):
 			_fails.append("%s 로 계속 밀었더니 몸이 바다에 걸쳤다: %s" % [move, motion.position])
 			continue
-		if stalled <= 2:
-			print("[qa] %s: 4000틱 안에 물가를 못 만났다(내륙) — 판정은 다른 방향에서 본다" % move)
+		var ahead: Vector2i = motion.tile() + move
+		if _world.is_land(ahead.x, ahead.y):
+			_fails.append("%s 물가에서 밀었는데 바다(%s)가 아니라 땅 앞에서 멈췄다" % [move, ahead])
 			continue
 		blocked_somewhere = true
 		# 물가에 붙었는지: 한 틱만 더 가면 바다여야 하고, 그 경계까지의 틈이 아주 작아야 한다.
@@ -238,6 +252,95 @@ func _check_sea_blocks() -> void:
 			print("[qa] %s: 타일 %s 에서 물가에 붙어 멈춤 (틈 %.3f)" % [move, motion.tile(), gap])
 	if not blocked_somewhere:
 		_fails.append("네 방향 어디에서도 바다에 막히지 않았다 — 충돌 검사가 헛돌았다")
+
+
+## **나무·바위는 걷기를 막고 덤불은 안 막는다** (docs/DESIGN.md 「월드 오브젝트」의
+## 「막는 크기」, INBOX #65). 바다와 **같은 지도 같은 코어**에 물어본다 — 막는 자리가
+## `blocked_at()` 한 곳으로 모여 있다는 것이 이 검사의 요점이다.
+##
+## 막는 크기는 **그 오브젝트가 선 칸 하나**다. 나무 그림은 두 칸 × 세 칸이지만 잎까지
+## 막으면 숲을 통째로 못 지나간다 — 그래서 **밑동 칸 바로 위 칸은 걸을 수 있어야
+## 한다**(잎 아래를 지나간다). 그것까지 여기서 본다.
+func _check_objects_block() -> void:
+	var tree := _find_object(WorldObjects.TREE)
+	var rock := _find_object(WorldObjects.ROCK)
+	var bush := _find_object(WorldObjects.BUSH)
+	var motion := PlayerMotion.new(_world)
+	for pair: Array in [[tree, "나무"], [rock, "바위"]]:
+		var t: Vector2i = pair[0]
+		if t.x < 0:
+			print("[qa] %s 를 못 찾아 막힘 검사를 건너뛴다" % pair[1])
+			continue
+		if not motion.blocked_at(WorldGen.tile_center(t)):
+			_fails.append("%s 가 선 칸 %s 을 걸어서 지나갈 수 있다" % [pair[1], t])
+		# 잎(나무는 위로 세 칸)까지 막으면 안 된다 — 밑동 바로 위 칸은 걸을 수 있어야 한다.
+		var above := t + Vector2i(0, -1)
+		if _world.is_land(above.x, above.y) and _world.object_at(above.x, above.y) == WorldObjects.NONE \
+				and motion.blocked_at(WorldGen.tile_center(above)):
+			_fails.append("%s 의 바로 윗칸 %s 까지 막혔다 — 막는 것은 선 칸 하나여야 한다"
+					% [pair[1], above])
+	if bush.x < 0:
+		print("[qa] 덤불을 못 찾아 통과 검사를 건너뛴다")
+	elif motion.blocked_at(WorldGen.tile_center(bush)):
+		_fails.append("덤불 칸 %s 이 걷기를 막는다 — 덤불은 안 막는다" % bush)
+	else:
+		print("[qa] 나무 %s · 바위 %s 는 막고, 덤불 %s 은 지나갈 수 있다" % [tree, rock, bush])
+
+	# 실제로 밀어서도 확인한다 — 판정 함수만 맞고 이동이 안 쓰면 소용이 없다.
+	var open_tree := _find_object(WorldObjects.TREE, true)
+	if open_tree.x < 0:
+		print("[qa] 서쪽 두 칸이 비어 있는 나무를 못 찾아 밀기 검사를 건너뛴다")
+		return
+	tree = open_tree
+	var walker := PlayerMotion.new(_world)
+	walker.place_at_tile(tree + Vector2i(-2, 0))
+	for i in 60:
+		walker.tick(PlayerInput.new(Vector2i(1, 0)))
+	if walker.tile().x >= tree.x:
+		_fails.append("나무 %s 를 향해 밀었더니 %s 까지 들어갔다" % [tree, walker.tile()])
+		return
+	var edge := float(tree.x * WorldGen.TILE_SIZE) - PlayerMotion.BODY_HALF.x
+	if absf(walker.position.x - edge) > MAX_SHORE_GAP:
+		_fails.append("나무 앞에서 %.2f 만큼 떨어져 멈췄다 — 밑동에 붙지 않았다"
+				% absf(walker.position.x - edge))
+	# 비스듬히 밀면 막힌 축만 멈추고 나머지 축으로는 미끄러져야 한다(해안과 같은 규칙).
+	var slide_dir := 1 if _world.is_walkable(tree.x - 1, tree.y + 1) else -1
+	if not _world.is_walkable(tree.x - 1, tree.y + slide_dir):
+		print("[qa] 나무 옆이 막혀 미끄러짐 검사를 건너뛴다")
+		return
+	var before := walker.position
+	for i in 20:
+		walker.tick(PlayerInput.new(Vector2i(1, slide_dir)))
+	var moved_y := (walker.position.y - before.y) * float(slide_dir)
+	if walker.blocked_at(walker.position):
+		_fails.append("나무에 비스듬히 밀었더니 몸이 막힌 칸에 걸쳤다: %s" % walker.position)
+	elif moved_y < 1.0:
+		_fails.append("나무에 붙은 채 비스듬히 밀었는데 옆으로 %.2f 밖에 못 갔다 — 미끄러지지 않는다"
+				% moved_y)
+	else:
+		print("[qa] 나무 %s 밑동에 붙어 멈추고, 비스듬히 밀면 옆으로 %.1f 미끄러진다" % [tree, moved_y])
+
+
+## 스폰에서 가장 가까운, 그 종류의 오브젝트가 선 칸. 없으면 (-1, -1).
+##
+## `clear_west` 를 켜면 **서쪽 두 칸이 걸을 수 있는** 것만 고른다 — 밀어서 확인하는
+## 검사는 조수를 놓을 자리와 달려올 거리가 필요하다. **이 조건을 안 걸면 옆 칸의
+## 다른 나무에 먼저 막히고도 "나무에 막혔다"로 통과한다**(2026-09-08 에 실제로 그랬다).
+func _find_object(kind: int, clear_west := false) -> Vector2i:
+	var spawn: Vector2i = _world.spawn_tile
+	var best := Vector2i(-1, -1)
+	var best_distance := INF
+	for y in range(8, WorldGen.MAP_TILES - 8):
+		for x in range(8, WorldGen.MAP_TILES - 8):
+			if _world.object_at(x, y) != kind:
+				continue
+			if clear_west and not (_world.is_walkable(x - 1, y) and _world.is_walkable(x - 2, y)):
+				continue
+			var distance: float = Vector2(Vector2i(x, y) - spawn).length_squared()
+			if distance < best_distance:
+				best_distance = distance
+				best = Vector2i(x, y)
+	return best
 
 
 ## 벽에 비스듬히 밀면 막힌 축만 멈추고 나머지 축으로는 미끄러져야 한다
@@ -501,6 +604,37 @@ func _check_stopped_on_land() -> void:
 	else:
 		print("[qa] 바다 쪽으로 계속 걸어도 땅 칸 %s 에서 멈춘다" % tile)
 	_shoot("52_player_at_shore")
+
+
+## 12) **나무를 향해 실제로 걸어본다** (INBOX #65 (3)). 코어만 맞고 화면 쪽 배선이
+## 옛 판정을 쓰고 있으면 여기서 잡힌다 — 캐릭터가 나무 한가운데를 그냥 지나간다.
+func _walk_into_a_tree() -> void:
+	var tree := _find_object(WorldObjects.TREE, true)
+	if tree.x < 0:
+		print("[qa] 서쪽 두 칸이 비어 있는 나무를 못 찾아 화면 쪽 나무 충돌 검사를 건너뛴다")
+		return
+	_tree_tile = tree
+	_player().place_at(WorldGen.tile_center(tree + Vector2i(-2, 0)))
+	_release_all()
+	_aim("right")
+	Input.action_press("move_right")
+	# 두 칸(96)이면 초당 5칸이라 0.4초면 닿는다 — 넉넉히 밀어붙인다.
+	_wait_time = 2.0
+
+
+func _check_stopped_at_tree() -> void:
+	_release_all()
+	if _tree_tile.x < 0:
+		return
+	var player := _player()
+	var tile: Vector2i = player.tile()
+	if tile.x >= _tree_tile.x:
+		_fails.append("나무 %s 를 향해 계속 걸었더니 %s 까지 들어갔다" % [_tree_tile, tile])
+	elif player.motion.blocked_at(player.position):
+		_fails.append("몸통이 나무 칸에 걸친 채로 멈췄다: %s" % player.position)
+	else:
+		print("[qa] 나무 %s 를 향해 계속 걸어도 %s 에서 멈춘다" % [_tree_tile, tile])
+	_shoot("54_player_at_tree")
 
 
 # --- 도구 ---------------------------------------------------------------------

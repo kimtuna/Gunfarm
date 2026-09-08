@@ -271,6 +271,23 @@ func is_land(x: int, y: int) -> bool:
 	return at(x, y) == LAND
 
 
+## **걸어 들어갈 수 있는 칸인가** — 땅이면서 걷기를 막는 오브젝트가 없는 칸이다
+## (docs/DESIGN.md 「월드 오브젝트」의 「막는 크기」). `player_motion.gd` 의
+## `blocked_at()` 이 몸통 상자가 걸치는 칸마다 이걸 묻는다.
+##
+## **총알은 이 판정을 쓰지 않는다** — 물은 걷지 못하지만 총알은 통과한다
+## (docs/DESIGN.md 「전투」). 총알 쪽은 아래 `blocks_bullet_at()` 이다.
+func is_walkable(x: int, y: int) -> bool:
+	return is_land(x, y) and not WorldObjects.blocks_walk(object_at(x, y))
+
+
+## **그 칸이 총알을 막는가.** 지형은 아무것도 막지 않는다 — 막는 것은 **키가 있는
+## 오브젝트**(나무·바위)뿐이다(docs/DESIGN.md 「전투」). 물이 여기 안 나오는 것이
+## 위 `is_walkable()` 과 갈리는 자리 전부다.
+func blocks_bullet_at(x: int, y: int) -> bool:
+	return WorldObjects.blocks_bullet(object_at(x, y))
+
+
 func land_ratio() -> float:
 	var land := 0
 	for v in tiles:

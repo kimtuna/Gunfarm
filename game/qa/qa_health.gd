@@ -74,9 +74,13 @@ var _samples := {}
 var _far_position := Vector2.ZERO
 
 
-## 코어 검사용 가짜 월드 — `player_motion.gd` 는 `is_land()` 하나만 본다.
+## 코어 검사용 가짜 월드 — `player_motion.gd` 는 `is_walkable()` 하나만 본다.
+## (전부 땅이고 나무도 바위도 없는 월드다 — 이 검사는 지형을 보지 않는다.)
 class OpenWorld extends RefCounted:
 	func is_land(_x: int, _y: int) -> bool:
+		return true
+
+	func is_walkable(_x: int, _y: int) -> bool:
 		return true
 
 

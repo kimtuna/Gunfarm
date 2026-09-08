@@ -60,9 +60,13 @@ var _loaded_before := 0
 var _bullets_before := 0
 
 
-## 총알 검사용 가짜 월드 — `player_motion.gd` 는 `is_land()` 하나만 본다.
+## 총알 검사용 가짜 월드 — `player_motion.gd` 는 `is_walkable()` 하나만 본다.
+## (전부 땅이고 나무도 바위도 없는 월드다.)
 class OpenWorld extends RefCounted:
 	func is_land(_x: int, _y: int) -> bool:
+		return true
+
+	func is_walkable(_x: int, _y: int) -> bool:
 		return true
 
 

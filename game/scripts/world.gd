@@ -176,9 +176,16 @@ func _ready() -> void:
 	(%GroundItemsView as Node2D).setup(ground_items)
 	(%DeathBoxesView as Node2D).setup(death_boxes)
 	# **총알 코어는 월드(지형)를 받지 않는다** — 물은 걸어서 못 건너지만 총알은
-	# 통과한다(docs/DESIGN.md 「전투」). 총알을 막는 것이 생기면 그 오브젝트가
-	# `bullets.blocks_bullet` 에 붙는다.
+	# 통과한다(docs/DESIGN.md 「전투」). 총알을 막는 것은 **키가 있는 오브젝트가
+	# 스스로 정해** 여기 `blocks_bullet` 에 꽂힌다 — 지금 꽂히는 것은 나무·바위이고
+	# (`world_objects.gd` 의 `BLOCKS_BULLET`), 덤불은 키가 없어 안 막는다.
+	# **이동 판정(`player_motion.gd` 의 `blocked_at()`)을 부르지 않는다** — 그러면
+	# 그 순간 둘이 도로 붙어서 총알이 물에 막힌다.
 	bullets = Bullets.new()
+	var blocking_world: RefCounted = world
+	bullets.blocks_bullet = func(point: Vector2) -> bool:
+		var t := WorldGen.world_to_tile(point)
+		return blocking_world.blocks_bullet_at(t.x, t.y)
 	(%BulletsView as Node2D).setup(bullets)
 	(%AimLine as Node2D).setup(%Player as Node2D)
 	# 화면 아래 핫바는 **인벤토리 맨 위 9칸을 그대로 비추는 것**이지 별도 보관함이

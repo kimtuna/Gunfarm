@@ -9,6 +9,8 @@ extends SceneTree
 ##   A. 코어(`bullets.gd` / `player_motion.gd` — 화면 없이 도는 순수 클래스)
 ##      1) **즉시판정이 아니다** — 쏜 순간에는 총구에 있고, 한 틱에 정해진 만큼만 간다.
 ##      2) 사거리(800)를 다 날아가면 사라진다 — 그 자리에서 딱 멈춘다.
+##      3-0) **나무·바위는 총알을 막고 덤불은 안 막는다**(INBOX #65) — 실제 월드에서
+##         칸을 골라 `world_gen.gd` 의 `blocks_bullet_at()` 에 물어본다.
 ##      3) **물은 총알을 막지 않는다** — 같은 지도 같은 칸에서 사람은 못 들어가고
 ##         총알은 지나간다. 그리고 **총알을 막는 것을 꽂으면** 거기서 사라지되
 ##         한 칸짜리 벽을 통째로 건너뛰지 않는다.
@@ -23,6 +25,8 @@ extends SceneTree
 ##     11) 좌클릭하면 총알이 실제로 나가고 **화면에 보이며 날아간다** — 쏜 직후에는 총구
 ##         근처에 있고(즉시판정이면 이 검사가 실패한다), 잠시 뒤 더 멀리 가 있다.
 ##     12) 쏘면 반동으로 정조준이 깎인다.
+##     14) **나무를 향해 쏘면 총알이 나무에서 멈춘다**(INBOX #65) — 코어가 아니라
+##         **게임의 배선**(`world.gd` 가 `blocks_bullet` 에 꽂는 것)을 보는 자리다.
 ##     13) **물가에서 물 건너로 쏘면 총알이 바다를 지나가고**, 같은 자리에서
 ##         **사람은 여전히 물에 못 들어간다**(이동 판정을 안 건드렸다는 확인).
 
@@ -34,10 +38,16 @@ const Bullets := preload("res://scripts/bullets.gd")
 const BulletsView := preload("res://scripts/bullets_view.gd")
 const PlayerMotion := preload("res://scripts/player_motion.gd")
 const PlayerInput := preload("res://scripts/player_input.gd")
+const WorldObjects := preload("res://scripts/world_objects.gd")
 
 const SHOTS := "user://qa_shots"
 const WORLD_SCENE := "res://scenes/world.tscn"
 const SEED := 20260907
+
+## 코어의 「무엇이 총알을 막는가」 검사가 쓰는 시드. **화면 검사(`SEED`)와 따로 두는
+## 이유**는 그쪽이 물가에서 물 건너로 쏘는 자리를 찾아야 해서 바뀔 수 있기 때문이다 —
+## 이 검사는 나무·바위·덤불이 한 지도에 다 있기만 하면 된다.
+const OBJECT_SEED := 20260906
 
 ## 프레임 수가 아니라 **시간**으로 기다린다 (docs/GOTCHAS.md).
 const SETTLE_SECONDS := 0.2
@@ -64,6 +74,18 @@ const MUZZLE_SECONDS := 0.06
 
 ## 물 통과 검사 — 물가에서 동쪽으로 이만큼까지 훑어서 바다를 찾고, 이어진 바다가
 ## 그만큼은 돼야 "물 위로 쐈다"고 할 수 있다.
+## 오른쪽으로 쏜 총알이 막히지 않고 날아가야 하는 거리(타일). 화면 검사가 총알을 쫓는
+## 시간은 `MUZZLE_SECONDS + FLIGHT_SECONDS` = 0.18초 = 약 3.4칸이라, 그 두 배쯤 잡는다.
+const LANE_TILES := 8
+
+## 나무를 향해 쏜 총알을 얼마나 기다리는가(초). 나무는 `TREE_SHOT_TILES` 안에 있으므로
+## 그 거리를 나는 시간(8칸 = 384 ÷ 900 = 0.43초)보다 넉넉하되 **사거리(0.89초)보다는
+## 짧아야 한다** — 안 그러면 "막혀서 사라진 것"과 "사거리를 다 써서 사라진 것"이
+## 구별되지 않는다.
+const TREE_FLIGHT_SECONDS := 0.55
+## 나무가 총구에서 몇 칸 안에 있어야 하는가.
+const TREE_SHOT_TILES := 8
+
 const SEA_SCAN_TILES := 6
 const SEA_MIN_TILES := 2
 
@@ -89,6 +111,9 @@ var _travelled_first := 0.0
 var _shore_tile := Vector2i.ZERO
 var _shore_sea_far := 0
 
+## 14) 총알이 막혀야 하는 나무(또는 바위) 칸. `_stand_west_of_tree` 가 정한다.
+var _tree_shot_tile := Vector2i(-1, -1)
+
 
 ## 이동 코어(`player_motion.gd`) 검사용 가짜 월드 — `is_land()` 하나만 본다. 지형 생성
 ## 전체를 끌고 오지 않아야 "바다 한 줄"처럼 원하는 모양을 정확히 만들 수 있다.
@@ -99,8 +124,18 @@ class SeaWorld extends RefCounted:
 	## 이 x 타일 한 줄만 바다다. -1 이면 전부 땅이다.
 	var sea_tile := -1
 
+	## 이 x 타일 한 줄에 나무가 서 있다. -1 이면 나무가 없다. **바다와 따로 두는 것이
+	## 이 가짜 월드의 요점이다** — 물은 걷기만 막고 나무는 둘 다 막는다.
+	var tree_tile := -1
+
 	func is_land(x: int, _y: int) -> bool:
 		return x != sea_tile
+
+	func is_walkable(x: int, y: int) -> bool:
+		return is_land(x, y) and x != tree_tile
+
+	func blocks_bullet_at(x: int, _y: int) -> bool:
+		return x == tree_tile
 
 
 func _initialize() -> void:
@@ -171,6 +206,16 @@ func _initialize() -> void:
 		_check_bullet_crossed_water,
 		_walk_into_the_sea,
 		_check_stopped_on_land,
+		# 14) 나무를 향해 쏘면 총알이 나무에서 멈춘다 (INBOX #65)
+		_stand_west_of_tree,
+		_aim_right,
+		_settle,
+		func(): _set_focus(1.0),
+		_wait_for_empty_sky,
+		_fire_at_tree,
+		func(): _wait_time = TREE_FLIGHT_SECONDS,
+		func(): _shoot("87_bullet_into_tree"),
+		_check_bullet_stopped_at_tree,
 	]
 
 
@@ -210,6 +255,7 @@ func _check_core() -> void:
 	_check_range()
 	_check_water_does_not_block()
 	_check_blocker_seam()
+	_check_objects_block_bullets()
 	_check_raw_angle()
 	_check_focus()
 	_check_spread()
@@ -339,6 +385,50 @@ func _check_blocker_seam() -> void:
 		open_bullets.tick()
 	if absf(float(open_entry[Bullets.KEY_TRAVELLED]) - Bullets.RANGE) > 0.01:
 		_fails.append("코어: 막는 것을 안 꽂았는데도 총알이 사거리 전에 사라졌다")
+
+
+## 3-3) **나무·바위는 총알을 막고, 덤불과 물은 안 막는다** (docs/DESIGN.md 「전투」의
+## *"키가 있는 것(벽·문·나무·바위)"*, INBOX #65). 위 3-1·3-2 가 가짜 월드로 **판정의
+## 모양**을 봤다면, 여기서는 **실제 월드가 실제로 무엇을 막는다고 답하는지**를 본다 —
+## 게임에 꽂히는 것이 `world_gen.gd` 의 `blocks_bullet_at()` 이기 때문이다.
+##
+## **걷기와 나란히 물어본다**: 덤불은 걷기도 총알도 안 막고, **물은 걷기만 막는다.**
+## 두 판정이 도로 하나로 붙으면 이 네 줄 중 하나가 반드시 어긋난다.
+func _check_objects_block_bullets() -> void:
+	var world: RefCounted = WorldGen.new()
+	world.build(OBJECT_SEED)
+	var motion := PlayerMotion.new(world)
+	var found := {}
+	for y in range(8, WorldGen.MAP_TILES - 8):
+		for x in range(8, WorldGen.MAP_TILES - 8):
+			var kind: int = world.object_at(x, y)
+			if kind != WorldObjects.NONE and not found.has(kind):
+				found[kind] = Vector2i(x, y)
+			if not found.has(WorldObjects.NONE) and world.is_land(x, y) \
+					and kind == WorldObjects.NONE:
+				found[WorldObjects.NONE] = Vector2i(x, y)
+	for pair: Array in [[WorldObjects.TREE, "나무", true], [WorldObjects.ROCK, "바위", true],
+			[WorldObjects.BUSH, "덤불", false], [WorldObjects.NONE, "빈 땅", false]]:
+		if not found.has(pair[0]):
+			print("[qa] 코어: %s 를 못 찾아 총알 막힘 검사를 건너뛴다" % pair[1])
+			continue
+		var t: Vector2i = found[pair[0]]
+		var got: bool = world.blocks_bullet_at(t.x, t.y)
+		if got != bool(pair[2]):
+			_fails.append("코어: %s 칸 %s 이 총알을 %s — %s 여야 한다"
+					% [pair[1], t, "막는다" if got else "안 막는다",
+					"막아야" if pair[2] else "통과시켜야"])
+	# 덤불은 **걷기도** 안 막는다 — 물과 갈리는 자리다(물은 걷기만 막는다).
+	if found.has(WorldObjects.BUSH):
+		var bush: Vector2i = found[WorldObjects.BUSH]
+		if motion.blocked_at(WorldGen.tile_center(bush)):
+			_fails.append("코어: 덤불 칸 %s 이 걷기를 막는다 — 둘 다 안 막아야 한다" % bush)
+	# 나무는 **둘 다** 막는다.
+	if found.has(WorldObjects.TREE):
+		var tree: Vector2i = found[WorldObjects.TREE]
+		if not motion.blocked_at(WorldGen.tile_center(tree)):
+			_fails.append("코어: 나무 칸 %s 을 걸어서 지나갈 수 있다 — 둘 다 막아야 한다" % tree)
+	print("[qa] 코어: 실제 월드에서 나무·바위는 총알을 막고 덤불·빈 땅은 통과시킨다 %s" % found)
 
 
 ## 4) 각도는 스냅된 4방향이 아니라 **원본 조준 각도**다 (docs/DESIGN.md 「조작」).
@@ -638,10 +728,25 @@ func _stand_on_open_land() -> void:
 			for dy in range(-radius, radius + 1):
 				for dx in range(-radius, radius + 1):
 					var tile := spawn + Vector2i(dx, dy)
-					if _land_around(world, tile, clearing):
+					if _land_around(world, tile, clearing) and _lane_clear(world, tile):
 						_player().place_at(WorldGen.tile_center(tile))
 						return
-	_fails.append("사방이 육지인 자리를 못 찾았다")
+	_fails.append("사방이 육지이고 동쪽으로 총알이 지나갈 수 있는 자리를 못 찾았다")
+
+
+## 오른쪽으로 쏜 총알이 **막히지 않고** `LANE_TILES` 칸을 날아갈 수 있는가
+## (2026-09-08, INBOX #65 — 나무·바위가 총알을 막게 되면서 필요해졌다).
+##
+## **총구는 발밑보다 가슴 높이만큼 위**라 총알이 한 칸 윗줄을 날 수 있다 — 그래서 두
+## 줄을 본다. 이걸 안 보면 숲 한가운데에 세워놓고 *"총알이 0.12초 만에 사라졌다"* 로
+## 거짓 실패한다(실제로 그랬다). **땅인지가 아니라 「막는 오브젝트가 있는지」를 묻는
+## 것이 요점이다** — 물은 총알을 안 막으므로 여기 안 나온다.
+func _lane_clear(world: RefCounted, tile: Vector2i) -> bool:
+	for dy in [-1, 0]:
+		for dx in range(0, LANE_TILES + 1):
+			if world.blocks_bullet_at(tile.x + dx, tile.y + dy):
+				return false
+	return true
 
 
 ## 물 건너로 쏠 수 있는 물가에 세운다 — **동쪽에 바다가 이어진 땅 칸**이다.
@@ -705,6 +810,68 @@ func _walk_into_the_sea() -> void:
 	_release_all()
 	Input.action_press("move_right")
 	_wait_time = 2.0
+
+
+## 14) **동쪽에 나무(또는 바위)가 있는 자리에 선다** — 총구가 나는 줄에 막는 것이
+## 있어야 한다. 총구는 발밑보다 위라 **총알이 나는 줄은 플레이어가 선 줄이 아닐 수
+## 있다**: 자리를 고르기 전에 실제 총구 위치로 그 줄을 구한다.
+func _stand_west_of_tree() -> void:
+	_release_all()
+	var world := _world()
+	var player := _player()
+	var offset: Vector2 = player.muzzle_position() - player.position
+	var spawn: Vector2i = world.spawn_tile
+	for radius in range(0, 40):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				var tile := spawn + Vector2i(dx, dy)
+				if not world.is_walkable(tile.x, tile.y):
+					continue
+				var muzzle := WorldGen.tile_center(tile) + offset
+				var row: int = WorldGen.world_to_tile(muzzle).y
+				var lane_start: int = WorldGen.world_to_tile(muzzle).x
+				var hit := 0
+				for step in range(1, TREE_SHOT_TILES + 1):
+					if world.blocks_bullet_at(lane_start + step, row):
+						hit = step
+						break
+				if hit < 2:
+					continue
+				_tree_shot_tile = Vector2i(lane_start + hit, row)
+				player.place_at(WorldGen.tile_center(tile))
+				return
+	print("[qa] 동쪽 %d칸 안에 나무가 있는 자리를 못 찾아 나무 총알 검사를 건너뛴다" % TREE_SHOT_TILES)
+
+
+func _fire_at_tree() -> void:
+	if _tree_shot_tile.x < 0:
+		return
+	_muzzle = _player().muzzle_position()
+	_focus_before_shot = _player().motion.aim_focus
+	_send_action("use_tool")
+
+
+## 총알이 **나무 칸에서** 사라졌는가. 사거리를 다 쓴 것과 헷갈리지 않게 기다린 시간이
+## 사거리보다 짧다(`TREE_FLIGHT_SECONDS`) — 그래도 남아 있으면 안 막힌 것이다.
+func _check_bullet_stopped_at_tree() -> void:
+	if _tree_shot_tile.x < 0:
+		return
+	var bullets := _bullets()
+	if bullets == null:
+		_fails.append("총알 코어가 없다")
+		return
+	if bullets.size() != 0:
+		var at: Vector2 = (bullets.bullets[0] as Dictionary)[Bullets.KEY_POSITION]
+		_fails.append("나무 칸 %s 을 향해 쐈는데 총알이 %s 까지 살아 있다 — 나무가 총알을 안 막는다"
+				% [_tree_shot_tile, WorldGen.world_to_tile(at)])
+		return
+	# **막혀서 사라진 것이 맞는가** — 사거리를 다 쓸 시간이 아직 안 됐다.
+	var flown := Bullets.SPEED * TREE_FLIGHT_SECONDS
+	if flown >= Bullets.RANGE:
+		_fails.append("검사에 이가 있다: %.2f초면 사거리(%.0f)를 다 쓴다" % [TREE_FLIGHT_SECONDS, Bullets.RANGE])
+	else:
+		print("[qa] 나무 칸 %s 에서 총알이 멈췄다 (사거리 %.0f 중 %.0f 만 갈 시간이었다)"
+				% [_tree_shot_tile, Bullets.RANGE, flown])
 
 
 func _release_all() -> void:

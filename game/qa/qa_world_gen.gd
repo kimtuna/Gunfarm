@@ -24,6 +24,9 @@ extends SceneTree
 ##      바다 위에 없고, 물가(이웃 8칸에 바다가 있는 칸)에 없고, 스폰 둘레를 안 막고,
 ##      같은 시드면 같은 자리에 같은 종류가 나고, 밀도가 기록해둔 범위 안이다.
 ##      그림 시트가 실제로 있고 칸 크기가 `world_objects.gd` 의 표와 맞는지도 본다.
+##  11) **숲이 벽이 되지 않는다** (INBOX #65): 나무·바위가 걷기를 막게 된 뒤,
+##      스폰에서 걸어서 닿는 칸이 걸을 수 있는 땅의 거의 전부여야 하고, 못 닿는
+##      웅덩이가 크면 안 된다. 밀도를 올리는 바퀴는 이 검사부터 볼 것.
 
 const WorldGen := preload("res://scripts/world_gen.gd")
 const WorldObjects := preload("res://scripts/world_objects.gd")
@@ -56,15 +59,34 @@ const OBJECT_SHARE_MAX := 0.32
 ## 사라진다(둘 다 타일 한 칸이라 캐릭터보다 작다). 실측 0.72~0.76.
 const TREE_SHARE_MIN := 0.50
 
+## **숲이 벽이 되지 않는가** (INBOX #65). 나무·바위가 선 칸은 걸을 수 없으므로
+## (`world_objects.gd` 의 `BLOCKS_WALK`), 걸을 수 있는 땅 칸 중 스폰에서 실제로 걸어서
+## 닿는 것이 이 비율은 넘어야 한다. 2026-09-08 실측: 시드 10개에서 98.6~99.0%.
+## **못 닿는 나머지는 나무에 둘러싸인 작은 빈터다** — 벌목이 붙으면 저절로 열린다.
+const REACHABLE_SHARE_MIN := 0.97
+## 스폰에서 못 닿는 덩어리 하나의 크기 상한(칸). 위 비율만으로는 "작은 빈터 수백 개"와
+## "큰 땅 한 조각이 통째로 잘림"을 구별하지 못한다. 실측 9~38칸.
+const UNREACHABLE_POCKET_MAX := 150
+
+## 걸을 수 있는 땅이 땅 전체에서 차지하는 비율의 하한. 오브젝트 밀도를 올리면 여기부터
+## 걸린다. 실측 79.7~81.0%.
+const WALKABLE_SHARE_MIN := 0.70
+
 var _fails: Array[String] = []
 
 
 func _initialize() -> void:
-	var started := Time.get_ticks_msec()
+	# **재는 것은 `build()` 뿐이다** — 검사까지 같이 재면(2026-09-08, INBOX #65 에
+	# 물 채우기 검사가 들어오면서 실제로 그랬다) 검사를 늘릴 때마다 "월드 생성이
+	# 느려졌다"고 거짓 실패한다. 여기서 묻는 것은 **입장할 때 멈추는가**이고,
+	# 입장할 때 도는 것은 `build()` 하나다.
+	var build_msec := 0
 	var fingerprints := {}
 	for seed_value in SEEDS:
 		var world: RefCounted = WorldGen.new()
+		var started := Time.get_ticks_msec()
 		world.build(seed_value)
+		build_msec += Time.get_ticks_msec() - started
 		fingerprints[str(seed_value)] = world.fingerprint()
 		_check_same_seed_is_same_world(seed_value, world)
 		_check_edges_are_sea(seed_value, world)
@@ -73,10 +95,10 @@ func _initialize() -> void:
 		_check_island_shape(seed_value, world)
 		_check_one_island_surrounded_by_sea(seed_value, world)
 		_check_objects(seed_value, world)
-	var elapsed := Time.get_ticks_msec() - started
-	print("[qa] 월드 %d개 생성에 %dms (한 개당 약 %dms)" % [SEEDS.size(), elapsed, elapsed / SEEDS.size()])
-	if elapsed / SEEDS.size() > 500:
-		_fails.append("월드 하나 만드는 데 %dms — 입장할 때 눈에 띄게 멈춘다" % (elapsed / SEEDS.size()))
+		_check_forest_is_not_a_wall(seed_value, world)
+	print("[qa] 월드 %d개 생성에 %dms (한 개당 약 %dms)" % [SEEDS.size(), build_msec, build_msec / SEEDS.size()])
+	if build_msec / SEEDS.size() > 500:
+		_fails.append("월드 하나 만드는 데 %dms — 입장할 때 눈에 띄게 멈춘다" % (build_msec / SEEDS.size()))
 
 	_check_object_sheets()
 	_check_seeds_differ(fingerprints)
@@ -332,3 +354,107 @@ func _check_across_runs(fingerprints: Dictionary) -> void:
 	var out := FileAccess.open(FINGERPRINT_PATH, FileAccess.WRITE)
 	out.store_string(JSON.stringify(fingerprints, "\t"))
 	out.close()
+
+
+## 11) **숲이 벽이 되지 않는가** (INBOX #65 (3) — *"실제로 걸어서 확인한다"* 의
+## 헤드리스 몫이다). 나무·바위가 선 칸을 뺀 나머지 땅에서 **스폰부터 4방향으로
+## 물을 채워** 얼마나 닿는지 센다.
+##
+## **4방향으로 세는 것이 맞다** — 이동은 축을 따로 밀어서 판정하므로
+## (`player_motion.gd` 의 `_move_axis`), 막힌 칸 둘이 대각으로 마주 보면 그 사이를
+## 비집고 지나갈 수 없다. 8방향으로 세면 실제로 못 가는 길을 갈 수 있다고 세게 된다.
+func _check_forest_is_not_a_wall(seed_value: int, world: RefCounted) -> void:
+	var n: int = WorldGen.MAP_TILES
+	var land := 0
+	var walkable := 0
+	for y in n:
+		for x in n:
+			if not world.is_land(x, y):
+				continue
+			land += 1
+			if world.is_walkable(x, y):
+				walkable += 1
+	if land == 0 or walkable == 0:
+		_fails.append("시드 %d: 걸을 수 있는 땅이 하나도 없다" % seed_value)
+		return
+	var walkable_share := float(walkable) / float(land)
+	if walkable_share < WALKABLE_SHARE_MIN:
+		_fails.append("시드 %d: 땅의 %.1f%% 만 걸을 수 있다 — 오브젝트가 너무 빽빽하다"
+				% [seed_value, walkable_share * 100.0])
+
+	var spawn: Vector2i = world.spawn_tile
+	if not world.is_walkable(spawn.x, spawn.y):
+		_fails.append("시드 %d: 스폰 칸 %s 에 걷기를 막는 오브젝트가 있다" % [seed_value, spawn])
+		return
+	var reached := _flood_walkable(world, spawn)
+	var reach_count := 0
+	for v in reached:
+		if v == 1:
+			reach_count += 1
+	var share := float(reach_count) / float(walkable)
+	if share < REACHABLE_SHARE_MIN:
+		_fails.append("시드 %d: 스폰에서 걸어서 닿는 곳이 걸을 수 있는 땅의 %.1f%% 뿐이다 — 숲이 벽이 됐다"
+				% [seed_value, share * 100.0])
+	var pocket := _largest_unreachable_pocket(world, reached)
+	if pocket > UNREACHABLE_POCKET_MAX:
+		_fails.append("시드 %d: 스폰에서 못 가는 땅 한 덩어리가 %d칸이다 — 빈터가 아니라 잘린 조각이다"
+				% [seed_value, pocket])
+	print("[qa] 시드 %d: 땅의 %.1f%% 가 걸을 수 있고, 그중 %.2f%% 에 스폰에서 걸어서 닿는다 (못 닿는 최대 덩어리 %d칸)"
+			% [seed_value, walkable_share * 100.0, share * 100.0, pocket])
+
+
+## 스폰에서 4방향으로 걸을 수 있는 칸만 채운다. 닿은 칸이 1 인 바이트 배열을 준다.
+func _flood_walkable(world: RefCounted, from: Vector2i) -> PackedByteArray:
+	var n: int = WorldGen.MAP_TILES
+	var seen := PackedByteArray()
+	seen.resize(n * n)
+	var stack: Array[int] = [from.y * n + from.x]
+	seen[stack[0]] = 1
+	while not stack.is_empty():
+		var i: int = stack.pop_back()
+		var x := i % n
+		var y := i / n
+		for step: Vector2i in WorldGen.NEIGHBORS:
+			var nx: int = x + step.x
+			var ny: int = y + step.y
+			if nx < 0 or ny < 0 or nx >= n or ny >= n:
+				continue
+			var j: int = ny * n + nx
+			if seen[j] == 1 or not world.is_walkable(nx, ny):
+				continue
+			seen[j] = 1
+			stack.push_back(j)
+	return seen
+
+
+## 스폰에서 못 닿는 「걸을 수 있는 칸」 덩어리 중 가장 큰 것의 크기.
+func _largest_unreachable_pocket(world: RefCounted, reached: PackedByteArray) -> int:
+	var n: int = WorldGen.MAP_TILES
+	var seen := PackedByteArray()
+	seen.resize(n * n)
+	var biggest := 0
+	for y0 in n:
+		for x0 in n:
+			var start: int = y0 * n + x0
+			if seen[start] == 1 or reached[start] == 1 or not world.is_walkable(x0, y0):
+				continue
+			var stack: Array[int] = [start]
+			seen[start] = 1
+			var size := 0
+			while not stack.is_empty():
+				var i: int = stack.pop_back()
+				size += 1
+				var x := i % n
+				var y := i / n
+				for step: Vector2i in WorldGen.NEIGHBORS:
+					var nx: int = x + step.x
+					var ny: int = y + step.y
+					if nx < 0 or ny < 0 or nx >= n or ny >= n:
+						continue
+					var j: int = ny * n + nx
+					if seen[j] == 1 or reached[j] == 1 or not world.is_walkable(nx, ny):
+						continue
+					seen[j] = 1
+					stack.push_back(j)
+			biggest = maxi(biggest, size)
+	return biggest

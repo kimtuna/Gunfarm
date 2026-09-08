@@ -35,6 +35,19 @@ const CELL := {
 ## (지형 무늬 변주와 같은 방식 — `x % 3` 류로 고르면 일정 간격으로 되풀이된다).
 const VARIANTS := 3
 
+## 이 종류가 **걸을 수 없게 막는가**. 「플레이어 이동」의 `blocked_at()` 이 본다.
+## **막는 것은 그림 전체가 아니라 그 오브젝트가 선 칸 하나다** — 나무 그림은 두 칸 ×
+## 세 칸이지만 밑동이 차지하는 것은 한 칸이고, 잎까지 막으면 숲을 통째로 못 지나간다
+## (docs/DESIGN.md 「월드 오브젝트」의 「막는 크기」).
+const BLOCKS_WALK := {TREE: true, ROCK: true, BUSH: false}
+
+## 이 종류가 **총알을 막는가**. `bullets.gd` 의 `blocks_bullet` 이 본다.
+##
+## **걷기와 다른 물음이다**(docs/DESIGN.md 「전투」의 *"총알을 막는 것과 걸을 수 없는
+## 곳은 다르다"*) — 물은 걷지 못하지만 총알은 통과한다. 여기서 갈리는 것은 **덤불**이다:
+## 「전투」가 총알을 막는 것으로 꼽은 *"키가 있는 것(벽·문·나무·바위)"* 에 덤불은 없다.
+const BLOCKS_BULLET := {TREE: true, ROCK: true, BUSH: false}
+
 
 static func sheet_path(kind: int) -> String:
 	return "res://assets/sprites/object_%s.png" % KINDS[kind]
@@ -51,3 +64,12 @@ static func region(kind: int, variant: int) -> Rect2:
 static func draw_offset(kind: int) -> Vector2:
 	var cell: Vector2i = CELL[kind]
 	return Vector2(-cell.x * 0.5, -cell.y)
+
+
+## `NONE`(0)을 넣어도 안전하다 — 표에 없으면 안 막는 것이다.
+static func blocks_walk(kind: int) -> bool:
+	return bool(BLOCKS_WALK.get(kind, false))
+
+
+static func blocks_bullet(kind: int) -> bool:
+	return bool(BLOCKS_BULLET.get(kind, false))
