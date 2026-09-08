@@ -11,10 +11,15 @@ extends SceneTree
 ##   2) 지도 테두리는 전부 바다다 — 월드 밖으로 걸어나갈 수 없어야 한다.
 ##   3) 바다 비율이 어느 시드에서나 기록해둔 범위 안에 들어온다.
 ##   4) 스폰 지점은 땅이고, **가장 큰 육지 덩어리 안**이다 (외딴 1칸 섬에 갇히면 안 된다).
-##   5) 본섬이 육지의 대부분을 차지한다 (섬이 잘게 부서지면 걸어서 갈 곳이 없다).
-##   6) **해안선이 그냥 동그란 원이 아니다** — 노이즈보다 섬 감쇠가 세면 시드를 바꿔도
+##   5) **육지가 하나로 이어져 있다** — 연결 요소가 정확히 1개. 두 조각으로 갈리면
+##      걸어서 못 가는 땅이 생긴다 (INBOX #61).
+##   6) **모든 물이 섬 바깥 바다 하나로 이어져 있다** — 갇힌 웅덩이가 하나도 없다.
+##      "육지를 하나의 섬으로 뭉치고 바깥을 바다로 두른다"의 나머지 절반이다 (INBOX #61).
+##   7) **섬이 지도 테두리에 닿지 않는다** — 앞바다 여백이 있어야 「두른 바다」로 보인다.
+##      테두리에 붙으면 섬이 아니라 네모로 잘린 대륙이 된다.
+##   8) **해안선이 그냥 동그란 원이 아니다** — 노이즈보다 섬 마스크가 세면 시드를 바꿔도
 ##      똑같이 생긴 원형 섬만 나온다. 실제로 한 번 그렇게 됐던 자리라 수치로 막아둔다.
-##   7) 생성이 충분히 빠르다(입장할 때 눈에 띄게 멈추면 안 된다).
+##   9) 생성이 충분히 빠르다(입장할 때 눈에 띄게 멈추면 안 된다).
 
 const WorldGen := preload("res://scripts/world_gen.gd")
 
@@ -24,12 +29,18 @@ const FINGERPRINT_PATH := "user://qa_world_fingerprints.json"
 const SEEDS: Array[int] = [1, 7, 42, 1234, 999999, 20260906, 3, 88, 555, 31337]
 
 ## 파라미터를 손보면 이 범위도 같이 갱신하고 docs/DESIGN.md "월드 생성"에도 반영할 것.
-const SEA_RATIO_MIN := 0.40
-const SEA_RATIO_MAX := 0.55
-## 본섬이 전체 육지에서 차지하는 최소 비율.
-const MAIN_ISLAND_SHARE_MIN := 0.80
-## 해안선 복잡도 = (바다에 닿은 땅 칸) / (전체 땅 칸). 완벽한 원이면 2~4% 밖에 안 나온다.
-const COAST_RATIO_MIN := 0.07
+## 2026-09-08 (INBOX #61) 실측: 시드 15개에서 50.6~56.4%.
+const SEA_RATIO_MIN := 0.46
+const SEA_RATIO_MAX := 0.62
+## **해안선 길이 ÷ 같은 넓이 원의 둘레.** 완벽한 원이면 1.0 이다.
+## 옛 기준(해안 칸 ÷ 땅 칸)을 버린 이유: 그 값은 **섬이 클수록 저절로 작아진다**
+## (둘레는 반지름에, 넓이는 제곱에 비례한다). 게다가 옛 지도는 육지에 뚫린 웅덩이
+## 테두리가 전부 「해안」으로 세어져서 10% 가 나왔던 것이라, 웅덩이를 메우자마자
+## 같은 섬이 4~6% 로 떨어진다 — **넓이로 정규화한 이 비**라야 "얼마나 원에서 먼가"만
+## 잰다. 2026-09-08 실측: 시드 15개에서 2.00~2.79.
+const COAST_VS_CIRCLE_MIN := 1.60
+## 땅이 지도 테두리에서 최소한 이만큼은 떨어져 있어야 한다(칸). 실측 11~12.
+const OCEAN_MARGIN_MIN := 6
 
 var _fails: Array[String] = []
 
@@ -46,6 +57,7 @@ func _initialize() -> void:
 		_check_sea_ratio(seed_value, world)
 		_check_spawn(seed_value, world)
 		_check_island_shape(seed_value, world)
+		_check_one_island_surrounded_by_sea(seed_value, world)
 	var elapsed := Time.get_ticks_msec() - started
 	print("[qa] 월드 %d개 생성에 %dms (한 개당 약 %dms)" % [SEEDS.size(), elapsed, elapsed / SEEDS.size()])
 	if elapsed / SEEDS.size() > 500:
@@ -55,7 +67,7 @@ func _initialize() -> void:
 	_check_across_runs(fingerprints)
 
 	if _fails.is_empty():
-		print("[qa] PASS — 시드 재현성 / 테두리 바다 / 바다 비율 / 스폰 지점 전부 정상")
+		print("[qa] PASS — 시드 재현성 / 섬 하나 + 두른 바다 / 바다 비율 / 스폰 지점 전부 정상")
 		quit()
 	else:
 		for f in _fails:
@@ -106,31 +118,91 @@ func _check_spawn(seed_value: int, world: RefCounted) -> void:
 		seed_value, world.sea_ratio() * 100.0, spawn, main.size(), reach * 100.0])
 
 
-## 5) + 6) 본섬 비중과 해안선 복잡도.
+## 7) + 8) 앞바다 여백과 해안선 복잡도.
 func _check_island_shape(seed_value: int, world: RefCounted) -> void:
+	var last: int = WorldGen.MAP_TILES - 1
 	var land := 0
 	var coast := 0
-	for y in range(1, WorldGen.MAP_TILES - 1):
-		for x in range(1, WorldGen.MAP_TILES - 1):
+	var margin: int = WorldGen.MAP_TILES
+	for y in WorldGen.MAP_TILES:
+		for x in WorldGen.MAP_TILES:
 			if not world.is_land(x, y):
 				continue
 			land += 1
+			margin = mini(margin, mini(mini(x, y), mini(last - x, last - y)))
 			if not (world.is_land(x + 1, y) and world.is_land(x - 1, y) \
 					and world.is_land(x, y + 1) and world.is_land(x, y - 1)):
 				coast += 1
 	if land == 0:
 		_fails.append("시드 %d: 땅이 하나도 없다" % seed_value)
 		return
-	var coast_ratio := float(coast) / float(land)
-	var share: float = float(world._largest_land_component().size()) / float(land)
-	print("[qa] 시드 %d → 해안선 복잡도 %.1f%%  본섬이 육지의 %.1f%%" % [
-		seed_value, coast_ratio * 100.0, share * 100.0])
-	if coast_ratio < COAST_RATIO_MIN:
-		_fails.append("시드 %d: 해안선 복잡도 %.1f%% (>= %.0f%% 여야 함) — 섬이 밋밋한 원이다" % [
-			seed_value, coast_ratio * 100.0, COAST_RATIO_MIN * 100.0])
-	if share < MAIN_ISLAND_SHARE_MIN:
-		_fails.append("시드 %d: 본섬이 육지의 %.1f%% 뿐이다 (>= %.0f%%) — 섬이 잘게 부서졌다" % [
-			seed_value, share * 100.0, MAIN_ISLAND_SHARE_MIN * 100.0])
+	# 같은 넓이의 원이라면 둘레가 이만큼이다. 해안선을 이걸로 나눠서 "원에서 얼마나 먼가"를 잰다.
+	var circle := 2.0 * sqrt(PI * float(land))
+	var wiggle := float(coast) / circle
+	print("[qa] 시드 %d → 해안선이 같은 넓이 원의 %.2f배  앞바다 여백 %d칸" % [seed_value, wiggle, margin])
+	if wiggle < COAST_VS_CIRCLE_MIN:
+		_fails.append("시드 %d: 해안선이 같은 넓이 원의 %.2f배뿐이다 (>= %.2f 여야 함) — 섬이 밋밋한 원이다" % [
+			seed_value, wiggle, COAST_VS_CIRCLE_MIN])
+	if margin < OCEAN_MARGIN_MIN:
+		_fails.append("시드 %d: 땅이 지도 테두리에서 %d칸밖에 안 떨어져 있다 (>= %d) — 섬이 아니라 네모로 잘린 대륙이다" % [
+			seed_value, margin, OCEAN_MARGIN_MIN])
+
+
+## 5) + 6) **하나의 섬 + 그것을 두른 바다 하나**인지 (INBOX #61 이 요구한 두 가지).
+## 육지 연결 요소가 여럿이면 걸어서 못 가는 땅이 생기고, 테두리에서 못 닿는 물이
+## 남아 있으면 그게 바로 "호수처럼 흩어진 웅덩이"다.
+func _check_one_island_surrounded_by_sea(seed_value: int, world: RefCounted) -> void:
+	var size: int = WorldGen.MAP_TILES
+	var islands := 0
+	var seen := PackedByteArray()
+	seen.resize(size * size)
+	for start in size * size:
+		if seen[start] == 1 or world.tiles[start] != WorldGen.LAND:
+			continue
+		islands += 1
+		_flood(world, seen, PackedInt32Array([start]), WorldGen.LAND)
+	if islands != 1:
+		_fails.append("시드 %d: 육지 덩어리가 %d개다 (1개여야 함) — 걸어서 못 가는 땅이 있다" % [seed_value, islands])
+
+	# 테두리에서 물길로 닿는 바다를 칠하고, 안 칠해진 물이 남으면 갇힌 웅덩이다.
+	var wet := PackedByteArray()
+	wet.resize(size * size)
+	var edges := PackedInt32Array()
+	for i in size:
+		for index in [i, (size - 1) * size + i, i * size, i * size + size - 1]:
+			if world.tiles[index] == WorldGen.SEA and wet[index] == 0:
+				wet[index] = 1
+				edges.append(index)
+	_flood(world, wet, edges, WorldGen.SEA)
+	var trapped := 0
+	for i in size * size:
+		if world.tiles[i] == WorldGen.SEA and wet[i] == 0:
+			trapped += 1
+	if trapped > 0:
+		_fails.append("시드 %d: 바깥 바다에 안 이어진 물이 %d칸 있다 — 섬을 두른 바다가 아니라 웅덩이다" % [
+			seed_value, trapped])
+
+
+## 이미 칠해둔 시작점들에서 같은 값끼리 4방향으로 번져나간다.
+func _flood(world: RefCounted, seen: PackedByteArray, stack: PackedInt32Array, want: int) -> void:
+	var size: int = WorldGen.MAP_TILES
+	for index in stack:
+		seen[index] = 1
+	var head := 0
+	while head < stack.size():
+		var index := stack[head]
+		head += 1
+		var x := index % size
+		var y := index / size
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var nx: int = x + step.x
+			var ny: int = y + step.y
+			if nx < 0 or ny < 0 or nx >= size or ny >= size:
+				continue
+			var ni: int = ny * size + nx
+			if seen[ni] == 0 and world.tiles[ni] == want:
+				seen[ni] = 1
+				stack.append(ni)
 
 
 ## 다른 시드는 다른 월드여야 한다 (시드가 실제로 먹히는지).

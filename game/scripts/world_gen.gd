@@ -25,15 +25,17 @@ enum { SEA = 0, LAND = 1 }
 
 # --- 생성 파라미터 (여기 숫자를 바꾸면 같은 시드라도 다른 월드가 나온다) ---------
 
-const NOISE_FREQUENCY := 0.022
+const NOISE_FREQUENCY := 0.024
 const NOISE_OCTAVES := 5
-## 노이즈를 얼마나 늘려 쓰는가. 이게 작으면 섬 감쇠가 지형을 지배해서 해안선이 그냥
-## 동그란 원이 되어버린다 — 만/반도/앞바다 섬은 전부 이 값에서 나온다.
-const NOISE_GAIN := 2.5
-## 높을수록 땅이 는다.
-const LAND_BIAS := 0.70
-## 섬 감쇠 `거리^power`. 낮으면 중심부터 깎여서 섬이 작아지고, 높으면 가장자리만 깎인다.
-const FALLOFF_POWER := 3.0
+## 노이즈를 0~1 높이로 옮길 때의 대비. 1보다 크면 위아래가 잘려서 **속이 꽉 찬 땅과
+## 트인 바다**가 넓게 생기고, 그 사이의 해안선만 들쭉날쭉해진다. 작을수록 밋밋해진다.
+const NOISE_CONTRAST := 1.3
+## 섬 마스크가 0 이 되는 반지름(지도 반폭 기준). **이 값 바깥에는 어떤 노이즈로도 땅이
+## 생길 수 없다** — 앞바다 여백이 여기서 나온다. 1.0 을 넘는 것은 지도가 정사각형이라
+## 모서리 쪽 거리가 1.41 까지 가기 때문이다.
+const ISLAND_RADIUS := 1.02
+## 땅이 되는 문턱. 높을수록 섬이 작아진다.
+const LAND_THRESHOLD := 0.10
 ## 지도 테두리 몇 칸은 무조건 바다로 둔다 — 월드 밖으로 걸어나갈 수 없게.
 const EDGE_SEA_TILES := 4
 
@@ -46,6 +48,8 @@ var spawn_tile := Vector2i.ZERO
 func build(seed_value: int) -> void:
 	world_seed = seed_value
 	tiles = _make_terrain(seed_value)
+	_keep_only_main_island()
+	_fill_enclosed_water()
 	spawn_tile = _find_spawn()
 
 
@@ -71,11 +75,65 @@ func _make_terrain(seed_value: int) -> PackedByteArray:
 				out[i] = SEA
 				continue
 			var dist := Vector2(x - center, y - center).length() / radius
-			# 노이즈 높이에서 중심으로부터의 거리 감쇠를 뺀다 — 가운데는 그대로 남고
-			# 가장자리로 갈수록 깎여서 "섬 하나 + 앞바다 작은 섬 몇 개" 모양이 된다.
-			var height := noise.get_noise_2d(float(x), float(y)) * NOISE_GAIN + LAND_BIAS
-			out[i] = LAND if height - pow(dist, FALLOFF_POWER) > 0.0 else SEA
+			# 노이즈 높이에 **가장자리로 갈수록 0 이 되는 마스크를 곱한다**(빼지 않는다).
+			# 곱하면 마스크가 0 인 바깥쪽은 노이즈가 아무리 높아도 바다라 앞바다 여백이
+			# 보장되고, 마스크가 서서히 줄어드는 구간에서는 땅이 될 확률만 낮아져서
+			# 해안선이 원호가 아니라 노이즈 모양 그대로 들쭉날쭉하게 끝난다.
+			var mask := clampf(1.0 - dist / ISLAND_RADIUS, 0.0, 1.0)
+			var height := clampf(0.5 + noise.get_noise_2d(float(x), float(y)) * NOISE_CONTRAST, 0.0, 1.0)
+			out[i] = LAND if height * mask > LAND_THRESHOLD else SEA
 	return out
+
+
+# --- 하나의 섬으로 다듬기 -----------------------------------------------------
+#
+# 노이즈는 본섬 말고도 앞바다에 조각섬을, 섬 안쪽에는 웅덩이를 얼마든지 만든다.
+# 마스크만으로는 그게 안 없어져서 지도가 "풀밭에 구멍이 뚫린 모양"이 된다
+# (docs/DESIGN.md "월드 생성"). **두 번 훑어서 섬 하나 + 그 바깥 바다 하나로 만든다.**
+# 둘 다 시드에서 나온 지형만 보고 도므로 재현성은 그대로다.
+
+## 가장 큰 육지 덩어리만 남기고 나머지 조각섬은 바다로 지운다.
+## 그래야 **걸어서 갈 수 없는 땅**이 아예 생기지 않는다.
+func _keep_only_main_island() -> void:
+	var main := _largest_land_component()
+	var keep := PackedByteArray()
+	keep.resize(tiles.size())
+	for index in main:
+		keep[index] = 1
+	for i in tiles.size():
+		if tiles[i] == LAND and keep[i] == 0:
+			tiles[i] = SEA
+
+
+## 지도 테두리에서 물길로 닿지 못하는 물(= 갇힌 웅덩이)을 땅으로 메운다.
+## 남는 물은 전부 **섬을 두른 바깥 바다 하나**가 된다.
+func _fill_enclosed_water() -> void:
+	var wet := PackedByteArray()
+	wet.resize(tiles.size())
+	var stack := PackedInt32Array()
+	var last := MAP_TILES - 1
+	for i in MAP_TILES:
+		for index in [i, last * MAP_TILES + i, i * MAP_TILES, i * MAP_TILES + last]:
+			if tiles[index] == SEA and wet[index] == 0:
+				wet[index] = 1
+				stack.append(index)
+	while not stack.is_empty():
+		var index := stack[stack.size() - 1]
+		stack.remove_at(stack.size() - 1)
+		var x := index % MAP_TILES
+		var y := index / MAP_TILES
+		for step in NEIGHBORS:
+			var nx: int = x + step.x
+			var ny: int = y + step.y
+			if nx < 0 or ny < 0 or nx >= MAP_TILES or ny >= MAP_TILES:
+				continue
+			var ni: int = ny * MAP_TILES + nx
+			if wet[ni] == 0 and tiles[ni] == SEA:
+				wet[ni] = 1
+				stack.append(ni)
+	for i in tiles.size():
+		if tiles[i] == SEA and wet[i] == 0:
+			tiles[i] = LAND
 
 
 func at(x: int, y: int) -> int:
