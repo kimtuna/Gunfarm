@@ -42,8 +42,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#61</span> [BUILD] **맵을 섬으로 만든다.** 사람 요청(2026-09-08). 지금은 256×256 칸에 바다 47%가 **호수처럼 흩어져** 있어서, 어디를 봐도 비슷한 풀밭에 웅덩이가 뚫린 모양이다. **육지를 하나의 섬으로 뭉치고 바깥을 바다로 두른다.**</li>
 <li><span class="num">#62</span> [DESIGN] **지형 무늬를 굵게 — 화면에서 「한 칸」이 읽히게 한다.** (2026-09-08 실측)</li>
 <li><span class="num">#63</span> [DESIGN] **월드 오브젝트를 놓는다 — 나무 · 바위 · 덤불.** 화면에 캐릭터 말고 **크기를 견줄 것**이 생기는 순간 캐릭터는 저절로 제 크기로 보인다. 세 항목 중 **효과가 가장 크다**(`DESIGN.md` 「카메라 / 해상도」의 실측 근거 참고).</li></ul></section>
-<section><h2>마지막 커밋</h2><code>a3365af  docs(README): 그림 파이프라인을 지금 것으로 고치고 루프가 도는 법을 적는다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 11:00</p></section>
+<section><h2>마지막 커밋</h2><code>005514c  docs: 시야 실측을 남기고 섬·지형무늬·오브젝트를 큐에 넣는다</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 11:22</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #60 [DESIGN] 풀밭과 바다에 무늬를 넣었다.**
 땅 한가운데 칸 픽셀의 **98.9% 가 `#4d793c` 한 색**이던 것을 **75.7%** 로,
 바다는 98.9% → **81.5%** 로 내렸다. 「무늬가 실제로 보이는가」를 재는 검사도 같이
@@ -64,7 +64,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <li><strong>여는 좌클릭과 도구를 쓰는 좌클릭을 한 곳으로 모으기</strong> (원래 INBOX #41, 2026-09-07 에 여기로 옮김). 지금 열 수 있는 것은 데스드롭 상자 하나뿐이라 <strong>미리 만들면 껍데기만 늘어난다.</strong> 상자·제작대처럼 「여는 것」이 둘 이상이 되는 바퀴가 가져간다.</li>
 <li><strong>캐릭터 32px 이사 — 채택하기로 정한 뒤에 할 것.</strong> (<strong>2026-09-08, INBOX #49</strong>: idle 4장은 #46~#49 로 이미 32px 이고 사람이 두 번 비율 피드백을 줬다. <strong>조건이 찼는지를 묻는 `[ASK] #50` 을 INBOX 에 올려뒀다</strong> — 사람이 고르면 그 단계를 여기서 INBOX 로 옮겨 적는다.) 순서와 범위: ① 걷기 6프레임 ② 도구 7종(#44 추정으로 2~3바퀴 — `STYLE_GUIDE` 「손에 쥔 도구」의 통과 구간이 전부 17px 격자 실측값이라 다시 뽑아야 한다) ③ 아이콘 7종·바닥 그림 7종·데스드롭 상자(크기 하한이 16 → 32px 로 돌아왔다) ④ 엔진 상수(`player_frames.gd` 의 `CELL` 17→32, 충돌 상자, 미리보기 배율)와 자체 QA 22벌 재확인. <strong>타일 아트·씬 스케일·이동 속도·사거리·카메라 범위는 안 바뀐다</strong> — 캐릭터와 도구 그림만이다.</li>
 <li><strong>캐릭터가 들어온 뒤에 할 것들</strong> (2026-09-08 저녁, INBOX #51~#55 에서 이사). 사람이 앞 캐릭터를 물려서 시트가 전부 지워졌다 — 아래는 <strong>새 캐릭터(INBOX #56)가 들어와야</strong> 손댈 수 있다. 들어오면 이 다섯 줄을 INBOX 로 새 번호를 붙여 옮긴다. - [ ] #51 [DESIGN] <strong>도구를 손에 들리게 한다.</strong> 지금 `hold_&lt;도구&gt;` / `use_&lt;도구&gt;` / `walk_&lt;도구&gt;` 시트 19장은 <strong>자세만 있고 도구가 안 보인다</strong> — 도끼를 들어도 빈손으로 팔만 든다. 재료는 다 있다: `game/tools/rig.py` 의 `hand_point(J, xf, side=&quot;R&quot;)` 가 변환을 다 거친 뒤의 <strong>손 좌표(1024px 원본 기준)</strong> 를 내준다. 거기에 도구 그림을 얹고 `bake_rows` 로 넘기면 손에 쥔 것이 된다. <strong>(1) 96px 판 도구 그림 7종을 만든다.</strong> 지금 `assets/sprites/item_&lt;도구&gt;.png` 는 아트 17px 이라 캐릭터(96px 칸, 배율 1)와 <strong>도트 크기가 안 맞는다</strong> — 캐릭터 옆에 놓으면 도구만 굵어 보인다. `docs/CHARACTER.md` 「크기」의 규칙을 지킬 것. <strong>(2) 손에 얹는다.</strong> 도구는 손 좌표에 얹고 <strong>팔 각도만큼 같이 돌린다</strong> — 도끼가 팔과 따로 놀면 안 된다. `Z_ORDER` 에서 도구가 팔보다 앞이다. <strong>(3) 방향마다 도구가 몸 앞/뒤 어디로 가는지 정한다</strong> — `up`(뒷모습)에서는 도구가 몸에 가려야 자연스럽다. <strong>끝나면 `.venv/bin/python game/qa/qa_character_sheets.py` 와 `qa/qa_player_world.gd` 가 둘 다 종료 코드 0 이어야 한다.</strong> - [ ] #52 [DESIGN] <strong>아이템 아이콘과 바닥 그림의 도트 크기를 캐릭터에 맞춘다.</strong> `item_&lt;도구&gt;.png`(아트 17px)와 `ground_&lt;도구&gt;.png`(12px), `death_box.png`(16×14px)가 전부 옛 절차 생성기 시절 값이다. 캐릭터는 96px 칸 × 배율 1, 지형은 48px 칸 × 배율 1 이라 <strong>도트 하나가 화면 1px</strong> 인데, 이것들만 배율 3~4배로 그려져 화면에서 도트가 3~4배 굵다. 인벤토리 칸 크기와 바닥에 놓였을 때의 화면 크기는 그대로 두고 <strong>아트 해상도만</strong> 올린다. `docs/CHARACTER.md` 「크기」와 `STYLE_GUIDE.md` 1번이 기준이다. - [ ] #53 [BUILD] <strong>`qa_sprite_check.py` 에서 캐릭터 항목을 걷어낸다.</strong> 그 파일의 `SPECS` 는 지워진 절차 생성기(`gen_character.palette()`)를 팔레트 원본으로 삼아서, 지금 캐릭터 시트를 하나도 검사하지 못하고 &quot;등록된 스펙이 없다&quot;로 떨어진다. 캐릭터는 이제 `game/qa/qa_character_sheets.py` 가 본다(`docs/CHARACTER.md` 「합격 기준」). <strong>지형·아이템·상자 검사는 살려둘 것</strong> — 그쪽은 아직 절차 생성기가 만든다. `TERRAIN_SPEC` 의 `cell` 도 16 → 48 로 고쳐야 한다(지형 아트가 48px 이 됐다). - [ ] #54 [BUILD] <strong>커스터마이징(피부색·머리색·옷색)이 다시 동작하게 한다.</strong> 지금 커마 화면에서 색을 골라도 캐릭터가 안 바뀐다 — 예전에는 팔레트 교체로 됐는데, ComfyUI 그림은 <strong>색이 구워져 있어</strong> 램프가 없다. `character_sprite.gd` 가 기대하는 램프 표(`character_palettes.gd`)도 캐릭터 쪽은 비었다. <strong>부품 단위로 푸는 게 자연스럽다</strong> — `rig.py` 가 이미 머리·몸통·팔다리를 나눠 갖고 있으므로, 부품마다 「이 부품의 색들」을 뽑아 그걸 램프로 삼고 사람이 고른 색으로 옮기면 된다. <strong>머리모양은 색이 아니라 형태라 팔레트 교체로 안 되고</strong>, 지금은 한 벌(`farmer`)뿐이다 — 그건 이번 범위가 아니다. - [ ] #55 [DESIGN] <strong>방향 4장의 몸 비율을 맞춘다.</strong> 지금 옆모습이 정면보다 말랐고 머리도 작다 — 방향마다 그림을 따로 뽑았기 때문이다(`docs/CHARACTER.md` 「방향 4장을 맞추기」). 색과 옷 모양은 맞췄지만 비율은 못 맞췄다. 뼈대를 같게 줘도 AI 가 다르게 그린다. <strong>먼저 「무엇을 맞출 것인가」를 정할 것</strong> — 키는 이미 같다(칸을 세로로 다 쓴다). 어긋난 것은 <strong>머리 높이 비율과 어깨 폭</strong>이다. 방법 후보: (가) 여러 장 뽑아 비율이 가장 가까운 것을 고른다, (나) 부품별로 크기를 보정해 조립한다(리그가 이미 `scale` 을 다룬다), (다) 옆·뒤도 정면 부품에서 만들어낸다. <strong>재보고 정할 것</strong> — `qa_character_sheets.py` 에 「방향끼리 머리 높이 비율 차이」 검사를 더하는 것이 이 항목의 절반이다.</li></ul></section>
-<footer>갱신: 2026-09-08 11:21 KST · <span id="live">자동 새로고침 10초</span></footer>
+<footer>갱신: 2026-09-08 11:37 KST · <span id="live">자동 새로고침 10초</span></footer>
 </main>
 <script>
 // 루프는 매 바퀴 이 페이지를 다시 그려서 push 하지만, 브라우저는 스스로 갱신하지 않는다.
@@ -77,7 +77,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908112130";
+  var STAMP = "20260908113729";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
