@@ -1,6 +1,10 @@
 ; Engine configuration file.
-; Gunfarm — 2D top-down multiplayer farming + gunplay.
-; See ../docs/DESIGN.md
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
 
 config_version=5
 
@@ -14,32 +18,14 @@ config/icon="res://icon.svg"
 
 [display]
 
-; PvP 공정성: 해상도를 바꿔도 보이는 월드 범위는 동일해야 한다 (docs/DESIGN.md "카메라 / 해상도").
-; canvas_items + keep 로 논리 해상도 1440x810 을 고정한다 — 창을 아무 크기/비율로 바꿔도
-; 보이는 월드 범위는 그대로고 선명도와 여백만 달라진다. (expand 는 창을 넓히면 월드가
-; 더 보여서 이 규칙을 깬다.)
-; **viewport_* 를 고치면 scripts/settings_store.gd 의 BASE_SIZE 도 같이 고친다** —
-; 어긋나면 "해상도를 바꿔도 보이는 월드 범위가 같다"가 깨진다.
 window/size/viewport_width=1440
 window/size/viewport_height=810
-; 창의 기본 크기는 논리 해상도와 다르다 — 1440x810 은 고를 수 있는 해상도 목록
-; (settings_store.gd 의 RESOLUTIONS)에 없는 값이라, 창은 목록의 첫 값으로 연다.
-; settings_store.gd 의 DEFAULT_SIZE 와 같아야 한다.
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
-
-[rendering]
-
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
-textures/canvas_textures/default_texture_filter=0
 
 [input]
 
-; 이동: WASD (docs/DESIGN.md "조작"). `physical_keycode` 로 잡아서 자판 배열이
-; 달라도(AZERTY 등) 같은 자리 키가 먹게 한다.
 move_up={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":87,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
@@ -60,41 +46,31 @@ move_right={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":68,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-; 맵 열기/닫기: M (docs/DESIGN.md 「맵 (M)」). 이동 키와 같은 이유로 `physical_keycode` 다.
 toggle_map={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":77,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-; 인벤토리 창 열기/닫기: E (docs/DESIGN.md 「조작」). 이동 키와 같은 이유로 `physical_keycode` 다.
 toggle_inventory={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":69,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-; 좌클릭 = 지금 손에 든 도구의 동작 (docs/DESIGN.md 「조작」의 "좌클릭: 지금 손에 든
-; 도구의 동작"). 총이면 발사, 도끼면 벌목 — 도구마다 갈라지는 것은 이 액션 하나를
-; 받은 뒤의 이야기라, 키 자체는 여기 한 줄이면 된다.
 use_tool={
 "deadzone": 0.2,
 "events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":1,"canceled":false,"pressed":false,"double_click":false,"script":null)
 ]
 }
-; R = 재장전 (docs/DESIGN.md 「총기 스탯」의 탄창 항목). 총을 들었을 때만 의미가
-; 있지만 그 판정은 키가 아니라 받는 쪽이 한다(무엇을 들었는지는 인벤토리가 안다).
-; 이동 키와 같은 이유로 `physical_keycode` 다.
 reload={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":82,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
-; 우클릭 = 장전된 탄종 전환 (기본탄 ↔ 마취탄, docs/DESIGN.md 「조작」).
 switch_ammo={
 "deadzone": 0.2,
 "events": [Object(InputEventMouseButton,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"button_mask":0,"position":Vector2(0, 0),"global_position":Vector2(0, 0),"factor":1.0,"button_index":2,"canceled":false,"pressed":false,"double_click":false,"script":null)
 ]
 }
-; 숫자키 1~9 — 인벤토리 맨 위 9칸(핫바)에서 손에 들 칸을 고른다 (docs/DESIGN.md 「조작」).
 hotbar_1={
 "deadzone": 0.2,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":49,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
@@ -140,3 +116,9 @@ hotbar_9={
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":57,"key_label":0,"unicode":0,"location":0,"echo":false,"script":null)
 ]
 }
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
