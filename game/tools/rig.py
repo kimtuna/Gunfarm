@@ -939,8 +939,10 @@ def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
     도끼를 들었다는 이유로 테두리가 높아져 **캐릭터가 그만큼 작아진다** — 시트마다
     사람 크기가 달라지는 것은 `DESIGN.md` 「캐릭터 애니메이션」이 못 박아 금지한
     것이다(*"서로 다른 생성 호출로 만든 프레임끼리 캐릭터가 차지하는 크기가 달라지면
-    안 된다"*). 가로는 **몸 중심을 축으로 좌우 같은 만큼** 넓혀서 도구를 담는다 —
+    안 된다"*). 가로는 **선 축을 두고 좌우 같은 만큼** 넓혀서 도구를 담는다 —
     한쪽만 넓히면 칸 안에서 캐릭터가 옆으로 밀려 발밑이 노드 원점에서 벗어난다.
+    **그 축은 테두리의 한가운데가 아니라 쉼 자세의 한가운데다** (2026-09-08, INBOX #71
+    — 테두리에는 뻗은 팔이 들어가서, 도구를 들면 캐릭터가 6px 옆으로 미끄러졌다).
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from gen_player import downscale
@@ -975,10 +977,21 @@ def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
             a = np.asarray(b)[..., 3] > 0
             a[floor + 1:] = False
             body_union |= a
-    bys, bxs = np.where(body_union)
-    ys, xs = np.where(union)
+    bys = np.flatnonzero(body_union.sum(1) > 0)
+    xs = np.flatnonzero(union.sum(0) > 0)
     W = union.shape[1]
-    cx = (int(bxs.min()) + int(bxs.max()) + 1) * 0.5      # 몸의 좌우 한가운데
+    # **가로의 축은 「선 축」이지 테두리의 한가운데가 아니다** (2026-09-08, INBOX #71).
+    # 테두리로 재면 **뻗은 팔이 거기 들어간다** — 도구를 든 자세는 오른팔이 옆으로
+    # 나가므로 축이 그만큼 오른쪽으로 밀리고, 상자가 따라 밀려 **몸통·다리가 칸 안에서
+    # 왼쪽으로 밀린다.** 그러면 빈손 ↔ 도구를 오갈 때 캐릭터가 옆으로 순간이동한다
+    # (실측: 정면 -5.5 ~ -7.5px, 뒷모습 -5.0 ~ -7.0px).
+    # 쉼 자세(변환 없음, 도구 없음)의 한가운데가 그 축이다 — **모션과 무관하게 방향마다
+    # 한 값**이라 22장이 저절로 같은 자리에 선다. 관절(`J['hipC']`)을 안 쓰는 이유는
+    # 그림이 뼈대에 정확히 얹혀 있지 않기 때문이고, 쉼 자세로 재면 지금 맞아 있는
+    # idle 이 한 픽셀도 안 움직인다(idle 이 곧 쉼 자세다).
+    rest = np.asarray(compose(body, J, {}))[..., 3] > 0
+    rxs = np.flatnonzero(rest.sum(0) > 0)
+    cx = (int(rxs.min()) + int(rxs.max()) + 1) * 0.5
     r = min(max(cx - int(xs.min()), int(xs.max()) + 1 - cx), cx, W - cx)
     box = (int(bys.min()), int(bys.max())+1, int(round(cx - r)), int(round(cx + r)))
     cells = [downscale(Image.fromarray(np.asarray(b)[..., :3]), k, cell=cell, box=box)
