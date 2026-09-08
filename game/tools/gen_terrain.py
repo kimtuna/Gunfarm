@@ -19,13 +19,21 @@
   * **변주는 좌표 해시로 고른다 — `x%3` 같은 규칙으로 고르면 안 된다.** 실제로
     3×3 블록 방식을 먼저 만들었더니, 눈에 띄는 무늬가 화면 144px 마다 정확히
     되풀이돼서 풀밭이 **벽지**로 보였다. 해시로 고르면 격자가 사라진다.
-  * **풀잎은 사이를 띄운 세로 획 2~3장**이다. 붙여서 부채꼴로 그리면 풀이 아니라
+  * **풀잎은 사이를 띄운 세로 획 몇 장**이다. 붙여서 부채꼴로 그리면 풀이 아니라
     작은 삼각형(=멀리 있는 나무)으로 읽힌다. 물결은 반대로 **가로 획**이라야
     물처럼 보인다 — 등방 얼룩으로 채우면 물이 아니라 자갈밭이 된다.
   * **얹는 양은 개수가 아니라 칸 넓이당으로 적는다**(2026-09-08, INBOX #60).
     개수를 상수로 박아두면 칸 크기를 바꾼 바퀴가 반드시 잊는다 — 칸이 16 → 48px 로
     커지는 동안 개수가 그대로여서 땅 픽셀의 **98.9% 가 한 색**이 됐다. 아래
-    `GRASS_TUFTS` / `SEA_RIPPLES` 참고.
+    `GRASS_TUFTS` / `SEA_WAVES` 참고.
+  * **그런데 밀도를 맞춰도 「보이는」 것은 아니다**(2026-09-08, INBOX #62).
+    넓이당 개수를 맞춘 뒤에도 잎이 **4 × 1px 짜리 45개**라 풀밭이 **균일한 잡티**
+    였다 — 배율이 1이라 아트 px 이 곧 화면 px 이다. **획의 크기를 화면에서 읽히는
+    크기로 잡고**(잎 8~14px · 굵기 2~3px) 개수를 그만큼 줄인다.
+  * **칸이 세어지는 것은 「덤불 + 맨땅」이 만든다.** 굵어진 획을 칸에 고르게 뿌리면
+    굵은 잡티일 뿐이라 화면이 끝없이 이어지는 한 장의 무늬가 된다 — 풀은 칸마다
+    **한 덤불**로 몬다(`CLUMP_SPREAD`). **바다는 몰지 않는다**: 물결은 칸의 절반을
+    넘게 길어서 몰면 맨물이 타일 모서리에 걸려 이음매가 보인다(그 자리 주석 참고).
   * **해안선은 타일 사각형을 그대로 쓰지 않는다.** 땅/바다 사각형에서 구한 부호
     거리장에 **16px 주기 노이즈**를 더해 경계를 흔든다. 주기가 타일 한 칸이라 이
     잡음은 **월드 좌표의 함수**가 되고, 그래서 따로 구운 이웃 타일끼리도 경계에서
@@ -100,8 +108,13 @@ def palette():
     """재질 → 4단계 램프. `qa_sprite_check.py` 가 이 함수를 그대로 불러 검사한다."""
     grass = gen.make_ramp(gen._hex(GRASS_BASE), GRASS_LUMA, hi_mix=0.18,
                           sat=(0.90, 1.0, 1.16, 1.28), ramp=(1.24, 1.0, 0.84, 0.70))
+    # **깊은 바다만 램프 폭이 넓다**(밝은면 ×1.80). 다른 램프는 1.2~1.3배인데,
+    # 바다는 기본 명도가 56 이라 1.32배로는 밝은면이 74 밖에 안 되어 **물마루가
+    # 안 보인다** — 물결을 아무리 굵게 그려도 화면에서는 남색 한 판이었다
+    # (2026-09-08, INBOX #62. 실측: 1.32 → 명도 표준편차 5.4 / 1.80 → 8.3).
+    # 기본·그늘·최암부는 그대로라 **바다의 평균 명도는 55~56 으로 안 바뀐다.**
     deep = gen.make_ramp(gen._hex(DEEP_BASE), DEEP_LUMA, hi_to=gen.COOL, hi_mix=0.26,
-                         sat=(0.94, 1.0, 1.10, 1.20), ramp=(1.32, 1.0, 0.84, 0.70))
+                         sat=(0.94, 1.0, 1.10, 1.20), ramp=(1.80, 1.0, 0.80, 0.62))
     shallow = gen.make_ramp(gen._hex(SHALLOW_BASE), SHALLOW_LUMA, hi_to=gen.COOL,
                             hi_mix=0.22, ramp=(1.22, 1.0, 0.86, 0.74))
     foam = gen.make_ramp(gen._hex(FOAM_BASE), FOAM_LUMA, hi_mix=0.10,
@@ -164,43 +177,104 @@ def _per_tile(per_kpx):
     return int(round(per_kpx * TILE * TILE / 1000.0))
 
 
-## 풀포기 — (램프 단계, 아래 그늘, 1000px² 당 개수, 잎 길이, 잎 수).
+## **획의 굵기와 길이는 화면에서 읽히는 크기로 잡는다** (2026-09-08, INBOX #62).
+## 배율이 1이라 아트 px 이 곧 화면 px 이다 — 여기 적은 숫자가 그대로 화면 크기다.
+## 그전에는 잎이 **4×1px 짜리가 칸에 45개**여서, 밀도(넓이당 비율)는 맞는데
+## 무늬 하나하나가 눈에 안 잡히는 **균일한 잡티**였다. 잡티는 아무리 깔아도
+## 「한 칸」의 경계를 못 만들어서, 화면에서 크기를 잴 기준이 사라진다.
+##
+## **굵게 · 크게 · 적게.** 잎을 8~14px 로 키우고 굵기를 2~3px 로 주는 대신
+## 개수를 1/5 로 줄였다 — 덮는 넓이는 비슷한데 **덩어리가 세어진다.**
+
+## 풀포기 — (램프 단계, 아래 그늘, 1000px² 당 개수, 잎 길이, 잎 수, 밑동 굵기).
 ## **어두운 포기를 먼저, 밝은 포기를 나중에** 얹는다(겹치면 밝은 쪽이 위로 와야 한다).
-GRASS_TUFTS = ((2, None, 7.0, (4, 8), (3, 5)),
-               (0, 2, 4.8, (3, 6), (2, 4)),
-               (3, None, 1.7, (3, 6), (2, 3)))
-BLADE_GAP = 2           # 잎 사이 간격 — 붙여 그리면 포기가 삼각형(=먼 나무)이 된다
+GRASS_TUFTS = ((2, None, 2.7, (9, 14), (3, 5), 3),     # 큰 포기 — 칸의 주인공이다
+               (0, 2, 2.7, (6, 10), (2, 4), 2),        # 밝은 포기 (그늘을 깔고 얹는다)
+               (3, None, 1.9, (4, 7), (2, 3), 2))      # 가장 어두운 잔포기
+BLADE_GAP = 1           # 잎 **사이의 빈 칸** — 굵기에 더해진다(붙여 그리면 삼각형이 된다)
+TUFT_TAPER = 0.20       # 바깥 잎이 가운데보다 이만큼씩 짧다 — 다발이 포기로 읽힌다
 
-## 물결 — (램프 단계, 아래 그늘, 1000px² 당 개수, 길이).
-SEA_RIPPLES = ((2, None, 8.7, (6, 14)),
-               (3, None, 3.0, (5, 11)),
-               (0, 3, 5.2, (4, 10)))
+## 물결 — (1000px² 당 개수, 길이, 굵기, 램프 단계, 마루를 얹는가).
+##
+## **바다는 「골 + 마루」 한 쌍이라야 물결로 읽힌다** (2026-09-08, INBOX #62).
+## 그전에는 1px 짜리 가로 획 열몇 개가 흩뿌려져 있어서 물결이 아니라 **긁힌 자국**
+## 이었다. 어두운 골 위에 밝은 마루를 한 줄 얹으면 그 한 쌍이 곧 물결 하나가 되고,
+## 획이 길어진 만큼 개수를 줄일 수 있다(칸에 열몇 개 → 네댓 개).
+SEA_WAVES = ((2.0, (18, 30), 3, 3, True),      # 큰 물마루 — 칸의 주인공
+             (2.0, (8, 16), 2, 2, False))      # 잔물결
 
 
-def _blade(idx, x, y, height, tone, lean, under=None):
-    """풀잎 하나 — 밑동은 곧고 **끝으로 갈수록 휜다**. 타일 밖은 반대편으로 감긴다.
+def _blade(idx, x, y, height, width, tone, lean, under=None):
+    """풀잎 하나 — 밑동은 곧고 굵고, **끝으로 갈수록 휘며 가늘어진다.**
+    타일 밖은 반대편으로 감긴다.
 
-    끝 한 칸만 밀면(옛 `_stroke` 의 `lean`) 4px 을 넘는 잎이 곧은 막대가 된다 —
-    48px 칸에서는 잎이 그만큼 길어져서 휘어짐이 필요해졌다.
+    끝 한 칸만 밀면(옛 `_stroke` 의 `lean`) 4px 을 넘는 잎이 곧은 막대가 된다.
+    **굵기도 같은 문제를 갖는다**(2026-09-08, INBOX #62): 굵기를 세로로 일정하게
+    두면 잎이 아니라 **각목**이라, 밑동에서 끝으로 한 칸씩 줄여야 잎으로 읽힌다.
     """
     if under is not None:
         # 뿌리 아래 한 칸이 그늘이다 — 광원이 왼쪽 위라 그늘은 언제나 아래다
         # (STYLE_GUIDE 4번). 잎보다 **먼저** 찍어야 잎이 안 덮인다.
-        idx[(y + 1) % TILE, x % TILE] = under
+        for j in range(width):
+            idx[(y + 1) % TILE, (x + j) % TILE] = under
     for k in range(height):
-        bend = int(round(lean * (k / max(height - 1, 1)) ** 1.6))
-        idx[(y - k) % TILE, (x + bend) % TILE] = tone
+        t = k / max(height - 1, 1)
+        bend = int(round(lean * t ** 1.6))
+        w = max(1, int(round(width - (width - 1) * t)))
+        for j in range(w):
+            idx[(y - k) % TILE, (x + bend + j) % TILE] = tone
 
 
-def _tuft(idx, rng, tone, under, height, blades):
-    """풀포기 — **사이를 띄운** 잎 몇 장. 붙여 그리면 삼각형(=멀리 있는 나무)이 된다."""
-    x, y = int(rng.integers(0, TILE)), int(rng.integers(0, TILE))
+## **무늬를 칸마다 한두 군데로 모은다** (2026-09-08, INBOX #62).
+## 같은 크기의 획을 칸 전체에 고르게 뿌리면, 획을 아무리 굵게 키워도 화면은
+## **끝없이 이어지는 한 장의 무늬**가 된다 — 눈이 「한 칸」의 경계를 못 찾는다.
+## 포기를 한두 덤불로 모으고 사이를 비워두면 그 덤불 간격이 곧 타일 간격이라,
+## 화면에서 **칸이 세어진다.** 덤불 자리·개수는 변주가 가르므로 이웃 칸과 다르다.
+## **칸마다 덤불 한 군데다.** 두 군데로 나눠본 후보는 덤불이 그만큼 작아져서 화면에서
+## 도로 잡티가 됐고(실측 후보 C2), 퍼짐을 0.30 까지 넓힌 것은 아예 고르게 뿌린 것과
+## 같아졌다. 퍼짐은 **덤불이 칸을 다 먹지 않을 만큼**이라야 사이의 맨땅이 남아서
+## 덤불 간격 = 칸 간격이 보인다.
+##
+## **바다는 몰지 않는다 — 몰면 이음매가 보인다.** 물결은 길이가 18~30px 이라 이미
+## 칸의 절반을 넘는데, 그걸 한 군데로 더 몰면 칸 안에 **넓은 맨물**이 남고 그 자리가
+## 곧잘 타일 모서리에 걸린다 — 이웃 칸의 물결 띠와 나란히 놓여 가로줄이 비친다.
+## 실측(「이음매」, 상한 1.10): 몰기 0.17 → **1.31** / x 로만 몰기 → 1.17~1.23 /
+## 고르게 뿌리기 → **0.61**. 풀은 포기가 작고 세로라 몰아도 0.94 로 통과한다.
+## 바다의 「한 칸」은 **물결 하나의 크기**가 대신 말한다(물결 하나 ≈ 칸의 절반).
+CLUMP_SPREAD = 0.13     # 풀 — 덤불 둘레로 퍼지는 폭 (타일 대비. 48px 에서 ±6px)
+
+
+def _clump_spot(rng):
+    """이 칸에서 무늬가 모일 자리. 칸 안 어디든 좋다(무늬가 타일 밖으로 감기므로)."""
+    return (float(rng.integers(0, TILE)), float(rng.integers(0, TILE)))
+
+
+def _near(rng, spot, spread):
+    """덤불 자리 둘레의 한 점. 타일 밖으로 나가면 반대편으로 감긴다."""
+    cx, cy = spot
+    s = spread * TILE
+    return (int(round(cx + rng.normal(0.0, s))) % TILE,
+            int(round(cy + rng.normal(0.0, s))) % TILE)
+
+
+def _tuft(idx, rng, tone, under, height, blades, width, at):
+    """풀포기 — **사이를 띄운** 잎 몇 장. 붙여 그리면 삼각형(=멀리 있는 나무)이 된다.
+
+    가운데 잎이 가장 길고 바깥으로 갈수록 짧아지며 바깥쪽으로 휜다 — 그래야
+    잎 몇 개가 아니라 **포기 하나**로 뭉쳐 보인다.
+    """
+    x, y = at
     n = int(rng.integers(blades[0], blades[1] + 1))
+    tall = int(rng.integers(height[0], height[1] + 1))
+    step = width + BLADE_GAP
+    mid = (n - 1) / 2.0
     for i in range(n):
-        dx = int(round((i - (n - 1) / 2.0) * BLADE_GAP))
-        _blade(idx, x + dx, y + int(rng.integers(0, 2)),
-               int(rng.integers(height[0], height[1] + 1)), tone,
-               lean=int(rng.integers(-1, 2)), under=under)
+        off = i - mid
+        h = max(3, int(round(tall * (1.0 - TUFT_TAPER * abs(off)))))
+        # 바깥 잎은 바깥으로 휜다(가운데 잎은 곧게 선다).
+        lean = int(np.sign(off)) * int(rng.integers(1, 3)) if off else int(rng.integers(-1, 2))
+        _blade(idx, x + int(round(off * step)), y + int(rng.integers(0, 2)),
+               h, max(1, width - (abs(off) > 1)), tone, lean=lean, under=under)
 
 
 def grass_index(seed):
@@ -212,40 +286,58 @@ def grass_index(seed):
     """
     idx = np.ones((TILE, TILE), np.int8)
     rng = np.random.default_rng(seed + 900)
-    for tone, under, per_kpx, height, blades in GRASS_TUFTS:
-        # 변주마다 한 포기씩 더 얹어 개수까지 갈라놓는다(자리는 시드가 이미 가른다).
-        for _ in range(_per_tile(per_kpx) + seed % 2):
-            _tuft(idx, rng, tone, under, height, blades)
+    spot = _clump_spot(rng)
+    for tone, under, per_kpx, height, blades, width in GRASS_TUFTS:
+        # **변주마다 개수를 갈라놓는다**(자리는 시드가 이미 가른다). 덤불이 칸에
+        # 하나뿐이라 포기 한두 개 차이가 화면에서 그대로 보인다 — 옛 45개짜리
+        # 잡티에서는 같은 `+1` 이 아무 차이도 못 만들었다(2026-09-08, INBOX #62).
+        for _ in range(max(1, _per_tile(per_kpx) + seed % 3 - 1)):
+            _tuft(idx, rng, tone, under, height, blades, width,
+                  _near(rng, spot, CLUMP_SPREAD))
     return idx
 
 
 def sea_index(seed):
-    """바다 한 칸의 램프 단계 지도 — 잔물결(가로 획) + 드문 물마루.
+    """바다 한 칸의 램프 단계 지도 — 물마루(골 + 마루) 몇 줄 + 잔물결.
 
-    풀과 같은 밀도 규칙을 쓰되 **획이 가로**다 — 세로 획으로 채우면 물이 아니라
-    잔디가 되고, 등방 얼룩으로 채우면 자갈밭이 된다.
+    풀과 같은 밀도·덤불 규칙을 쓰되 **획이 가로**다 — 세로 획으로 채우면 물이
+    아니라 잔디가 되고, 등방 얼룩으로 채우면 자갈밭이 된다.
     """
     idx = np.ones((TILE, TILE), np.int8)
     rng = np.random.default_rng(seed + 300)
-    for tone, under, per_kpx, run in SEA_RIPPLES:
-        for _ in range(_per_tile(per_kpx) + seed % 2):
-            _ripple(idx, rng, tone, under, run)
+    for per_kpx, run, thick, tone, crest in SEA_WAVES:
+        for _ in range(max(1, _per_tile(per_kpx) + seed % 3 - 1)):
+            # 풀과 달리 **고르게 뿌린다** — 이유는 `CLUMP_SPREAD` 위 주석.
+            at = (int(rng.integers(0, TILE)), int(rng.integers(0, TILE)))
+            _wave(idx, rng, tone, crest, run, thick, at)
     return idx
 
 
-def _ripple(idx, rng, tone, under, run):
-    """물결 한 줄 — 가로 획 + 끝을 한 칸 올려 굽힌다(직선이면 자막처럼 보인다)."""
-    x, y = int(rng.integers(0, TILE)), int(rng.integers(0, TILE))
+def _wave(idx, rng, tone, crest, run, thick, at):
+    """물결 한 줄 — 굵은 가로 획. **양끝은 한 칸으로 가늘어지고** 가운데가 두껍다.
+
+    (2026-09-08, INBOX #62) 1px 짜리 가로 획은 48px 칸에서 물결이 아니라 **긁힌
+    자국**이다. 굵기를 주되 **끝을 뾰족하게 남겨야** 각목이 안 된다 — 잎과 같은
+    이유다. 그리고 획이 길어진 만큼 **가운데를 한 칸 내려** 물결의 골을 만든다.
+
+    `crest` 면 그 골 **바로 위에 가장 밝은 단계를 한 줄** 얹는다 — 물결이 물결로
+    읽히는 것은 획 하나가 아니라 「어두운 골 + 밝은 마루」 한 쌍이다.
+    """
+    x, y = at
     length = int(rng.integers(run[0], run[1] + 1))
     lean = int(rng.integers(-1, 2))
+    sag = int(rng.integers(0, 2))       # 가운데가 한 칸 처지는가 (물결의 골)
     for k in range(length):
-        shift = lean if k >= length - 1 else 0
-        py, px = (y + shift) % TILE, (x + k) % TILE
-        if under is not None:
-            idx[(py + 1) % TILE, px] = under
-        idx[py, px] = tone
-    if rng.random() < 0.6:
-        idx[(y - 1) % TILE, (x + length) % TILE] = tone
+        t = k / max(length - 1, 1)
+        # 끝 두 칸은 한 겹으로 가늘어진다.
+        w = thick if 1 <= k < length - 1 else 1
+        shift = (lean if k >= length - 1 else 0) + (sag if 0.3 <= t <= 0.7 else 0)
+        px = (x + k) % TILE
+        for j in range(w):
+            idx[(y + shift + j) % TILE, px] = tone
+        # 마루는 골보다 짧다 — 끝까지 얹으면 두 줄짜리 띠가 되어 물결이 아니라 자막이다.
+        if crest and 2 <= k < length - 2:
+            idx[(y + shift - 1) % TILE, px] = 0
 
 
 # ── 해안 ──────────────────────────────────────────────────────────────────
