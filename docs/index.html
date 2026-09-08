@@ -41,8 +41,8 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#67</span> [DESIGN] **아이템 아이콘과 바닥 그림의 도트 크기를 캐릭터·지형에 맞춘다.** (2026-09-08, `LATER.md` 에서 올림.)</li>
 <li><span class="num">#68</span> [BUILD] **커스터마이징(피부색·머리색·옷색)이 다시 동작하게 한다.** (2026-09-08, `LATER.md` 에서 올림.)</li></ul></section>
-<section><h2>마지막 커밋</h2><code>4a48ed4  [INBOX #66] 도구가 손에 들렸다 — 리그의 부품으로 매달고 팔 각도를 물려받는다</code>
-  <p class="sub" style="margin:.3rem 0 0">2026-09-08 14:08</p></section>
+<section><h2>마지막 커밋</h2><code>1f20822  chore(dashboard): 진행 상황 갱신</code>
+  <p class="sub" style="margin:.3rem 0 0">2026-09-08 14:09</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #66 [DESIGN] 도구가 손에 들렸다.** 도구 7종 × 4방향 ×
 (들고있기 / 사용 / 든 채 걷기) 시트 20장에 도끼·곡괭이·낫·총·괭이·물뿌리개·낚싯대가
 실제로 그려져 있다. 그전에는 자세만 있고 **도끼를 들어도 빈손으로 팔만 들었다.**
@@ -74,7 +74,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908140904";
+  var STAMP = "20260908140926";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
