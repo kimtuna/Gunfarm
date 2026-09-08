@@ -80,6 +80,11 @@ const SORT_MIN_PIXELS := 100
 ## (`qa_player_world.gd` 와 같은 값·같은 방식).
 const AIM_REACH := 0.3
 
+## 「아이템/오브젝트 크기 표준」의 하한 — 바닥에 놓이는 것은 화면에서 짧은 쪽이
+## 이보다 작으면 안 된다. 구워진 그림은 `ART`(36)가 지키고, 코드로 그리는
+## 자리표시는 아래 `_check_placeholder_art()` 가 지킨다.
+const PLACEHOLDER_MIN_PX := 32
+
 var _steps: Array[Callable] = []
 var _step := 0
 var _wait := 0
@@ -265,12 +270,45 @@ func _check_dot_scale() -> void:
 		if art.get_size() != Vector2(GroundItemNode.ART, GroundItemNode.ART):
 			_fails.append("코어: %s 의 바닥 그림이 %s — %dpx 한 칸이어야 한다"
 					% [id, art.get_size(), GroundItemNode.ART])
-	# 자리표시(그림이 없는 아이템)도 제 격자 위에 있어야 한다. **`ZOOM` 이 아니라
-	# `PLACEHOLDER_DOT` 으로 나눈다** — 자리표시만 코드에 박힌 무늬라 결이 다르다
-	# (그 이유는 `ground_item_node.gd` 의 같은 상수 옆에 있다).
-	if GroundItemNode.PLACEHOLDER % GroundItemNode.PLACEHOLDER_DOT != 0:
-		_fails.append("코어: 자리표시 %dpx 가 한 칸 %d 로 안 나눠떨어진다"
-				% [GroundItemNode.PLACEHOLDER, GroundItemNode.PLACEHOLDER_DOT])
+	_check_placeholder_art()
+
+
+## 자리표시(그림이 없는 아이템)의 무늬 표. **여기가 도트 결이 갈리기 가장 쉬운
+## 자리다** — 구워진 그림과 달리 코드 안의 글자 표라, 배율을 내려도 저절로
+## 안 따라온다(2026-09-08, INBOX #70 이 실제로 그렇게 남아 있던 것을 고쳤다).
+## 보는 것 넷:
+##   - 표의 칸 수가 `PLACEHOLDER_COLS`/`ROWS` 와 맞는가(줄 길이도 전부 같은가).
+##   - 화면 크기가 그 칸 수 × `ZOOM` 인가 — **자리표시만의 배율을 다시 두지 않는다.**
+##   - 짧은 쪽이 32px 이상인가 — 「아이템/오브젝트 크기 표준」의 하한이다.
+##   - 램프 4단계를 실제로 세 단계 넘게 쓰는가(단색이면 색종이로 보인다).
+func _check_placeholder_art() -> void:
+	var art: Array = GroundItemNode.PLACEHOLDER_ART
+	var rows: int = art.size()
+	var cols: int = 0 if rows == 0 else (art[0] as String).length()
+	if rows != GroundItemNode.PLACEHOLDER_ROWS or cols != GroundItemNode.PLACEHOLDER_COLS:
+		_fails.append("코어: 자리표시 표가 %d x %d — 상수는 %d x %d 다"
+				% [cols, rows, GroundItemNode.PLACEHOLDER_COLS,
+				GroundItemNode.PLACEHOLDER_ROWS])
+	var steps := {}
+	for y in rows:
+		var row: String = art[y]
+		if row.length() != cols:
+			_fails.append("코어: 자리표시 %d 번째 줄이 %d 칸 — 나머지는 %d 칸이다"
+					% [y, row.length(), cols])
+		for x in row.length():
+			var cell := row[x]
+			if cell != "." and cell != "k":
+				steps[cell] = true
+	var size: Vector2i = GroundItemNode.PLACEHOLDER
+	if size != Vector2i(cols, rows) * GroundItemNode.ZOOM:
+		_fails.append("코어: 자리표시 화면 크기 %s 가 표(%d x %d) × 배율 %d 와 다르다"
+				% [size, cols, rows, GroundItemNode.ZOOM])
+	if mini(size.x, size.y) < PLACEHOLDER_MIN_PX:
+		_fails.append("코어: 자리표시가 화면 %d x %d — 짧은 쪽이 「크기 표준」의 하한 %dpx 를 깬다"
+				% [size.x, size.y, PLACEHOLDER_MIN_PX])
+	if steps.size() < 3:
+		_fails.append("코어: 자리표시가 램프 단계를 %d 개만 쓴다 — 단색으로 보인다"
+				% steps.size())
 
 
 ## 지금 실려 있는 캐릭터 시트의 씬 배율. 시트에서 칸 크기를 읽어 `scale_of()` 에
