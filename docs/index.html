@@ -41,7 +41,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 </div>
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#62</span> [DESIGN] **지형 무늬를 굵게 — 화면에서 「한 칸」이 읽히게 한다.** (2026-09-08 실측)</li>
 <li><span class="num">#63</span> [DESIGN] **월드 오브젝트를 놓는다 — 나무 · 바위 · 덤불.** 화면에 캐릭터 말고 **크기를 견줄 것**이 생기는 순간 캐릭터는 저절로 제 크기로 보인다. 세 항목 중 **효과가 가장 크다**(`DESIGN.md` 「카메라 / 해상도」의 실측 근거 참고).</li></ul></section>
-<section><h2>마지막 커밋</h2><code>6f28810  [INBOX #61] 맵을 섬 하나로 만든다 — 감쇠를 빼는 대신 마스크를 곱한다</code>
+<section><h2>마지막 커밋</h2><code>b35fcbd  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-08 11:58</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-08 — **INBOX #61 [BUILD] 맵이 섬 하나가 됐다.**
 육지 연결 요소가 시드마다 **28~51개 → 정확히 1개**, 갇힌 물이 **2100~6600칸 → 0칸**,
@@ -75,7 +75,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260908115821";
+  var STAMP = "20260908115843";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
