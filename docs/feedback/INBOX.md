@@ -565,3 +565,26 @@
     (배경 제거 → 알파 가중 축소 → 팔레트 → 1px 잉크). 지금은 임시 폴더에 있고
     **저장소에 넣지 않았다** — 실제로 쓸 일이 생기면 그때 `game/tools/` 로 옮긴다.
   자체 QA: 없다(문서 항목). `#73` 을 하는 바퀴가 이 결론 위에서 작업하면 된다.
+
+- [ ] #75 [BUILD] **논리 해상도 1920×1080 · 인물 키 72px(1.5칸) 로 내린다.** (2026-09-10 사람 결정 — 근거는 `docs/DESIGN.md` 「카메라 / 해상도」 와 「아이템/오브젝트 크기 표준」 에 숫자까지 적어뒀다.)
+  읽을 것: `docs/DESIGN.md` · `docs/CHARACTER.md`
+
+  **고칠 값은 넷뿐이다. 새로 설계할 것이 없다 — 아래 숫자를 그대로 넣는다.**
+
+  ```
+  game/project.godot     viewport_width  1440 → 1920      viewport_height  810 → 1080
+                         window_width_override 1280 → 1920  window_height_override 720 → 1080
+  game/tools/comfy.py    FIG_HEADS  3.6 → 2.77
+  game/tools/rig.py      인물 키(bake 대상) 96 → 72        # joints() 의 h
+  ```
+
+  - **`heads` 를 같이 내리는 것이 이 항목의 핵심이다.** `joints()` 는 **머리만 `H = h/heads` 로 재고 상체·하체·팔은 `h` 로 잰다.** `h` 만 줄이면 얼굴까지 같이 죽는다(`CHARACTER.md` 에 48px 에서 얼굴이 죽은 실측이 있다). `heads` 2.77 이면 `H = 72/2.77 = 26px` 로 **머리 26px · 눈 3px 이 그대로 남는다.**
+  - **어깨·엉덩이 폭과 팔다리 반경은 손대지 말 것** — 전부 `h` 의 비율이라 저절로 따라온다. 사람이 *"당연히 몸도 같이 얇아져야지"* 라고 정했다. 실측으로 사라지는 부위가 없음을 확인했다(가장 가는 정면 허벅지 6 → 4.5px).
+  - **시트 칸(`cell`)은 96px 그대로 둔다.** 인물이 72px 이 되어 칸에 24px 이 남고, 그 여유가 **`#72`(가로로 넓은 도구가 칸에 안 들어가 캐릭터가 8% 작아진다)를 푼다** — `#72` 를 이 항목과 같이 보고, 풀렸으면 닫는다.
+  - **타일·아이템·지형·아이콘은 한 장도 안 건드린다.** 타일 아트는 48px 그대로다.
+
+  **다시 굽고 검사한다**: `.venv/bin/python -c "import sys;sys.path.insert(0,'game/tools');import rig;rig.build_sheets()"` → `--import` → `qa_character_sheets.py` `qa_player_walk` `qa_player_world` `qa_character_sprite` `qa_sprite_check.py` `qa_ground_items`.
+
+  **미리 아는 위험 — 걷기 모션 값이 96px 다리에 맞춰져 있다.** `rig.py` 의 `STRIDE` 와 `walk_front`/`walk_side` 의 허벅지·무릎·어깨·팔꿈치 각도는 사람이 96px 에서 눈으로 고른 값이다. 다리가 36 → 27px 이 되므로 **그대로 두면 짧은 다리가 과장되게 휘적거린다.** 「이어짐」·「고르게」가 뭐라 하는지 보고 각도를 다시 잡는다 — `CHARACTER.md` 의 통과 구간 표를 다시 뽑을 것.
+
+  **사람이 볼 것**: 고친 뒤 월드 캡처를 지금 것과 나란히 놓는다. 캐릭터가 화면 세로의 **11.9% → 6.7%**, 보이는 칸이 **30 × 16.9 → 40 × 22.5** 가 되어야 한다.
