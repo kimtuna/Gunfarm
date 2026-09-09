@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# loop_design.sh — 그림·모션 루프. `loop.sh` 와 **따로** 돈다.
+#
+# 규칙은 docs/DESIGN_LOOP.md, 큐는 docs/feedback/DESIGN_QUEUE.md.
+#
+# 한 바퀴:
+#   1. 큐에서 번호가 가장 작은 미완료(`- [ ] #dN`) 항목을 찾는다
+#   2. **만드는 세션** — PROMPT_DESIGN.md. 후보를 굽고 note.md 를 쓴다
+#   3. **보는 세션**   — PROMPT_CRITIC.md. ②의 그림을 보고 「잴 것」을 critique.md 에 쓴다
+#      (감상 금지 — 근거는 docs/DESIGN_LOOP.md 「판정자는 셋」)
+#   4. 갤러리(docs/design.html)를 다시 그려 커밋+push
+#
+# 항목 상태 셋:
+#   - [ ]  미완료           루프가 집는다
+#   - [~]  사람 대기         `[취향]` 항목이 후보를 다 냈다. 루프는 건너뛴다
+#   - [x]  완료
+#
+# **`[취향]` 항목은 루프가 못 닫는다** — 후보를 갤러리에 올리고 `- [~]` 로 바꾼 뒤
+# 다음 항목으로 간다. 안 그러면 취향 항목 하나에 영원히 물린다.
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT" || exit 1
+# shellcheck source=env.sh
+source "$ROOT/env.sh"
+
+HARNESS="$ROOT/.harness/design"
+mkdir -p "$HARNESS"
+LOG="$ROOT/.harness/design.log"
+STOP_FILE="$HARNESS/STOP"
+WARNING_FILE="$HARNESS/WARNING"
+REPEAT_FILE="$HARNESS/repeat_count"
+LAST_ITEM_FILE="$HARNESS/last_item"
+QUEUE="$ROOT/docs/feedback/DESIGN_QUEUE.md"
+P_MAKE="$ROOT/PROMPT_DESIGN.md"
+P_EYE="$ROOT/PROMPT_CRITIC.md"
+
+# 한 바퀴에 두 세션을 부르므로 각각의 제한은 절반으로 본다.
+DESIGN_LAP_TIMEOUT="${DESIGN_LAP_TIMEOUT:-$((LAP_TIMEOUT_SECONDS))}"
+EYE_TIMEOUT="${EYE_TIMEOUT:-900}"        # 보는 세션은 짧다 — 그림 몇 장 보고 쓰는 게 전부다
+
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
+
+notify() {
+  [[ "${NOTIFY:-1}" == "1" ]] || return 0
+  command -v osascript >/dev/null 2>&1 || return 0
+  osascript -e "display notification \"${2//\"/}\" with title \"Gunfarm — 그림\" subtitle \"${1//\"/}\" sound name \"${NOTIFY_SOUND:-Glass}\"" \
+    >/dev/null 2>&1 || true
+}
+
+# 갤러리만 그린다 — **기존 대시보드(docs/index.html)는 건드리지 않는다.**
+# 두 페이지가 서로를 못 깨게 스크립트도 파일도 따로다(docs/DESIGN_LOOP.md 「갤러리」).
+render_and_push_gallery() {
+  /usr/bin/python3 "$ROOT/scripts/render_design.py" >>"$LOG" 2>&1 || return 0
+  git -C "$ROOT" add docs/design.html docs/design_reference >/dev/null 2>&1
+  if ! git -C "$ROOT" diff --cached --quiet 2>/dev/null; then
+    git -C "$ROOT" commit -q -m "chore(gallery): 그림 갤러리 갱신" >>"$LOG" 2>&1
+    git -C "$ROOT" push -q "$PUSH_REMOTE" "HEAD:$PUSH_BRANCH" >>"$LOG" 2>&1 \
+      || log "경고: 갤러리 push 실패 (다음 바퀴에 다시 시도)"
+  fi
+}
+
+halt() {
+  printf '%s\n\n(%s)\n' "$1" "$(date '+%Y-%m-%d %H:%M:%S')" > "$WARNING_FILE"
+  log "== 멈춤: $1"
+  render_and_push_gallery
+  notify "그림 루프가 멈췄습니다" "$(printf '%s' "$1" | head -1)"
+  exit "${2:-1}"
+}
+
+# 번호가 가장 작은 미완료 항목. 출력: "<번호><TAB><본문>"
+next_item() {
+  grep -E '^- \[ \] *#d[0-9]+' "$QUEUE" 2>/dev/null \
+    | sed -E 's/^- \[ \] *#d([0-9]+) *(.*)$/\1'$'\t''\2/' \
+    | sort -n -k1,1 | head -1
+}
+
+CREDIT_RE='usage limit|session limit|rate limit|limit reached|hit your [a-z ]*limit|Credit balance is too low|insufficient credit|quota exceeded|Please run /login'
+
+# `claude -p` 한 번. $1=프롬프트파일 $2=제한초 $3=결과JSON. 종료코드를 그대로 돌려준다.
+run_session() {
+  local prompt="$1" limit="$2" out="$3" pid start rc
+  claude -p "$(cat "$prompt")" \
+    --model "$MODEL" \
+    --permission-mode "$PERMISSION_MODE" \
+    --no-session-persistence \
+    --output-format json \
+    --add-dir "$ROOT" \
+    >"$out" 2>>"$LOG" &
+  pid=$!
+  start=$(date +%s)
+  # 벽시계로 잰다 — 맥이 자면 sleep 타이머가 같이 멈춘다(loop.sh 에서 겪은 것).
+  ( while kill -0 "$pid" 2>/dev/null; do
+      sleep 30
+      if (( $(date +%s) - start >= limit )); then
+        kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
+      fi
+    done ) >/dev/null 2>&1 &
+  local wd=$!
+  wait "$pid"; rc=$?
+  pkill -P "$wd" >/dev/null 2>&1; kill "$wd" >/dev/null 2>&1; wait "$wd" 2>/dev/null
+  return $rc
+}
+
+# --- 시작 전 확인 ---
+for f in "$QUEUE" "$P_MAKE" "$P_EYE"; do
+  [[ -f "$f" ]] || { echo "$f 없음"; exit 1; }
+done
+command -v claude >/dev/null || { echo "claude CLI 없음"; exit 1; }
+
+rm -f "$WARNING_FILE"
+log "== 그림 루프 시작 (pid $$)"
+
+while :; do
+  [[ -f "$STOP_FILE" ]] && { rm -f "$STOP_FILE"; log "== STOP 파일 — 정상 종료"; exit 0; }
+
+  ITEM="$(next_item)"
+  if [[ -z "$ITEM" ]]; then
+    WAITING="$(grep -cE '^- \[~\]' "$QUEUE" 2>/dev/null)"; WAITING="${WAITING:-0}"
+    render_and_push_gallery
+    if (( WAITING > 0 )); then
+      halt "큐에 남은 것이 없습니다 — **사람이 고를 후보 ${WAITING}건**이 갤러리에 있습니다.
+https://kimtuna.github.io/Gunfarm/design.html
+고르셨으면 그 항목을 - [x] 로 바꾸고 ./ctl.sh design start" 0
+    fi
+    halt "그림 큐가 비었습니다. docs/feedback/DESIGN_QUEUE.md 에 항목을 넣고 ./ctl.sh design start" 0
+  fi
+
+  NUM="${ITEM%%$'\t'*}"; TEXT="${ITEM#*$'\t'}"
+  # 갈래 — 본문 맨 앞의 [바탕]/[자]/[취향]
+  KIND="$(printf '%s' "$TEXT" | sed -nE 's/^\[([^]]+)\].*/\1/p')"
+  KIND="${KIND:-자}"
+
+  LAST="$(cat "$LAST_ITEM_FILE" 2>/dev/null || echo)"
+  if [[ "$LAST" == "$NUM" ]]; then
+    COUNT=$(( $(cat "$REPEAT_FILE" 2>/dev/null || echo 0) + 1 ))
+  else
+    COUNT=1
+  fi
+  echo "$NUM" > "$LAST_ITEM_FILE"; echo "$COUNT" > "$REPEAT_FILE"
+
+  if (( COUNT > STUCK_REPEAT_LIMIT )); then
+    halt "#d$NUM 이 ${STUCK_REPEAT_LIMIT}회 연속 미완료입니다 — 접근이 틀렸을 수 있습니다.
+$TEXT"
+  fi
+
+  WORK="$HARNESS/d$NUM"
+  mkdir -p "$WORK"
+  echo "$NUM" > "$HARNESS/current"
+  echo "$KIND" > "$WORK/kind"
+  log "-- 바퀴 시작: #d$NUM [$KIND] (연속 ${COUNT}/${STUCK_REPEAT_LIMIT}회차) — $TEXT"
+  render_and_push_gallery
+
+  LOG_MARK="$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')"; LOG_MARK="${LOG_MARK:-0}"
+
+  # ── ② 만드는 세션 ────────────────────────────────────────────────────────
+  OUT_MAKE="$WORK/make_$(date +%s).json"
+  run_session "$P_MAKE" "$DESIGN_LAP_TIMEOUT" "$OUT_MAKE"; RC=$?
+  (( RC == 143 || RC == 137 )) && log "경고: 만드는 세션이 타임아웃으로 종료됨"
+  (( RC != 0 && RC != 143 && RC != 137 )) && log "경고: 만드는 세션 종료코드 $RC"
+
+  if grep -qiE "$CREDIT_RE" "$OUT_MAKE" 2>/dev/null \
+     || tail -n "+$((LOG_MARK + 1))" "$LOG" 2>/dev/null | grep -qiE "$CREDIT_RE"; then
+    HIT="$(grep -oiE "[^\"]*($CREDIT_RE)[^\"]*" "$OUT_MAKE" 2>/dev/null | head -1)"
+    RESET_AT="$(/usr/bin/python3 "$ROOT/scripts/parse_reset.py" "$HIT" 2>/dev/null)"
+    echo "$((COUNT - 1))" > "$REPEAT_FILE"     # 한도는 연속 실패로 세지 않는다
+    if [[ -n "$RESET_AT" ]]; then
+      WAKE=$((RESET_AT + 60))
+      log "== 한도에 걸림 — $(date -r "$RESET_AT" '+%H:%M') 리셋. 그때까지 자고 이어서 돈다"
+      while (( $(date +%s) < WAKE )); do
+        [[ -f "$STOP_FILE" ]] && { rm -f "$STOP_FILE"; log "== 대기 중 STOP"; exit 0; }
+        sleep 30
+      done
+      continue
+    fi
+    halt "한도에 걸렸는데 리셋 시각을 못 읽었습니다: $HIT"
+  fi
+
+  # ── ③ 보는 세션 ─────────────────────────────────────────────────────────
+  # 만드는 세션이 그림을 하나도 안 남겼으면 볼 것이 없다 — 건너뛴다.
+  if compgen -G "$WORK/*.png" >/dev/null || [[ -s "$WORK/note.md" ]]; then
+    OUT_EYE="$WORK/eye_$(date +%s).json"
+    run_session "$P_EYE" "$EYE_TIMEOUT" "$OUT_EYE"; RC2=$?
+    (( RC2 != 0 )) && log "경고: 보는 세션 종료코드 $RC2 (비평 없이 진행)"
+  else
+    log "   만드는 세션이 그림도 note.md 도 안 남겼다 — 보는 세션을 건너뛴다"
+  fi
+
+  render_and_push_gallery
+
+  # ── ④ 판정 ──────────────────────────────────────────────────────────────
+  if grep -qE "^- \[[xX]\][^#]*#d${NUM}([^0-9]|$)" "$QUEUE"; then
+    log "-- 완료: #d$NUM"
+    rm -f "$REPEAT_FILE" "$LAST_ITEM_FILE"
+  elif grep -qE "^- \[~\][^#]*#d${NUM}([^0-9]|$)" "$QUEUE"; then
+    log "-- 후보 나옴, 사람 대기: #d$NUM"
+    notify "고를 후보가 나왔습니다 — #d$NUM" "$(printf '%s' "$TEXT" | head -1)"
+    rm -f "$REPEAT_FILE" "$LAST_ITEM_FILE"
+  else
+    log "-- 미완료로 남음: #d$NUM (다음 바퀴 재시도)"
+  fi
+
+  sleep "${WAIT_BETWEEN_LAPS:-20}"
+done

@@ -6,23 +6,49 @@
 #   ./ctl.sh graceful-stop  STOP 파일 생성 — 지금 바퀴를 끝내고 멈춘다
 #   ./ctl.sh status         돌고 있는지 / 마지막 로그 / 경고
 #   ./ctl.sh logs           로그 따라가기
+#
+#   ./ctl.sh design start|stop|graceful-stop|status|logs
+#                           **그림·모션 루프**(loop_design.sh). INBOX 루프와 따로 돈다.
+#                           규칙 docs/DESIGN_LOOP.md · 큐 docs/feedback/DESIGN_QUEUE.md
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$ROOT/env.sh"
 
-LABEL="com.gunfarm.loop"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+# 첫 인자가 design 이면 **그림 루프**를 다룬다 — 스크립트·라벨·로그만 갈리고
+# 아래 launchd 코드는 그대로 쓴다(복사하면 한쪽만 고쳐지는 사고가 난다).
+WHICH="main"
+if [[ "${1:-}" == "design" ]]; then WHICH="design"; shift; fi
+
 HARNESS="$ROOT/.harness"
-LOG="$HARNESS/loop.log"
-PIDFILE="$HARNESS/loop.pid"
 mkdir -p "$HARNESS"
+if [[ "$WHICH" == "design" ]]; then
+  LABEL="com.gunfarm.design"
+  SCRIPT="$ROOT/loop_design.sh"
+  LOG="$HARNESS/design.log"
+  PIDFILE="$HARNESS/design.pid"
+  STOPDIR="$HARNESS/design"
+  QUEUE_FILE="$ROOT/docs/feedback/DESIGN_QUEUE.md"
+  QUEUE_NAME="DESIGN_QUEUE"
+  NUM_RE='#d[0-9]+'
+  mkdir -p "$STOPDIR"
+else
+  LABEL="com.gunfarm.loop"
+  SCRIPT="$ROOT/loop.sh"
+  LOG="$HARNESS/loop.log"
+  PIDFILE="$HARNESS/loop.pid"
+  STOPDIR="$HARNESS"
+  QUEUE_FILE="$ROOT/docs/feedback/INBOX.md"
+  QUEUE_NAME="INBOX"
+  NUM_RE='#[0-9]+'
+fi
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 # 실제로 loop.sh 프로세스가 살아 있는가? 살아있으면 PID를 출력한다.
 running_pid() {
   local pid
-  pid="$(pgrep -f "bash $ROOT/loop.sh" 2>/dev/null | head -1)"
-  [[ -z "$pid" ]] && pid="$(pgrep -f "$ROOT/loop.sh" 2>/dev/null | head -1)"
+  pid="$(pgrep -f "bash $SCRIPT" 2>/dev/null | head -1)"
+  [[ -z "$pid" ]] && pid="$(pgrep -f "$SCRIPT" 2>/dev/null | head -1)"
   [[ -n "$pid" ]] && echo "$pid"
 }
 
@@ -38,11 +64,11 @@ write_plist() {
     <string>/usr/bin/caffeinate</string>
     <string>-is</string>
     <string>/bin/bash</string>
-    <string>$ROOT/loop.sh</string>
+    <string>$SCRIPT</string>
   </array>
   <key>WorkingDirectory</key><string>$ROOT</string>
-  <key>StandardOutPath</key><string>$HARNESS/launchd.out.log</string>
-  <key>StandardErrorPath</key><string>$HARNESS/launchd.err.log</string>
+  <key>StandardOutPath</key><string>$HARNESS/launchd.$WHICH.out.log</string>
+  <key>StandardErrorPath</key><string>$HARNESS/launchd.$WHICH.err.log</string>
   <key>RunAtLoad</key><false/>
   <key>KeepAlive</key><false/>
   <key>EnvironmentVariables</key>
@@ -58,7 +84,7 @@ PLISTEOF
 # 큐가 비었거나 즉시 멈추는 경우 루프는 1초 안에 끝나서 pgrep 으로는 못 잡는다.
 started_count() {
   local n
-  n="$(grep -c '== 루프 시작' "$LOG" 2>/dev/null)"
+  n="$(grep -cE '== (루프|그림 루프) 시작' "$LOG" 2>/dev/null)"
   echo "${n:-0}"   # 로그 파일이 아직 없으면 grep 이 아무것도 안 찍는다 → 0 으로 정규화.
 }                  # (정규화를 한쪽에만 하면 "" != "0" 이 되어 시작했다고 오보한다)
 
@@ -67,7 +93,7 @@ cmd_start() {
     echo "이미 돌고 있습니다 (pid $pid). 멈추려면 ./ctl.sh stop"
     return 0
   fi
-  rm -f "$HARNESS/STOP"
+  rm -f "$STOPDIR/STOP"
 
   local uid before i pid
   uid="$(id -u)"
@@ -98,7 +124,7 @@ cmd_start() {
   launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1
   # caffeinate 로 감싼다 — 안 그러면 맥이 Maintenance Sleep 에 들어가면서 세션과
   # 타임아웃 타이머가 같이 정지한다(무인 루프가 몇 시간씩 멈춰 있게 된다).
-  nohup /usr/bin/caffeinate -is /bin/bash "$ROOT/loop.sh" >>"$HARNESS/nohup.log" 2>&1 &
+  nohup /usr/bin/caffeinate -is /bin/bash "$SCRIPT" >>"$HARNESS/nohup.$WHICH.log" 2>&1 &
   local fallback=$!
   sleep 2
   if kill -0 "$fallback" 2>/dev/null; then
@@ -131,7 +157,7 @@ cmd_stop() {
 
 cmd_graceful_stop() {
   if running_pid >/dev/null; then
-    touch "$HARNESS/STOP"
+    touch "$STOPDIR/STOP"
     echo "STOP 파일을 만들었습니다 — 지금 바퀴가 끝나면 멈춥니다."
   else
     echo "돌고 있지 않습니다."
@@ -144,19 +170,24 @@ cmd_status() {
   else
     echo "○ 멈춰 있음"
   fi
-  if [[ -f "$HARNESS/WARNING" ]]; then
+  if [[ -f "$STOPDIR/WARNING" ]]; then
     echo
     echo "⚠ 경고:"
-    sed 's/^/   /' "$HARNESS/WARNING"
+    sed 's/^/   /' "$STOPDIR/WARNING"
   fi
   local remaining done_n
   # grep -c 는 0건일 때도 "0"을 찍고 exit 1 을 낸다 — `|| echo 0` 을 붙이면 "0\n0" 이 된다.
   # 완료 항목은 `- [x] (2026-09-06) #1 ...` 처럼 번호 앞에 날짜가 붙으므로 그걸 삼킨다.
-  remaining="$(grep -cE '^- \[ \][^#]*#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
-  done_n="$(grep -cE '^- \[[xX]\][^#]*#[0-9]+' "$ROOT/docs/feedback/INBOX.md" 2>/dev/null)"
-  remaining="${remaining:-0}"; done_n="${done_n:-0}"
+  remaining="$(grep -cE "^- \[ \][^#]*$NUM_RE" "$QUEUE_FILE" 2>/dev/null)"
+  done_n="$(grep -cE "^- \[[xX]\][^#]*$NUM_RE" "$QUEUE_FILE" 2>/dev/null)"
+  waiting="$(grep -cE "^- \[~\][^#]*$NUM_RE" "$QUEUE_FILE" 2>/dev/null)"
+  remaining="${remaining:-0}"; done_n="${done_n:-0}"; waiting="${waiting:-0}"
   echo
-  echo "INBOX: 완료 $done_n / 남음 $remaining"
+  if (( waiting > 0 )); then
+    echo "$QUEUE_NAME: 완료 $done_n / 남음 $remaining / **사람이 고를 것 $waiting**"
+  else
+    echo "$QUEUE_NAME: 완료 $done_n / 남음 $remaining"
+  fi
   if [[ -f "$LOG" ]]; then
     echo
     echo "최근 로그:"
@@ -170,5 +201,5 @@ case "${1:-status}" in
   graceful-stop)  cmd_graceful_stop ;;
   status)         cmd_status ;;
   logs)           tail -f "$LOG" ;;
-  *) echo "사용법: $0 {start|stop|graceful-stop|status|logs}" >&2; exit 2 ;;
+  *) echo "사용법: $0 [design] {start|stop|graceful-stop|status|logs}" >&2; exit 2 ;;
 esac

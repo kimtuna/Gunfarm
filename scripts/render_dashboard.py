@@ -160,6 +160,7 @@ code {{ font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }}
 footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; }}
 </style></head><body><main>
 <h1>Gunfarm</h1>
+<p><a href="design.html">그림 갤러리 →</a></p>
 <p class="sub">당신의 농장은 병참기지다. — 자율 개발 루프 진행 상황</p>
 {banner}
 <div class="cards">

@@ -114,6 +114,16 @@ PNG·SVG·오디오처럼 **임포트되는 자산마다** 생기는 `<자산>.i
 
 ## 하네스
 
-`./ctl.sh status|start|stop|graceful-stop|logs`, 설정은 `env.sh`.
-런타임 상태(로그/PID/바퀴별 JSON)는 `.harness/` 에 쌓이고 커밋하지 않는다.
-대시보드: https://kimtuna.github.io/Gunfarm/ (`docs/index.html`, GitHub Pages `main` `/docs`)
+**루프가 둘이고 따로 돈다.**
+
+| | 명령 | 큐 | 프롬프트 | 페이지 |
+|---|---|---|---|---|
+| 기능 | `./ctl.sh start\|stop\|status\|logs` | `docs/feedback/INBOX.md` | `PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
+| **그림·모션** | `./ctl.sh design start\|stop\|status\|logs` | `docs/feedback/DESIGN_QUEUE.md` | `PROMPT_DESIGN.md` + `PROMPT_CRITIC.md` | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
+
+설정은 둘 다 `env.sh`. 런타임 상태(로그/PID/바퀴별 JSON)는 `.harness/` 에 쌓이고
+커밋하지 않는다.
+
+**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`PROMPT_DESIGN.md`)과
+보는 쪽(`PROMPT_CRITIC.md`). 보는 쪽은 감상이 아니라 **「무엇을 어떻게 재라」**만
+내놓는다. 규칙과 근거는 `docs/DESIGN_LOOP.md` 에 있다.
