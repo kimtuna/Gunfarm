@@ -22,7 +22,7 @@ OUT = os.path.join(ROOT, "docs", "design.html")
 
 # 이 루프가 만든 그림만 모은다 — `d<번호>_...` 로 시작하는 것.
 # 그 규칙이 없으면 예전 참고 자료 수십 장이 갤러리에 섞인다.
-PAT = re.compile(r"^d(\d+)_(.+)\.png$")
+PAT = re.compile(r"^d(\d+)_(.+?)(?:_r(\d+))?\.png$")
 
 e = html.escape
 
@@ -51,7 +51,11 @@ def queue_items():
 
 
 def shots(num):
-    """이 항목이 만든 PNG — 새것부터."""
+    """이 항목이 만든 PNG — **회차 순서(r1 → r2 → r3)로.**
+
+    한 바퀴에 한 장씩 쌓아 올리는 방식이라(docs/DESIGN_LOOP.md 「한 바퀴에 한 장만
+    그린다」), 사람이 **무엇이 나아졌는지 견줄 수 있게** 옛것부터 보여준다.
+    """
     try:
         names = os.listdir(REFDIR)
     except OSError:
@@ -60,10 +64,11 @@ def shots(num):
     for n in names:
         m = PAT.match(n)
         if m and int(m.group(1)) == num:
+            rev = int(m.group(3)) if m.group(3) else 0
             p = os.path.join(REFDIR, n)
-            got.append((os.path.getmtime(p), n))
-    got.sort(reverse=True)
-    return [n for _, n in got]
+            got.append((rev, os.path.getmtime(p), n))
+    got.sort()
+    return [(r, n) for r, _, n in got]
 
 
 def read(*parts):
@@ -99,16 +104,21 @@ def main():
     first = True
     for num, state, kind, title in items:
         pics = shots(num)
+        hist = read(WORKDIR, "d%d" % num, "history.md")
         note = read(WORKDIR, "d%d" % num, "note.md")
         crit = read(WORKDIR, "d%d" % num, "critique.md")
         label, color = BADGE[state]
         thumbs = "".join(
-            '<a href="design_reference/{n}" target="_blank">'
-            '<img src="design_reference/{n}" alt="{n}" loading="lazy"></a>'.format(n=e(p))
-            for p in pics)
+            '<figure><a href="design_reference/{n}" target="_blank">'
+            '<img src="design_reference/{n}" alt="{n}" loading="lazy"></a>'
+            '<figcaption>{cap}</figcaption></figure>'.format(
+                n=e(p), cap=("r%d" % r) if r else e(p))
+            for r, p in pics)
         if not thumbs:
             thumbs = '<p class="none">아직 그림이 없습니다.</p>'
-        body = [thumbs]
+        body = ['<div class="revs">%s</div>' % thumbs]
+        if hist:
+            body.append('<h4>회차 이력 — 무엇을 보완해 왔나</h4><pre>%s</pre>' % e(hist))
         if note:
             body.append('<h4>만든 세션이 남긴 것</h4><pre>%s</pre>' % e(note))
         if crit:
@@ -119,7 +129,7 @@ def main():
             '<span class="num">#d{num}</span>'
             '<span class="kind">{kind}</span>'
             '<span class="title">{title}</span>'
-            '<span class="count">{cnt}장</span>'
+            '<span class="count">{cnt}회차</span>'
             '</summary><div class="body">{body}</div></details>'.format(
                 op=" open" if first and state != "done" else "",
                 c=color, lab=label, num=num, kind=e(kind), title=e(title),
@@ -153,8 +163,11 @@ summary::-webkit-details-marker{{display:none}}
 .title{{flex:1;min-width:200px}}
 .count{{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}}
 .body{{padding:4px 14px 16px;border-top:1px solid var(--line)}}
+.revs{{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}}
+figure{{margin:0}}
+figcaption{{color:var(--dim);font-size:11px;margin-top:4px;text-align:center}}
 .body img{{max-width:100%;image-rendering:pixelated;border-radius:6px;
- border:1px solid var(--line);margin:10px 0;display:block}}
+ border:1px solid var(--line);display:block}}
 h4{{font-size:12px;color:var(--dim);margin:16px 0 6px;font-weight:600}}
 pre{{white-space:pre-wrap;word-break:break-word;background:#101116;border:1px solid var(--line);
  border-radius:8px;padding:10px 12px;font-size:12.5px;color:#cfd0d8;overflow-x:auto}}
