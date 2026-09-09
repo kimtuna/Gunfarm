@@ -15,13 +15,16 @@ MAX_BUDGET_USD_PER_LAP="${MAX_BUDGET_USD_PER_LAP:-0}"
 LAP_TIMEOUT_SECONDS="${LAP_TIMEOUT_SECONDS:-5400}"        # 90분. 넘기면 세션을 죽이고 미완료 처리
 WAIT_BETWEEN_LAPS="${WAIT_BETWEEN_LAPS:-20}"              # 바퀴 사이 대기(초)
 
-# --- 그림 루프 전용 상한 (loop_design.sh) ---
-# 그림 루프는 **한 바퀴에 세션을 두 번** 부르고(만드는 쪽 + 보는 쪽), 「취향」 항목은
-# 후보를 여러 벌 굽는다 — 기능 루프보다 비싸다. 그래서 여기만 상한이 따로 있다.
-# **0 = 무제한.** 기본값은 안전 쪽으로 잡아뒀으니 필요하면 올려라 (멈춰도 `design start`
-# 하면 이어서 돈다 — 누적은 `.harness/design/total_cost` 에 계속 쌓인다).
-DESIGN_MAX_TOTAL_USD="${DESIGN_MAX_TOTAL_USD:-200}"   # 누적이 이 금액을 넘으면 멈춘다
-DESIGN_MAX_LAPS="${DESIGN_MAX_LAPS:-40}"              # 한 번 켤 때 돌 수 있는 최대 바퀴
+# --- 그림 루프 (loop_design.sh) ---
+# **끝나는 조건은 돈도 바퀴 수도 아니다 — 「사람이 직접 보고 퀄리티가 안 떨어진다」다**
+# (2026-09-10 사람 지적). 위 MAX_BUDGET_USD_PER_LAP 을 0 으로 정한 이유와 같다:
+# 후보를 반복 생성하는 것이 정상이고, 돈으로 끊으면 퀄리티 기준을 올려둔 의미가 없다.
+#
+# 아래 둘은 **완료 조건이 아니라 안전장치**다 — 사람이 없는 동안 폭주하지 않게 하는 것.
+# 걸리면 「끝났다」가 아니라 「와서 한 번 봐라」이고, `design start` 하면 누적을
+# 이어받아 계속 돈다. **0 = 무제한이 기본이다.**
+DESIGN_MAX_TOTAL_USD="${DESIGN_MAX_TOTAL_USD:-0}"     # 누적 비용 상한 (0=무제한)
+DESIGN_MAX_LAPS="${DESIGN_MAX_LAPS:-0}"               # 한 번에 도는 바퀴 (0=무제한)
 
 # --- 멈춤 조건 ---
 STUCK_REPEAT_LIMIT="${STUCK_REPEAT_LIMIT:-3}"  # 같은 INBOX 번호가 연속 N회 미완료면 멈춘다

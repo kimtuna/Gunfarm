@@ -10,13 +10,18 @@
 #      (감상 금지 — 근거는 docs/DESIGN_LOOP.md 「판정자는 셋」)
 #   4. 갤러리(docs/design.html)를 다시 그려 커밋+push
 #
-# 항목 상태 셋:
-#   - [ ]  미완료           루프가 집는다
-#   - [~]  사람 대기         `[취향]` 항목이 후보를 다 냈다. 루프는 건너뛴다
-#   - [x]  완료
+# **끝나는 조건은 돈도 바퀴 수도 아니다 — 「사람이 직접 보고 누가 봐도 퀄리티가
+# 떨어지지 않는다」다** (docs/DESIGN_LOOP.md 「끝나는 조건은 하나다」).
+# 이 스크립트의 상한들은 **완료 조건이 아니라 폭주 방지**이고 기본으로 꺼져 있다.
 #
-# **`[취향]` 항목은 루프가 못 닫는다** — 후보를 갤러리에 올리고 `- [~]` 로 바꾼 뒤
-# 다음 항목으로 간다. 안 그러면 취향 항목 하나에 영원히 물린다.
+# 항목 상태 셋:
+#   - [ ]  미완료            루프가 집는다
+#   - [~]  **사람 확인 대기**  화면에 보이는 것이 바뀌었다. 루프는 건너뛰고 다음으로
+#   - [x]  완료              화면이 안 바뀌는 것(검사 추가·코드 정리)만 루프가 닫는다
+#
+# **화면이 바뀌는 항목은 루프가 못 닫는다** — `- [~]` 로 두고 다음 항목으로 간다.
+# 안 그러면 항목 하나에 영원히 물리고, 무엇보다 **자는 못난 것을 걸러낼 뿐 좋은
+# 것을 판정하지 못한다.**
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -148,9 +153,9 @@ while :; do
     WAITING="$(grep -cE '^- \[~\]' "$QUEUE" 2>/dev/null)"; WAITING="${WAITING:-0}"
     render_and_push_gallery
     if (( WAITING > 0 )); then
-      halt "큐에 남은 것이 없습니다 — **사람이 고를 후보 ${WAITING}건**이 갤러리에 있습니다.
+      halt "큐에 남은 것이 없습니다 — **사람이 확인할 것 ${WAITING}건**이 갤러리에 있습니다.
 https://kimtuna.github.io/Gunfarm/design.html
-고르셨으면 그 항목을 - [x] 로 바꾸고 ./ctl.sh design start" 0
+보시고 퀄리티가 떨어지지 않으면 - [x], 미달이면 - [ ] 로 되돌린 뒤 ./ctl.sh design start" 0
     fi
     halt "그림 큐가 비었습니다. docs/feedback/DESIGN_QUEUE.md 에 항목을 넣고 ./ctl.sh design start" 0
   fi
@@ -237,8 +242,8 @@ $TEXT"
     log "-- 완료: #d$NUM"
     rm -f "$REPEAT_FILE" "$LAST_ITEM_FILE"
   elif grep -qE "^- \[~\][^#]*#d${NUM}([^0-9]|$)" "$QUEUE"; then
-    log "-- 후보 나옴, 사람 대기: #d$NUM"
-    notify "고를 후보가 나왔습니다 — #d$NUM" "$(printf '%s' "$TEXT" | head -1)"
+    log "-- 사람 확인 대기: #d$NUM"
+    notify "확인해 주세요 — #d$NUM" "$(printf '%s' "$TEXT" | head -1)"
     rm -f "$REPEAT_FILE" "$LAST_ITEM_FILE"
   else
     log "-- 미완료로 남음: #d$NUM (다음 바퀴 재시도)"

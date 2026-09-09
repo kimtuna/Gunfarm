@@ -82,7 +82,7 @@ def git(*args):
         return ""
 
 
-BADGE = {"todo": ("진행 중", "#c8862a"), "wait": ("고를 차례", "#2f7fd0"),
+BADGE = {"todo": ("진행 중", "#c8862a"), "wait": ("확인해 주세요", "#2f7fd0"),
          "done": ("완료", "#3f8a4a")}
 
 
@@ -166,7 +166,7 @@ footer{{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var
 <h1>그림 갤러리</h1>
 <p class="sub">그림·모션 루프가 만든 후보들. 규칙은 <code>docs/DESIGN_LOOP.md</code>,
 큐는 <code>docs/feedback/DESIGN_QUEUE.md</code>.
-<b>「고를 차례」</b>가 붙은 것은 사람이 골라야 넘어갑니다.</p>
+<b>「확인해 주세요」</b>가 붙은 것은 <b>사람이 직접 보고 「누가 봐도 퀄리티가 떨어지지 않는다」</b>고 판단해야 넘어갑니다 — 그것이 이 루프의 유일한 완료 조건입니다.</p>
 {blocks}
 <footer>마지막 갱신 {now} · {commit}</footer>
 </div></body></html>""".format(
@@ -177,7 +177,7 @@ footer{{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(page)
     n_wait = sum(1 for _, s, _, _ in items if s == "wait")
-    print("design gallery: %d항목 (고를 차례 %d) -> %s" % (len(items), n_wait, OUT))
+    print("design gallery: %d항목 (확인 대기 %d) -> %s" % (len(items), n_wait, OUT))
 
 
 if __name__ == "__main__":
