@@ -6,6 +6,24 @@
 
 ## 한 바퀴의 흐름 (4단계)
 
+## 루프는 둘이다 (2026-09-10)
+
+기능과 그림은 **끝나는 방식이 달라서** 큐를 갈랐다. 기능은 「통과/불통과」인데
+그림은 「후보 중 고르기」라, 같은 큐에 두면 도끼 날 하나로 열 바퀴를 도는 동안
+기능이 멈춘다.
+
+| | 명령 | 큐 | 규칙 | 보는 곳 |
+|---|---|---|---|---|
+| **기능** | `./ctl.sh start` | `docs/feedback/INBOX.md` | `PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
+| **그림·모션** | `./ctl.sh design start` | `docs/feedback/DESIGN_QUEUE.md` | [`docs/DESIGN_LOOP.md`](docs/DESIGN_LOOP.md) | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
+
+**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`PROMPT_DESIGN.md`)이 후보를
+굽고, 보는 쪽(`PROMPT_CRITIC.md`)이 그 그림을 실제로 보고 **「무엇을 어떻게 재라」**를
+내놓는다. 감상은 금지다: 이 프로젝트에서 진짜 문제를 잡아낸 것은 전부 측정이었고
+눈으로 "괜찮아 보인다"고 한 판단은 전부 틀렸다(근거는 `DESIGN_LOOP.md`).
+
+아래는 **기능 루프**의 흐름이다.
+
 1. **읽기**: `docs/feedback/INBOX.md`는 전체를 읽지 않고 grep 등으로 번호가 가장
    작은 미완료 항목 하나만 찾아서 그것만 읽는다(완료된 옛 항목이 쌓여도 매 바퀴
    비용이 늘지 않게). `docs/STATUS.md` 전체, `docs/DESIGN.md` 전체. `[DESIGN]`
