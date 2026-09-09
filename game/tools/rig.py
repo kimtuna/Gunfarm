@@ -65,27 +65,47 @@ SOURCES = {
 
 
 # ── 뼈대 ────────────────────────────────────────────────────────────────────
-# `pose.py` 가 ControlNet 에 넘긴 것과 **같은 값이어야 한다** — 그림이 이 뼈대를
-# 보고 그려졌으므로, 여기가 어긋나면 엉뚱한 자리에서 자른다.
-def joints(cx=512, top=180, h=680, heads=3.6, arm_deg=90.0):
+## **관절 좌표를 여기서 계산하지 않는다 — `comfy.figure()` 를 부른다** (2026-09-10, `#d1`).
+##
+## 예전에는 같은 식을 여기 한 번 더 적어뒀는데 **옆모습에서 갈라졌다.**
+## `comfy.figure()` 는 옆모습에서 어깨·골반을 일부러 접고(안 접으면 프롬프트에
+## side view 를 넣어도 AI 가 정면을 그린다) 두 팔을 앞으로 미는데, 여기 베낀 식에는
+## 그 셋이 하나도 없었다. AI 는 접힌 어깨로 그렸는데 자를 때는 안 접힌 뼈대를 댔고,
+## 팔꿈치가 **44.8px** 어긋나 `split()` 이 옆모습 아래팔에 배정한 픽셀이 **0개**였다
+## (실측, `docs/feedback/DESIGN_QUEUE.md` #d1).
+##
+## **고치는 방향은 「베낀 식을 손보기」가 아니라 「베끼지 않기」다.** 값이 두 벌 있으면
+## 언젠가 또 갈라진다. **`comfy.figure()` 는 고치지 않는다** — 그걸 바꾸면 밑그림을
+## 다시 뽑아야 한다. 여기서 부르고 이름만 붙인다.
+## 그래도 남는 자리(아래 `head`/`hipC`)는 `qa/qa_rig_joints.py` 가 매번 대조한다.
+##
+## OpenPose(COCO 18점) 번호 → 리그가 쓰는 이름. `comfy.LIMBS` 와 같은 번호다.
+POSE_NAMES = {0: 'nose', 1: 'neck', 2: 'shoulderR', 3: 'elbowR', 4: 'handR',
+              5: 'shoulderL', 6: 'elbowL', 7: 'handL',
+              8: 'hipR', 9: 'kneeR', 10: 'footR',
+              11: 'hipL', 12: 'kneeL', 13: 'footL'}
+
+
+def joints(cx=512, top=180, h=680, heads=3.6, arm_deg=90.0, face="front"):
+    """관절 좌표. `face` 는 `comfy.SHEET_CELLS` 의 것과 같다 — front/left/right/back.
+
+    **`face` 를 안 넘기면 정면 뼈대가 나온다.** 옆모습 칸을 자를 때 이걸 빠뜨리면
+    어깨가 안 접힌 뼈대로 자르게 된다 — `#d1` 이 바로 그 버그였다.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import comfy
+    P = comfy.figure(cx, top, h=h, heads=heads, arm_deg=arm_deg, face=face)
     H = h/heads
-    nose = top + H*0.50; neck = top + H*1.00
-    hip = top + h*0.62; knee = top + h*0.81; foot = top + h*1.00
-    sw = h*0.105; hw = h*0.070; up, fo = h*0.155, h*0.135
-    t = math.radians(arm_deg); dx, dy = math.sin(t), math.cos(t)
-    J = {}
-    J['head']  = (cx, nose - H*0.35)
-    J['nose']  = (cx, nose)
-    J['neck']  = (cx, neck)
-    J['shoulderR'] = (cx+sw, neck);  J['shoulderL'] = (cx-sw, neck)
-    J['elbowR'] = (cx+sw+up*dx, neck+up*dy)
-    J['handR']  = (J['elbowR'][0]+fo*dx, J['elbowR'][1]+fo*dy)
-    J['elbowL'] = (cx-sw-up*dx, neck+up*dy)
-    J['handL']  = (J['elbowL'][0]-fo*dx, J['elbowL'][1]+fo*dy)
-    J['hipC']   = (cx, hip - h*0.02)
-    J['hipR'] = (cx+hw, hip); J['hipL'] = (cx-hw, hip)
-    J['kneeR'] = (cx+hw, knee); J['footR'] = (cx+hw, foot)
-    J['kneeL'] = (cx-hw, knee); J['footL'] = (cx-hw, foot)
+    nose_y = top + H*0.50
+    J = {n: (float(P[i][0]), float(P[i][1]))
+         for i, n in POSE_NAMES.items() if P[i] is not None}
+    ## `figure()` 에 **없는 둘.** 뒷모습은 코가 없으므로(OpenPose 규약: 뒤통수는
+    ## 코 없이 귀 둘) 코는 칸 한가운데로 되돌린다.
+    J.setdefault('nose', (float(cx), nose_y))
+    ## 옛 식 그대로다 — 옛 `nose` 가 늘 `cx` 였으므로 정면·뒷모습에서는 값이 같고,
+    ## 옆모습에서만 얼굴이 나간 만큼 머리 뼈도 따라 나간다.
+    J['head'] = (J['nose'][0], nose_y - H*0.35)
+    J['hipC'] = (float(cx), (top + h*0.62) - h*0.02)
     return J
 
 ## 부품 = (이름, 뼈의 두 끝, 부모 부품, 도는 축, **뼈에서 뻗을 수 있는 반경**).
@@ -1058,8 +1078,10 @@ def load_sheet(path=None):
         m = np.zeros((H, W), bool)
         m[max(0, y0):min(H, y1), max(0, x0):min(W, x1)] = True
         q = a.copy(); q[~m] = 0
+        ## **`face` 를 반드시 넘긴다** — 옆모습은 어깨·골반이 접혀 있고 팔이 앞으로
+        ## 밀려 있다. 빠뜨리면 정면 뼈대로 옆모습을 자른다(`#d1`).
         J = joints(cx=cx, top=top, h=comfy.FIG_H,
-                   heads=comfy.FIG_HEADS, arm_deg=comfy.ARM_DEG)
+                   heads=comfy.FIG_HEADS, arm_deg=comfy.ARM_DEG, face=face)
         q = _only_figure(q, J)
         name = {"front": "down", "left": "left", "back": "up"}[face]
         out[name] = (split(Image.fromarray(strip_outline(q), 'RGBA'), J,

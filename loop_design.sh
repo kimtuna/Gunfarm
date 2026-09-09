@@ -31,6 +31,8 @@ STOP_FILE="$HARNESS/STOP"
 WARNING_FILE="$HARNESS/WARNING"
 REPEAT_FILE="$HARNESS/repeat_count"
 LAST_ITEM_FILE="$HARNESS/last_item"
+COST_FILE="$HARNESS/total_cost"
+LAPS=0
 QUEUE="$ROOT/docs/feedback/DESIGN_QUEUE.md"
 P_MAKE="$ROOT/PROMPT_DESIGN.md"
 P_EYE="$ROOT/PROMPT_CRITIC.md"
@@ -102,6 +104,26 @@ run_session() {
   return $rc
 }
 
+# 세션 하나가 쓴 돈을 누적에 더하고, 누적을 돌려준다.
+add_cost() {
+  /usr/bin/python3 -c "
+import json
+c = 0.0
+try:
+    c = float(json.load(open('$1')).get('total_cost_usd') or 0)
+except Exception:
+    pass
+prev = 0.0
+try:
+    prev = float(open('$COST_FILE').read().strip() or 0)
+except Exception:
+    pass
+t = prev + c
+open('$COST_FILE', 'w').write('%.4f' % t)
+print('%.4f %.2f' % (c, t))
+" 2>/dev/null || echo "0 0"
+}
+
 # --- 시작 전 확인 ---
 for f in "$QUEUE" "$P_MAKE" "$P_EYE"; do
   [[ -f "$f" ]] || { echo "$f 없음"; exit 1; }
@@ -109,10 +131,17 @@ done
 command -v claude >/dev/null || { echo "claude CLI 없음"; exit 1; }
 
 rm -f "$WARNING_FILE"
-log "== 그림 루프 시작 (pid $$)"
+log "== 그림 루프 시작 (pid $$, 누적상한 \$$DESIGN_MAX_TOTAL_USD, 최대 ${DESIGN_MAX_LAPS}바퀴, 누적 \$$(cat "$COST_FILE" 2>/dev/null || echo 0))"
 
 while :; do
   [[ -f "$STOP_FILE" ]] && { rm -f "$STOP_FILE"; log "== STOP 파일 — 정상 종료"; exit 0; }
+
+  LAPS=$((LAPS + 1))
+  if (( DESIGN_MAX_LAPS > 0 && LAPS > DESIGN_MAX_LAPS )); then
+    halt "한 번에 ${DESIGN_MAX_LAPS}바퀴를 돌았습니다 — 사람이 한 번 보라는 뜻입니다.
+갤러리: https://kimtuna.github.io/Gunfarm/design.html
+이어서 돌리려면 ./ctl.sh design start (누적 비용은 그대로 이어집니다)" 0
+  fi
 
   ITEM="$(next_item)"
   if [[ -z "$ITEM" ]]; then
@@ -152,6 +181,7 @@ $TEXT"
   render_and_push_gallery
 
   LOG_MARK="$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')"; LOG_MARK="${LOG_MARK:-0}"
+  OUT_EYE=""
 
   # ── ② 만드는 세션 ────────────────────────────────────────────────────────
   OUT_MAKE="$WORK/make_$(date +%s).json"
@@ -184,6 +214,20 @@ $TEXT"
     (( RC2 != 0 )) && log "경고: 보는 세션 종료코드 $RC2 (비평 없이 진행)"
   else
     log "   만드는 세션이 그림도 note.md 도 안 남겼다 — 보는 세션을 건너뛴다"
+  fi
+
+  # ── 비용 ────────────────────────────────────────────────────────────────
+  read -r LAP_COST TOTAL_COST <<<"$(add_cost "$OUT_MAKE")"
+  if [[ -n "${OUT_EYE:-}" && -f "${OUT_EYE:-/nonexistent}" ]]; then
+    read -r EYE_COST TOTAL_COST <<<"$(add_cost "$OUT_EYE")"
+    LAP_COST="$(/usr/bin/python3 -c "print('%.4f' % (float('$LAP_COST')+float('$EYE_COST')))" 2>/dev/null || echo "$LAP_COST")"
+  fi
+  log "   비용: \$$LAP_COST  (누적 \$$TOTAL_COST)"
+  if /usr/bin/python3 -c "import sys; sys.exit(0 if float('$DESIGN_MAX_TOTAL_USD') > 0 and float('$TOTAL_COST') >= float('$DESIGN_MAX_TOTAL_USD') else 1)" 2>/dev/null; then
+    render_and_push_gallery
+    halt "누적 비용이 상한(\$$DESIGN_MAX_TOTAL_USD)에 닿았습니다 — 지금까지 \$$TOTAL_COST.
+갤러리: https://kimtuna.github.io/Gunfarm/design.html
+계속하려면 env.sh 의 DESIGN_MAX_TOTAL_USD 를 올리고 ./ctl.sh design start" 0
   fi
 
   render_and_push_gallery
