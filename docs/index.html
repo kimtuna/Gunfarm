@@ -43,7 +43,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 <section><h2>대기 중인 항목</h2><ul class="queue"><li class="first"><span class="lead">다음</span><span class="num">#73</span> [DESIGN] **낫과 괭이를 「삽」 하나로 합치고, 도구 그림을 실루엣이 갈리게 다시 잡는다.** (2026-09-08 사람 결정 — 근거는 `docs/ITEMS.md` 「생활 스킬 — 채집 계열」에 있다.)</li>
 <li><span class="num">#74</span> [DESIGN] **도구·아이템 그림은 앞으로도 절차 생성으로 간다 — AI 로 뽑지 않는다.** (2026-09-10 사람 결정.)</li>
 <li><span class="num">#76</span> [BUILD] **그림 루프가 만든 시트를 엔진이 제대로 읽는지 확인한다 (새 규격).**</li></ul></section>
-<section><h2>마지막 커밋</h2><code>a01e46b  [INBOX #72] 가로로 넓은 도구의 키 깎임이 풀렸음을 재서 닫았다</code>
+<section><h2>마지막 커밋</h2><code>0957001  chore(dashboard): 진행 상황 갱신</code>
   <p class="sub" style="margin:.3rem 0 0">2026-09-10 10:04</p></section>
 <section><h2>STATUS — 마지막 갱신</h2><pre>2026-09-10 — **INBOX #72 [BUILD] 를 재서 닫았다. 코드는 한 줄도 안 고쳤다.**
 
@@ -75,7 +75,7 @@ footer { color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem; 
 // 그래서 짧은 주기 폴링이 여기서는 옳은 답이다 — 받아오는 건 10KB 남짓이라 부담이 없다.
 // 즉시 갱신이 꼭 필요하면 로컬에서 SSE 서버를 띄우는 별도 대시보드가 필요하다.
 (function () {
-  var STAMP = "20260910100428";
+  var STAMP = "20260910100449";
   var EVERY = 10000;
   var el = document.getElementById("live");
   function tick() {
