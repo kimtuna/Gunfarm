@@ -14,6 +14,9 @@
 # 떨어지지 않는다」다** (docs/DESIGN_LOOP.md 「끝나는 조건은 하나다」).
 # 이 스크립트의 상한들은 **완료 조건이 아니라 폭주 방지**이고 기본으로 꺼져 있다.
 #
+# 갈래 `[플레이]` 는 **루프가 아예 손대지 않는다** — 세션을 열지 않고 멈추고 사람을
+# 부른다. 「어울리나」의 절반과 「적합한가」의 대부분은 돌려봐야 알기 때문이다.
+#
 # 항목 상태 셋:
 #   - [ ]  미완료            루프가 집는다
 #   - [~]  **사람 확인 대기**  화면에 보이는 것이 바뀌었다. 루프는 건너뛰고 다음으로
@@ -176,6 +179,21 @@ https://kimtuna.github.io/Gunfarm/design.html
   if (( COUNT > STUCK_REPEAT_LIMIT )); then
     halt "#d$NUM 이 ${STUCK_REPEAT_LIMIT}회 연속 미완료입니다 — 접근이 틀렸을 수 있습니다.
 $TEXT"
+  fi
+
+  # **[플레이] 항목은 루프가 못 한다** — 사람이 게임을 직접 켜서 보는 자리다.
+  # 세션을 열지 않고 바로 멈춘다(docs/DESIGN_LOOP.md 「PNG 로 판정할 수 있는 것과 없는 것」).
+  if [[ "$KIND" == "플레이" ]]; then
+    render_and_push_gallery
+    halt "#d$NUM — **사람이 게임을 직접 켜서 볼 차례입니다.**
+
+  /Applications/Godot.app/Contents/MacOS/Godot --path game
+
+$(printf '%s' "$TEXT" | head -1)
+
+갤러리(캡처·GIF)로는 못 보는 것들입니다 — 움직여야 보입니다.
+보시고 괜찮으면 그 항목을 - [x] 로, 미달이면 문제인 항목을 - [ ] 로 되돌린 뒤
+./ctl.sh design start" 0
   fi
 
   WORK="$HARNESS/d$NUM"

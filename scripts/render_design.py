@@ -127,12 +127,13 @@ def main():
             '<details{op}><summary>'
             '<span class="badge" style="background:{c}">{lab}</span>'
             '<span class="num">#d{num}</span>'
-            '<span class="kind">{kind}</span>'
+            '<span class="kind{playcls}">{kind}</span>'
             '<span class="title">{title}</span>'
             '<span class="count">{cnt}회차</span>'
             '</summary><div class="body">{body}</div></details>'.format(
                 op=" open" if first and state != "done" else "",
                 c=color, lab=label, num=num, kind=e(kind), title=e(title),
+                playcls=(" play" if kind == "플레이" else ""),
                 cnt=len(pics), body="".join(body)))
         first = False
 
@@ -160,6 +161,7 @@ summary::-webkit-details-marker{{display:none}}
 .num{{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}}
 .kind{{font-size:11px;color:var(--dim);border:1px solid var(--line);
  padding:1px 6px;border-radius:4px}}
+.kind.play{{color:#ffd479;border-color:#7a6330;background:#2a2418}}
 .title{{flex:1;min-width:200px}}
 .count{{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}}
 .body{{padding:4px 14px 16px;border-top:1px solid var(--line)}}
