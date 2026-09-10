@@ -15,7 +15,7 @@ import subprocess
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-QUEUE = os.path.join(ROOT, "docs", "feedback", "DESIGN_QUEUE.md")
+QUEUE = os.path.join(ROOT, "docs", "DESIGN_QUEUE.md")
 REFDIR = os.path.join(ROOT, "docs", "design_reference")
 WORKDIR = os.path.join(ROOT, ".harness", "design")
 OUT = os.path.join(ROOT, "docs", "design.html")
@@ -250,7 +250,7 @@ footer{{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var
 <p class="sub"><a href="./">← 진행 대시보드</a></p>
 <h1>그림 갤러리</h1>
 <p class="sub">그림·모션 루프가 만든 후보들. 규칙은 <code>docs/DESIGN_LOOP.md</code>,
-큐는 <code>docs/feedback/DESIGN_QUEUE.md</code>.
+큐는 <code>docs/DESIGN_QUEUE.md</code>.
 <b>「확인해 주세요」</b>가 붙은 것은 <b>사람이 직접 보고 「누가 봐도 퀄리티가 떨어지지 않는다」</b>고 판단해야 넘어갑니다 — 그것이 이 루프의 유일한 완료 조건입니다.</p>
 {blocks}
 <footer>마지막 갱신 {now} · {commit}</footer>

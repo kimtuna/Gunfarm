@@ -25,8 +25,8 @@
 
 | 루프 | 큐 | 규칙 | 명령 |
 |---|---|---|---|
-| **기능** | `docs/feedback/INBOX.md` | `PROMPT.md` | `./ctl.sh start` |
-| **그림·모션** | `docs/feedback/DESIGN_QUEUE.md` | **`docs/DESIGN_LOOP.md`** | `./ctl.sh design start` |
+| **기능** | `docs/INBOX.md` | `docs/PROMPT.md` | `./ctl.sh start` |
+| **그림·모션** | `docs/DESIGN_QUEUE.md` | **`docs/DESIGN_LOOP.md`** | `./ctl.sh design start` |
 
 기능 루프가 그림 문제를 발견하면 고치지 말고 `DESIGN_QUEUE` 에 항목으로 넘기고,
 그림 루프가 엔진 코드가 필요하면 `INBOX` 로 넘긴다.

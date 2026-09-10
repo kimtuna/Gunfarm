@@ -12,9 +12,9 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-INBOX = ROOT / "docs" / "feedback" / "INBOX.md"
+INBOX = ROOT / "docs" / "INBOX.md"
 STATUS = ROOT / "docs" / "STATUS.md"
-LATER = ROOT / "docs" / "feedback" / "LATER.md"
+LATER = ROOT / "docs" / "LATER.md"
 WARN = ROOT / ".harness" / "WARNING"
 OUT = ROOT / "docs" / "index.html"
 
@@ -173,7 +173,7 @@ footer {{ color:var(--dim); font-size:.8rem; text-align:center; margin-top:2rem;
 <section><h2>STATUS — 마지막 갱신</h2><pre>{e(status_head) or '(비어있음)'}</pre></section>
 <section><h2>나중에 할 것</h2>
   <p class="sub" style="margin:0 0 .5rem">작업 큐가 아닙니다 — 루프는 이 목록을 실행하지 않습니다.
-  만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/feedback/LATER.md</code>)</p>
+  만들 때가 되면 사람이 INBOX 로 옮깁니다. (<code>docs/LATER.md</code>)</p>
   <ul class="later">{later_rows}</ul></section>
 <footer>갱신: {now} · <span id="live">자동 새로고침 10초</span></footer>
 </main>

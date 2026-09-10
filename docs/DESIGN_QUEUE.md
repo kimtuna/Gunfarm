@@ -1,6 +1,6 @@
 # DESIGN_QUEUE — 그림·모션 루프의 큐
 
-> 이 큐는 **`docs/DESIGN_LOOP.md` 의 루프**가 돈다. `docs/feedback/INBOX.md` 와 섞지 않는다.
+> 이 큐는 **`docs/DESIGN_LOOP.md` 의 루프**가 돈다. `docs/INBOX.md` 와 섞지 않는다.
 >
 > **이 큐의 산출물은 `docs/MOTION.md` 다.** 그림은 결과물이고 문서가 원본이다 —
 > 왜 그 동작이고 왜 그 값인지가 안 남으면 다음 바퀴가 되돌린다

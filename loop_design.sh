@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # loop_design.sh — 그림·모션 루프. `loop.sh` 와 **따로** 돈다.
 #
-# 규칙은 docs/DESIGN_LOOP.md, 큐는 docs/feedback/DESIGN_QUEUE.md.
+# 규칙은 docs/DESIGN_LOOP.md, 큐는 docs/DESIGN_QUEUE.md.
 #
 # 한 바퀴:
 #   1. 큐에서 번호가 가장 작은 미완료(`- [ ] #dN`) 항목을 찾는다
@@ -41,9 +41,9 @@ REPEAT_FILE="$HARNESS/repeat_count"
 LAST_ITEM_FILE="$HARNESS/last_item"
 COST_FILE="$HARNESS/total_cost"
 LAPS=0
-QUEUE="$ROOT/docs/feedback/DESIGN_QUEUE.md"
-P_MAKE="$ROOT/PROMPT_DESIGN.md"
-P_EYE="$ROOT/PROMPT_CRITIC.md"
+QUEUE="$ROOT/docs/DESIGN_QUEUE.md"
+P_MAKE="$ROOT/docs/PROMPT_DESIGN.md"
+P_EYE="$ROOT/docs/PROMPT_CRITIC.md"
 
 # 한 바퀴에 두 세션을 부르므로 각각의 제한은 절반으로 본다.
 DESIGN_LAP_TIMEOUT="${DESIGN_LAP_TIMEOUT:-$((LAP_TIMEOUT_SECONDS))}"
@@ -235,7 +235,7 @@ while :; do
 https://kimtuna.github.io/Gunfarm/design.html
 보시고 퀄리티가 떨어지지 않으면 - [x], 미달이면 - [ ] 로 되돌린 뒤 ./ctl.sh design start" 0
     fi
-    halt "그림 큐가 비었습니다. docs/feedback/DESIGN_QUEUE.md 에 항목을 넣고 ./ctl.sh design start" 0
+    halt "그림 큐가 비었습니다. docs/DESIGN_QUEUE.md 에 항목을 넣고 ./ctl.sh design start" 0
   fi
 
   NUM="${ITEM%%$'\t'*}"; TEXT="${ITEM#*$'\t'}"

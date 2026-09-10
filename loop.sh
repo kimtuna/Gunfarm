@@ -23,8 +23,8 @@ STOP_FILE="$HARNESS/STOP"
 WARNING_FILE="$HARNESS/WARNING"
 LAST_ITEM_FILE="$HARNESS/last_item"
 REPEAT_FILE="$HARNESS/repeat_count"
-INBOX="$ROOT/docs/feedback/INBOX.md"
-PROMPT="$ROOT/PROMPT.md"
+INBOX="$ROOT/docs/INBOX.md"
+PROMPT="$ROOT/docs/PROMPT.md"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
 
@@ -102,7 +102,7 @@ CREDIT_RE='usage limit|session limit|rate limit|limit reached|hit your [a-z ]*li
 
 # --- 시작 전 확인 ---
 [[ -f "$PROMPT" ]] || { echo "PROMPT.md 없음"; exit 1; }
-[[ -f "$INBOX"  ]] || { echo "docs/feedback/INBOX.md 없음"; exit 1; }
+[[ -f "$INBOX"  ]] || { echo "docs/INBOX.md 없음"; exit 1; }
 command -v claude >/dev/null || { echo "claude CLI 없음"; exit 1; }
 rm -f "$WARNING_FILE"
 log "== 루프 시작 (model=$MODEL, budget=\$$MAX_BUDGET_USD_PER_LAP/바퀴, timeout=${LAP_TIMEOUT_SECONDS}s)"
@@ -120,7 +120,7 @@ while true; do
     log "== 큐가 비었음 — 세션을 열지 않고 종료"
     render_and_push_dashboard
     notify "할 일이 다 떨어졌습니다" \
-      "완료 $(grep -cE '^- \[[xX]\]' "$INBOX" 2>/dev/null || echo 0)개. docs/feedback/INBOX.md 에 새 항목을 넣고 ./ctl.sh start"
+      "완료 $(grep -cE '^- \[[xX]\]' "$INBOX" 2>/dev/null || echo 0)개. docs/INBOX.md 에 새 항목을 넣고 ./ctl.sh start"
     exit 0
   fi
   NUM="${ITEM%%$'\t'*}"

@@ -464,11 +464,15 @@ func _check_feet_on_origin() -> void:
 		return
 	var image: Image = sprite.sprite_frames.get_frame_texture("idle_down", 0).get_image()
 	var bottom := -1
+	var top := -1
 	for y in image.get_height():
 		for x in image.get_width():
 			if image.get_pixel(x, y).a > 0.0:
 				bottom = y
+				if top < 0:
+					top = y
 				break
+	_check_figure_height(top, bottom, image.get_height())
 	var feet_local: float = (float(bottom + 1) - image.get_height() * 0.5 + sprite.offset.y) * sprite.scale.y
 	if absf(feet_local) > 3.0:
 		_fails.append("발밑이 원점에서 %.1f px 어긋났다 — 캐릭터가 뜨거나 파묻혀 보인다" % feet_local)
@@ -479,6 +483,29 @@ func _check_feet_on_origin() -> void:
 				% [screen_height, want_height, PlayerFrames.CELL, PlayerFrames.SCALE])
 	else:
 		print("[qa] 발밑이 원점 (%.1fpx 오차), 화면 높이 %.0fpx" % [feet_local, screen_height])
+
+
+## **칸 안에서 인물이 실제로 차지하는 키**가 `PlayerFrames.FIGURE` 와 같은가.
+##
+## 이 검사가 있는 이유(2026-09-10, INBOX #76): 인물 키의 원본은 그림 루프의
+## `game/tools/gen_player.py` 의 `FIG` 인데, 엔진 쪽은 그 값을 **옮겨 적어서** 쓴다
+## (`PlayerFrames.FIGURE` → `BODY_CENTER` → 조준 기준점 · 총알 높이). 옮겨 적은 값은
+## 조용히 낡는다 — 실제로 2026-09-10 에 인물이 96 → 72px 로 내려갔는데 엔진은 계속
+## 「인물 키 = 칸(96)」으로 알고 있었고, **어느 QA 도 그걸 못 봤다.** 예광탄이 총이
+## 아니라 머리 옆에서 날아가는데도 `qa_bullets` 는 통과했다(양쪽이 **같은** 틀린 값을
+## 써서 서로 상쇄됐다). 그래서 **그림에서 직접 재는** 이 검사가 따로 필요하다.
+func _check_figure_height(top: int, bottom: int, cell: int) -> void:
+	if top < 0 or bottom < 0:
+		_fails.append("idle_down 첫 프레임이 통째로 비어 있다")
+		return
+	var drawn := bottom - top + 1
+	if drawn != PlayerFrames.FIGURE:
+		_fails.append(("시트의 인물 키가 %dpx 인데 PlayerFrames.FIGURE 는 %dpx 다 — "
+				+ "조준 기준점과 총알 높이(BODY_CENTER)가 몸에서 벗어난다. "
+				+ "`game/tools/gen_player.py` 의 FIG 와 맞출 것")
+				% [drawn, PlayerFrames.FIGURE])
+	else:
+		print("[qa] 칸 %dpx 안에서 인물 키 %dpx — PlayerFrames.FIGURE 와 같다" % [cell, drawn])
 
 
 ## 실제 마우스를 조준 기준점에서 `angle` 쪽으로 밀어놓는다.
@@ -493,7 +520,7 @@ func _aim_at(angle: float) -> void:
 	# 창 크기로 잡으면 이미 창 픽셀인 값을 한 번 더 변환해서 조준 각도가 어긋난다
 	# (2026-09-08, INBOX #48 — 그 전에는 논리 해상도와 창 크기가 같아서 안 드러났다).
 	var size := root.get_visible_rect().size
-	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.BODY_CENTER)
 	Input.warp_mouse(_to_window(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH))
 
 

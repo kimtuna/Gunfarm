@@ -28,9 +28,9 @@
 |---|---|---|
 | 명령 | `./ctl.sh start` | `./ctl.sh design start` |
 | 실행기 | `loop.sh` | `loop_design.sh` |
-| 큐 | `docs/feedback/INBOX.md` | `docs/feedback/DESIGN_QUEUE.md` |
-| 규칙 | `PROMPT.md` | **`docs/DESIGN_LOOP.md`** (반드시 읽어라) |
-| 세션 프롬프트 | `PROMPT.md` | `PROMPT_DESIGN.md` + `PROMPT_CRITIC.md` |
+| 큐 | `docs/INBOX.md` | `docs/DESIGN_QUEUE.md` |
+| 규칙 | `docs/PROMPT.md` | **`docs/DESIGN_LOOP.md`** (반드시 읽어라) |
+| 세션 프롬프트 | `docs/PROMPT.md` | `docs/PROMPT_DESIGN.md` + `docs/PROMPT_CRITIC.md` |
 | 한 바퀴 | 세션 **하나** | 세션 **둘** (만드는 쪽 → 보는 쪽) |
 | 만드는 것 | 엔진 코드 · 로직 · UI | **그림 파일** |
 | 고치는 코드 | `game/scripts/*.gd` · `project.godot` | **`game/tools/*.py`** |
@@ -56,13 +56,24 @@
 
 ## 2. 문서 지도 — 무엇이 어디 있나
 
+**md 는 전부 `docs/` 한 폴더에 있다** (2026-09-10 정리). 루트에 남은 둘은 자리가
+정해져 있어서 못 옮긴다:
+
+| | 왜 루트인가 |
+|---|---|
+| `CLAUDE.md` | **Claude Code 가 저장소 루트에서 자동으로 읽는다** — 옮기면 모든 세션이 기계 설정(Godot 경로·venv·git 규칙)을 잃는다 |
+| `README.md` | GitHub 이 루트에서 보여준다 |
+
+`docs/` 안에는 md 18개와 `index.html` · `design.html` · `design_reference/` 가 같이 있다
+(GitHub Pages 가 `/docs` 를 본다).
+
 ### 매번 읽는 것
 
 | 파일 | 무엇 |
 |---|---|
-| **`CLAUDE.md`** | **이 기계에서 무엇을 어떤 명령으로 돌리는가.** Godot 경로 · venv · ComfyUI · git 규칙(`.uid`/`.import` 커밋) |
+| **`CLAUDE.md`** (루트) | **이 기계에서 무엇을 어떤 명령으로 돌리는가.** Godot 경로 · venv · ComfyUI · git 규칙(`.uid`/`.import` 커밋) |
 | **`docs/DESIGN.md`** | 무엇을 만드는가. **맨 위에 「문서 지도」가 있다** — 영역별 문서와 언제 읽는지 |
-| 큐 (`INBOX.md` / `DESIGN_QUEUE.md`) | 이번 바퀴에 할 일 |
+| 큐 — `docs/INBOX.md` / `docs/DESIGN_QUEUE.md` | 이번 바퀴에 할 일 |
 
 ### 영역별 — 그 영역을 건드릴 때만
 
@@ -80,11 +91,11 @@
 
 | 파일 | 무엇 |
 |---|---|
-| `README.md` | 하네스 설계 — 왜 이렇게 만들었나 |
+| `README.md` (루트) | 하네스 설계 — 왜 이렇게 만들었나 |
 | **`docs/DESIGN_LOOP.md`** | **그림 루프의 규칙 전부** — 판정자 셋 · 회차 쌓기 · 끝나는 조건 · 갤러리 |
-| `PROMPT.md` · `PROMPT_DESIGN.md` · `PROMPT_CRITIC.md` | 세션에게 실제로 넘어가는 지시서 |
+| `docs/PROMPT.md` · `docs/PROMPT_DESIGN.md` · `docs/PROMPT_CRITIC.md` | 세션에게 실제로 넘어가는 지시서 |
 | `docs/STATUS.md` | 지난 바퀴가 남긴 메모 |
-| `docs/feedback/LATER.md` | 나중에 할 것 |
+| `docs/LATER.md` | 나중에 할 것 |
 | `docs/VISION.md` | 얼리억세스 이후 장기 비전 — **지금 범위 아님** |
 
 ---

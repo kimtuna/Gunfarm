@@ -9,7 +9,7 @@
 #
 #   ./ctl.sh design start|stop|graceful-stop|status|logs
 #                           **그림·모션 루프**(loop_design.sh). INBOX 루프와 따로 돈다.
-#                           규칙 docs/DESIGN_LOOP.md · 큐 docs/feedback/DESIGN_QUEUE.md
+#                           규칙 docs/DESIGN_LOOP.md · 큐 docs/DESIGN_QUEUE.md
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,7 +28,7 @@ if [[ "$WHICH" == "design" ]]; then
   LOG="$HARNESS/design.log"
   PIDFILE="$HARNESS/design.pid"
   STOPDIR="$HARNESS/design"
-  QUEUE_FILE="$ROOT/docs/feedback/DESIGN_QUEUE.md"
+  QUEUE_FILE="$ROOT/docs/DESIGN_QUEUE.md"
   QUEUE_NAME="DESIGN_QUEUE"
   NUM_RE='#d[0-9]+'
   mkdir -p "$STOPDIR"
@@ -38,7 +38,7 @@ else
   LOG="$HARNESS/loop.log"
   PIDFILE="$HARNESS/loop.pid"
   STOPDIR="$HARNESS"
-  QUEUE_FILE="$ROOT/docs/feedback/INBOX.md"
+  QUEUE_FILE="$ROOT/docs/INBOX.md"
   QUEUE_NAME="INBOX"
   NUM_RE='#[0-9]+'
 fi

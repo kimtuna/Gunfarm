@@ -1,6 +1,10 @@
 # 이 저장소의 실행 환경
 
-> 게임 설계는 `docs/DESIGN.md`, 매 바퀴의 작업 지시는 `PROMPT.md` 에 있다.
+> **문서는 전부 `docs/` 에 있다** (2026-09-10 정리). 루트에는 이 파일과 `README.md`
+> 뿐이다 — 이 파일은 Claude Code 가 루트에서 자동으로 읽어서 못 옮긴다.
+> **새 세션은 `docs/START.md` 부터 읽어라** — 무엇이 어디 있고 무엇이 돌고 있는지가
+> 거기 다 있다.
+> 게임 설계는 `docs/DESIGN.md`, 매 바퀴의 작업 지시는 `docs/PROMPT.md` 에 있다.
 > 이 파일은 **이 기계에서 무엇을 어떤 명령으로 돌리는가**만 적는다.
 
 ## Godot
@@ -118,12 +122,12 @@ PNG·SVG·오디오처럼 **임포트되는 자산마다** 생기는 `<자산>.i
 
 | | 명령 | 큐 | 프롬프트 | 페이지 |
 |---|---|---|---|---|
-| 기능 | `./ctl.sh start\|stop\|status\|logs` | `docs/feedback/INBOX.md` | `PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
-| **그림·모션** | `./ctl.sh design start\|stop\|status\|logs` | `docs/feedback/DESIGN_QUEUE.md` | `PROMPT_DESIGN.md` + `PROMPT_CRITIC.md` | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
+| 기능 | `./ctl.sh start\|stop\|status\|logs` | `docs/INBOX.md` | `docs/PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
+| **그림·모션** | `./ctl.sh design start\|stop\|status\|logs` | `docs/DESIGN_QUEUE.md` | `docs/PROMPT_DESIGN.md` + `docs/PROMPT_CRITIC.md` | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
 
 설정은 둘 다 `env.sh`. 런타임 상태(로그/PID/바퀴별 JSON)는 `.harness/` 에 쌓이고
 커밋하지 않는다.
 
-**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`PROMPT_DESIGN.md`)과
-보는 쪽(`PROMPT_CRITIC.md`). 보는 쪽은 감상이 아니라 **「무엇을 어떻게 재라」**만
+**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`docs/PROMPT_DESIGN.md`)과
+보는 쪽(`docs/PROMPT_CRITIC.md`). 보는 쪽은 감상이 아니라 **「무엇을 어떻게 재라」**만
 내놓는다. 규칙과 근거는 `docs/DESIGN_LOOP.md` 에 있다.

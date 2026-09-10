@@ -1,6 +1,6 @@
 # 하네스 설계
 
-`claude -p` 헤드리스 세션을 매 바퀴 새로 열어서, `docs/feedback/INBOX.md` 큐에 쌓인
+`claude -p` 헤드리스 세션을 매 바퀴 새로 열어서, `docs/INBOX.md` 큐에 쌓인
 작업을 한 바퀴에 하나씩 처리하는 자율 개발 루프다. 세션은 이전 바퀴의 대화를 기억하지
 못한다 — 기억은 `docs/INBOX.md`/`docs/STATUS.md`/`docs/DESIGN.md` 파일이 대신한다.
 
@@ -14,17 +14,17 @@
 
 | | 명령 | 큐 | 규칙 | 보는 곳 |
 |---|---|---|---|---|
-| **기능** | `./ctl.sh start` | `docs/feedback/INBOX.md` | `PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
-| **그림·모션** | `./ctl.sh design start` | `docs/feedback/DESIGN_QUEUE.md` | [`docs/DESIGN_LOOP.md`](docs/DESIGN_LOOP.md) | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
+| **기능** | `./ctl.sh start` | `docs/INBOX.md` | `docs/PROMPT.md` | [대시보드](https://kimtuna.github.io/Gunfarm/) |
+| **그림·모션** | `./ctl.sh design start` | `docs/DESIGN_QUEUE.md` | [`docs/DESIGN_LOOP.md`](docs/DESIGN_LOOP.md) | [갤러리](https://kimtuna.github.io/Gunfarm/design.html) |
 
-**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`PROMPT_DESIGN.md`)이 후보를
-굽고, 보는 쪽(`PROMPT_CRITIC.md`)이 그 그림을 실제로 보고 **「무엇을 어떻게 재라」**를
+**그림 루프는 한 바퀴에 세션을 두 번 부른다** — 만드는 쪽(`docs/PROMPT_DESIGN.md`)이 후보를
+굽고, 보는 쪽(`docs/PROMPT_CRITIC.md`)이 그 그림을 실제로 보고 **「무엇을 어떻게 재라」**를
 내놓는다. 감상은 금지다: 이 프로젝트에서 진짜 문제를 잡아낸 것은 전부 측정이었고
 눈으로 "괜찮아 보인다"고 한 판단은 전부 틀렸다(근거는 `DESIGN_LOOP.md`).
 
 아래는 **기능 루프**의 흐름이다.
 
-1. **읽기**: `docs/feedback/INBOX.md`는 전체를 읽지 않고 grep 등으로 번호가 가장
+1. **읽기**: `docs/INBOX.md`는 전체를 읽지 않고 grep 등으로 번호가 가장
    작은 미완료 항목 하나만 찾아서 그것만 읽는다(완료된 옛 항목이 쌓여도 매 바퀴
    비용이 늘지 않게). `docs/STATUS.md` 전체, `docs/DESIGN.md` 전체. `[DESIGN]`
    태그일 때만 `docs/STYLE_GUIDE.md`도 전체 읽는다.
@@ -33,11 +33,11 @@
 3. **자체 QA**: 실제로 실행해서 확인한다. 통과 못 하면 커밋하지 않는다.
 4. **커밋 + push**: 세션이 직접 커밋하고 push까지 끝낸다.
 
-세부 규칙은 `PROMPT.md`에 있다 — 매 바퀴 세션에게 그대로 전달되는 지시서다.
+세부 규칙은 `docs/PROMPT.md`에 있다 — 매 바퀴 세션에게 그대로 전달되는 지시서다.
 
 ## 설계 결정과 이유
 
-- **하네스 지시서는 한 파일(`PROMPT.md`)로 둔다.** 작업 종류(로직/그림)별로 파일을
+- **하네스 지시서는 한 파일(`docs/PROMPT.md`)로 둔다.** 작업 종류(로직/그림)별로 파일을
   나누면 매 바퀴 읽어야 할 문서량과 유지보수 부담이 커진다 — 태그(`[BUILD]`/
   `[DESIGN]`)별 차이는 한 파일 안에서 짧게 분기하는 것으로 충분하다.
 - **`docs/STATUS.md`는 매 바퀴 완전히 덮어쓴다.** 이전 내용을 "지난 바퀴 기록" 같은
@@ -46,7 +46,7 @@
   커밋 메시지에 그대로 남으니 중복 보존할 필요가 없다. 재사용 가치가 있는 교훈은
   STATUS.md에 쌓아두지 말고 제자리로 옮긴다 — 재사용 가능한 검증 방법/스크립트는
   `game/qa/`에 코드로, 게임 설계 결정은 `DESIGN.md`에, 하네스 프로세스 규칙은 사람이
-  검토한 뒤 `PROMPT.md`에.
+  검토한 뒤 `docs/PROMPT.md`에.
 - **작업 커밋의 push는 세션이 직접 한다.** 4단계 흐름을 세션이 스스로 끝까지 수행하는
   게 가장 단순한 모델이다 — push를 별도 스크립트에 미루면 그 자체로 불필요한 개념적
   레이어가 하나 늘어난다. `loop.sh`는 진행 상황 대시보드 파일만 별도로 커밋+push한다.
@@ -75,7 +75,7 @@
   예상과 다르거나 에러가 나면, 원인을 스스로 조사하기 전에 먼저 이 파일부터
   검색한다"는 **조건부 참조**로 바꿨다 — 실제로 문제를 만난 바퀴만 비용을 치른다.
   쓰기 쪽은 STATUS.md가 불어났던 것과 같은 문제를 피하려고 세 가지를 못박았다
-  (자세한 형식은 `PROMPT.md` 참고): 추가 전 중복 확인, "사실+대응법" 형식 고정
+  (자세한 형식은 `docs/PROMPT.md` 참고): 추가 전 중복 확인, "사실+대응법" 형식 고정
   (서술형 금지), 일정 줄 수를 넘으면 자동 추가 대신 사람에게 정리를 제안한다.
   **`loop.sh`를 실제로 만들 때는 이 줄 수 확인을 크레딧 부족 감지와 같은 방식으로
   스크립트가 직접 하게 만드는 것도 검토할 것** — LLM의 자율적인 판단에만 기대지
@@ -122,7 +122,7 @@
 ### 루프는 이 흐름을 이렇게 돈다
 
 - 항목이 `[DESIGN]` 이면 세션이 `docs/CHARACTER.md` 를 먼저 읽는다
-  (`PROMPT.md` 의 「캐릭터 그림을 건드릴 때」).
+  (`docs/PROMPT.md` 의 「캐릭터 그림을 건드릴 때」).
 - 시트를 구운 뒤 **기계가 판정한다** — `game/qa/qa_character_sheets.py` 가
   규격·알파·발밑·머리 흔들림·프레임 이어짐·방향 간 색맞음을 재고 종료 코드로 답한다.
   게임 안 확인은 `game/qa/qa_player_world.gd` 가 창을 띄워 캡처까지 한다.

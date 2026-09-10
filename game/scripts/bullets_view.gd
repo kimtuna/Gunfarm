@@ -16,8 +16,12 @@ const Bullets := preload("res://scripts/bullets.gd")
 const PlayerFrames := preload("res://scripts/player_frames.gd")
 
 ## 지면 좌표를 그림에서 얼마나 올리는가. **`player.gd` 의 `aim_origin()` 과 같은 값**
-## (그림 칸 절반 = 가슴 높이)이라 총알이 조준선과 같은 자리에서 나가는 것으로 보인다.
-const LIFT := PlayerFrames.CELL * PlayerFrames.SCALE * 0.5
+## (몸 한가운데 = 가슴 높이)이라 총알이 조준선과 같은 자리에서 나가는 것으로 보인다.
+##
+## **2026-09-10 (INBOX #76): `CELL * SCALE * 0.5`(=48) 에서 `BODY_CENTER`(=36) 로 고쳤다.**
+## 인물이 칸(96)을 꽉 채우지 않게 된 뒤로 「칸의 절반」이 몸 한가운데가 아니게 됐고,
+## 예광탄이 총이 아니라 **머리 옆에서** 날아갔다 — 근거는 `player_frames.BODY_CENTER`.
+const LIFT := PlayerFrames.BODY_CENTER
 
 ## 꼬리 길이(월드 단위). 한 틱 이동량(15)보다 길어야 프레임 사이가 점선으로 끊겨
 ## 보이지 않는다.

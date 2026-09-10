@@ -806,7 +806,7 @@ func _aim_at(angle: float) -> void:
 	# 창 크기로 잡으면 이미 창 픽셀인 값을 한 번 더 변환해서 조준 각도가 어긋난다
 	# (2026-09-08, INBOX #48 — 그 전에는 논리 해상도와 창 크기가 같아서 안 드러났다).
 	var size := root.get_visible_rect().size
-	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.CELL * PlayerFrames.SCALE * 0.5)
+	var origin := size * 0.5 - Vector2(0.0, PlayerFrames.BODY_CENTER)
 	Input.warp_mouse(_to_window(origin + Vector2.from_angle(angle) * minf(size.x, size.y) * AIM_REACH))
 
 

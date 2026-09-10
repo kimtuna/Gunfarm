@@ -176,7 +176,7 @@ func _check_no_base_colors() -> void:
 	elif not _sheet_is_recolorable(base):
 		# **기준색이 시트에 애초에 없으면 이 통과는 공짜다** — 그렇다고 말해 둔다.
 		# 2026-09-08 에 캐릭터가 ComfyUI 그림 + 리그로 바뀌면서 색이 그림에 구워졌다
-		# (`docs/CHARACTER.md` 8절 · `docs/feedback/LATER.md` #54). 램프가 다시 생기면
+		# (`docs/CHARACTER.md` 8절 · `docs/LATER.md` #54). 램프가 다시 생기면
 		# 이 줄이 사라지고 아래 줄이 나온다 — 검사를 고칠 필요가 없다.
 		print("[qa] 기준색 검사는 지금 공짜다 — 시트에 기준색 램프가 한 픽셀도 없다 "
 				+ "(팔레트 교체가 아직 성립하지 않는다: LATER.md #54)")
