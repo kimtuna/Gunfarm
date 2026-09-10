@@ -51,12 +51,18 @@
   **`game/qa/*.py`**(그림을 재는 검사) 뿐이다.
   **`project.godot` · `game/scripts/*.gd` · `game/qa/*.gd` 는 건드리지 마라** —
   필요하면 `docs/feedback/INBOX.md` 에 항목을 남기고 이 바퀴는 넘어가라.
-- **QA 는 `.py` 두 개만 돌린다** — `qa_sprite_check.py` · `qa_character_sheets.py`.
-  `game/qa/*.gd` **스물셋은 기능 루프의 것이다. 돌리지 마라.** 걷는가·줍는가·쏘는가는
-  네가 볼 일이 아니다(2026-09-10 사람 지적). 새 검사가 필요하면 **`.py` 로 만들어라.**
-- **게임을 띄우는 것은 「검사」가 아니라 「보기」다.** 캡처를 찍으려면 띄워야 하지만
-  그건 판정 재료를 만드는 것이다. 띄웠는데 게임이 깨져 있으면 **고치지 말고
-  `INBOX` 에 넘겨라.**
+- **QA 는 「네가 만든 것을 검사하는 것」만 돌린다** — 언어(`.py`/`.gd`)로 가르는 게
+  아니다. **모션은 네가 만드니 모션 QA 도 네 것이고, 그건 엔진을 띄우는 `.gd` 다.**
+  목록은 `docs/DESIGN_LOOP.md` 「QA 를 어느 루프가 보나」에 있다. 요약:
+
+  | 네 것 | `qa_sprite_check.py` · `qa_character_sheets.py` · `qa_player_sprite` · **`qa_player_walk`(걷기 모션)** · `qa_character_sprite` · `qa_terrain_view` · `qa_hotbar`(든 도구가 보이는가) · `qa_ground_items`(바닥 그림이 보이는가) · `qa_player_appearance`(외형이 입혀지는가) |
+  |---|---|
+  | **네 것 아님** | `qa_inventory` · `qa_gun_ammo` · `qa_health` · `qa_death_box` · `qa_bullets` · `qa_map` · `qa_main_menu` · `qa_settings` · `qa_character_slots` · `qa_slot_store` · `qa_character_customize` · `qa_world_entry` · `qa_world_gen` · `qa_player_world` |
+  | **공통** | `qa_uid_files`(파일 위생) · **「엔진에서 돌렸을 때 멀쩡한가」** |
+
+- **「엔진에서 멀쩡한가」는 네 몫이기도 하다.** 시트를 다시 구웠으면 엔진이 그걸
+  제대로 읽는지 확인해라. 다만 **깨진 원인이 엔진 코드면 고치지 말고 `INBOX` 에
+  넘겨라** — `game/scripts/*.gd` 와 `project.godot` 은 기능 루프 것이다.
 
 ## 항목을 닫는 법 — **화면이 바뀌면 네가 못 닫는다**
 
