@@ -75,75 +75,55 @@ footer{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var(
 `docs/design_reference/d2_grass_r0.png`(월드 캡처) · `d2_grasszoom_r0.png`(2배 확대).
 **재본 값**: 변주 8종의 덮인 넓이 **18.4 / 21.2 / 21.9 / 19.6 / 19.8 / 24.9 / 19.1 / 18.4 %**
 — 폭 **6.5%**. 여덟 칸이 전부 「덤불 하나」라 자리만 다르고 양이 같다.
-「이음매」 땅 0.94 · 「무늬」 grass 79%/±9.5 — **QA 는 전부 초록불이었다.**</pre></div></div><div class="rev"><a href="design_reference/d2_grass_r1.png" target="_blank"><img src="design_reference/d2_grass_r1.png" alt="d2_grass_r1.png" loading="lazy"></a><div class="why"><span class="rno">r1</span><pre>**전 회차에서 그대로 둔 것**
-- **덤불 하나의 크기** — 잎 8~14px · 굵기 2~3px · 한 덤불에 포기 5~7개.
-  `INBOX #62` 가 값을 치르고 올린 값이고, 큐가 *&quot;줄이지 말 것&quot;* 이라고 못 박았다.
-  한 개도 안 건드렸다.
-- **덤불로 모으는 것 자체**(`CLUMP_SPREAD = 0.13`) · 퍼짐 값.
-- **바다** — 물결·개수·뿌리는 방식 전부 그대로. 큐: *&quot;바다는 건드리지 않는다.&quot;*
-- 팔레트·램프·타일 규격.
+「이음매」 땅 0.94 · 「무늬」 grass 79%/±9.5 — **QA 는 전부 초록불이었다.**</pre></div></div><div class="rev"><a href="design_reference/d2_grass_r1.png" target="_blank"><img src="design_reference/d2_grass_r1.png" alt="d2_grass_r1.png" loading="lazy"></a><div class="why"><span class="rno">r1</span><pre>&gt; *&quot;지금 QA 테스트 하고 있는 거 같은데 **전혀 안 바뀌었는데?**&quot;*
 
-**보완한 것**
-큐의 지적 *&quot;`INBOX #62` 가 잡티를 덩어리로 만든 것까지는 옳았다. 틀린 것은 그 덩어리를
-칸마다 똑같이 하나씩 놓은 것이다&quot;* 때문에, **덤불의 크기가 아니라 「수」를 변주마다
-벌렸다** — `gen_terrain.GRASS_CLUMPS = (0, 1, 1, 2, 1, 3, 1, 2)`.
-- **0 이 한 종 있다.** 전부 1개 이상이면 화면에 빈 데가 없어서, 자리를 아무리 흔들어도
-  밀도가 고르게 보인다 — 그게 지금까지의 문제였다.
-- **0 을 여럿 두지 않았다.** 8종 중 둘이 비면 25% 가 민무늬라 이번엔 땜빵으로 보인다.
+**재보면 13.3% 바뀌었다. 그런데 바뀐 방향이 틀렸다.**
 
-**재본 값** (r0 → r1)
-| | r0 | r1 |
-|---|---|---|
-| 변주별 덮인 넓이 | 18.4 ~ 24.9% | **0.0 ~ 50.0%** |
-| 폭 | 6.5% | **50.0%** |
-| 「이음매」 땅 (상한 1.10) | 0.94 | **0.89** (더 안 보인다) |
-| 「이음매」 바다 (상한 0.80) | 0.61 | 0.61 (안 건드렸다) |
-| 「무늬」 grass | 79% / ±9.5 | 75% / ±10.8 |
-| 「무늬」 sea | 79% / ±10.9 | 79% / ±10.9 |
-| 「캐릭터대비」 | 61% | 61% |
+- r0 은 덤불이 칸마다 하나씩 **고르게** 있었다.
+- r1 은 덤불이 **더 빽빽해졌을 뿐 여전히 고르다.**
+- **맨땅이 드러난 칸이 하나도 없다.**
 
-**새로 만든 자**: `qa_sprite_check.py` 의 **「변주폭」**.
-「변주」·「무늬」·「이음매」가 셋 다 초록불인 채로 이 문제가 지나갔다 — 「변주」는 8종의
-바이트열이 다르기만 하면 통과하고, 「무늬」는 8종을 뭉쳐 평균만 본다.
-**검사가 진짜 잡는지 확인했다**: `GRASS_CLUMPS = (1,)*8` 로 옛 그림을 다시 구워
-돌리니 다른 검사는 전부 초록불인데 「변주폭」만 FAIL 이었다
-(*&quot;폭 7% &lt; 하한 30%&quot;*).
+큐가 요구한 것은 *&quot;8종의 덤불 수를 **0~3개로 벌린다**. **맨땅이 드러난 칸이 섞여야**
+「드문드문」이 읽힌다&quot;* 였다. **「드문드문」이 아니라 「더 촘촘하게 균일」이 됐다.**
 
-**사람 판정**: (대기)</pre></div></div><div class="rev"><a href="design_reference/d2_grasszoom_r1.png" target="_blank"><img src="design_reference/d2_grasszoom_r1.png" alt="d2_grasszoom_r1.png" loading="lazy"></a><div class="why"><span class="rno">r1</span><pre>**전 회차에서 그대로 둔 것**
-- **덤불 하나의 크기** — 잎 8~14px · 굵기 2~3px · 한 덤불에 포기 5~7개.
-  `INBOX #62` 가 값을 치르고 올린 값이고, 큐가 *&quot;줄이지 말 것&quot;* 이라고 못 박았다.
-  한 개도 안 건드렸다.
-- **덤불로 모으는 것 자체**(`CLUMP_SPREAD = 0.13`) · 퍼짐 값.
-- **바다** — 물결·개수·뿌리는 방식 전부 그대로. 큐: *&quot;바다는 건드리지 않는다.&quot;*
-- 팔레트·램프·타일 규격.
+### r2 가 할 것
 
-**보완한 것**
-큐의 지적 *&quot;`INBOX #62` 가 잡티를 덩어리로 만든 것까지는 옳았다. 틀린 것은 그 덩어리를
-칸마다 똑같이 하나씩 놓은 것이다&quot;* 때문에, **덤불의 크기가 아니라 「수」를 변주마다
-벌렸다** — `gen_terrain.GRASS_CLUMPS = (0, 1, 1, 2, 1, 3, 1, 2)`.
-- **0 이 한 종 있다.** 전부 1개 이상이면 화면에 빈 데가 없어서, 자리를 아무리 흔들어도
-  밀도가 고르게 보인다 — 그게 지금까지의 문제였다.
-- **0 을 여럿 두지 않았다.** 8종 중 둘이 비면 25% 가 민무늬라 이번엔 땜빵으로 보인다.
+1. **변주 8종 중 최소 두 종은 덤불이 0개여야 한다.** 맨 풀만 있는 칸이다.
+   지금은 여덟 종이 전부 덤불을 갖고 있다.
+2. **덤불 수를 0 · 0 · 1 · 1 · 2 · 2 · 3 · 3 처럼 벌려라.** 넓이 비율(%)이 아니라
+   **개수**를 벌리는 것이다 — r1 은 넓이만 흔들고 개수는 그대로였다.
+3. **재서 보여라**: 변주 8종의 **덤불 개수**와 덮인 넓이를 둘 다. 개수의 폭이
+   **0~3** 이 아니면 안 된 것이다.
+4. **덤불 하나의 크기는 여전히 건드리지 마라**(`INBOX #62` 의 값).
 
-**재본 값** (r0 → r1)
-| | r0 | r1 |
-|---|---|---|
-| 변주별 덮인 넓이 | 18.4 ~ 24.9% | **0.0 ~ 50.0%** |
-| 폭 | 6.5% | **50.0%** |
-| 「이음매」 땅 (상한 1.10) | 0.94 | **0.89** (더 안 보인다) |
-| 「이음매」 바다 (상한 0.80) | 0.61 | 0.61 (안 건드렸다) |
-| 「무늬」 grass | 79% / ±9.5 | 75% / ±10.8 |
-| 「무늬」 sea | 79% / ±10.9 | 79% / ±10.9 |
-| 「캐릭터대비」 | 61% | 61% |
+### 덤으로 — 사람이 같은 캡처에서 본 것
 
-**새로 만든 자**: `qa_sprite_check.py` 의 **「변주폭」**.
-「변주」·「무늬」·「이음매」가 셋 다 초록불인 채로 이 문제가 지나갔다 — 「변주」는 8종의
-바이트열이 다르기만 하면 통과하고, 「무늬」는 8종을 뭉쳐 평균만 본다.
-**검사가 진짜 잡는지 확인했다**: `GRASS_CLUMPS = (1,)*8` 로 옛 그림을 다시 구워
-돌리니 다른 검사는 전부 초록불인데 「변주폭」만 FAIL 이었다
-(*&quot;폭 7% &lt; 하한 30%&quot;*).
+**해안선이 완전한 계단이다.** 48px 칸이 그대로 보인다. 이건 `#d4` 의 일이지만,
+**화면에서 제일 눈에 띄는 것이 그거였다** — `#d4` 를 할 때 이 캡처를 견줘라.</pre></div></div><div class="rev"><a href="design_reference/d2_grasszoom_r1.png" target="_blank"><img src="design_reference/d2_grasszoom_r1.png" alt="d2_grasszoom_r1.png" loading="lazy"></a><div class="why"><span class="rno">r1</span><pre>&gt; *&quot;지금 QA 테스트 하고 있는 거 같은데 **전혀 안 바뀌었는데?**&quot;*
 
-**사람 판정**: (대기)</pre></div></div></div></details>
+**재보면 13.3% 바뀌었다. 그런데 바뀐 방향이 틀렸다.**
+
+- r0 은 덤불이 칸마다 하나씩 **고르게** 있었다.
+- r1 은 덤불이 **더 빽빽해졌을 뿐 여전히 고르다.**
+- **맨땅이 드러난 칸이 하나도 없다.**
+
+큐가 요구한 것은 *&quot;8종의 덤불 수를 **0~3개로 벌린다**. **맨땅이 드러난 칸이 섞여야**
+「드문드문」이 읽힌다&quot;* 였다. **「드문드문」이 아니라 「더 촘촘하게 균일」이 됐다.**
+
+### r2 가 할 것
+
+1. **변주 8종 중 최소 두 종은 덤불이 0개여야 한다.** 맨 풀만 있는 칸이다.
+   지금은 여덟 종이 전부 덤불을 갖고 있다.
+2. **덤불 수를 0 · 0 · 1 · 1 · 2 · 2 · 3 · 3 처럼 벌려라.** 넓이 비율(%)이 아니라
+   **개수**를 벌리는 것이다 — r1 은 넓이만 흔들고 개수는 그대로였다.
+3. **재서 보여라**: 변주 8종의 **덤불 개수**와 덮인 넓이를 둘 다. 개수의 폭이
+   **0~3** 이 아니면 안 된 것이다.
+4. **덤불 하나의 크기는 여전히 건드리지 마라**(`INBOX #62` 의 값).
+
+### 덤으로 — 사람이 같은 캡처에서 본 것
+
+**해안선이 완전한 계단이다.** 48px 칸이 그대로 보인다. 이건 `#d4` 의 일이지만,
+**화면에서 제일 눈에 띄는 것이 그거였다** — `#d4` 를 할 때 이 캡처를 견줘라.</pre></div></div></div></details>
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d3</span><span class="kind">취향</span><span class="title">바다 — 물결이 「긁힌 자국」이 아니라 물로 보여야 한다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge taste"><b>★ 감독이 <b>눈으로</b> 판정</b><p>기계가 못 재는 것입니다 — 모양·비율·색감이 「누가 봐도 퀄리티가 떨어지지 않는가」.</p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d4</span><span class="kind">취향</span><span class="title">해안선 — 섬의 테두리가 화면에서 제일 큰 지형지물이다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge taste"><b>★ 감독이 <b>눈으로</b> 판정</b><p>기계가 못 재는 것입니다 — 모양·비율·색감이 「누가 봐도 퀄리티가 떨어지지 않는가」.</p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d5</span><span class="kind play">플레이</span><span class="title">배경을 켜서 본다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge play"><b>★ 감독이 <b>게임을 켜서</b> 판정</b><p>돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, 클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br><code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code></p></div><p class="none">아직 그림이 없습니다.</p></div></details>
@@ -177,5 +157,5 @@ footer{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var(
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d55</span><span class="kind play">플레이</span><span class="title">도구·아이템을 켜서 본다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge play"><b>★ 감독이 <b>게임을 켜서</b> 판정</b><p>돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, 클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br><code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code></p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d60</span><span class="kind play">플레이</span><span class="title">게임을 켜서 전체를 판정한다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge play"><b>★ 감독이 <b>게임을 켜서</b> 판정</b><p>돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, 클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br><code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code></p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#3f8a4a">완료</span><span class="num">#d10</span><span class="kind"></span><span class="title">(2026-09-10 완료 — `rig.joints()` 가 `comfy.figure()` 를 직접 부르게 바꿔</span><span class="count">0회차</span></summary><div class="body"><p class="none">아직 그림이 없습니다.</p></div></details>
-<footer>마지막 갱신 2026-09-10 10:07 · cdb893a [#d2 r1] 초원의 「벽지」 — 덤불의 크기가 아니라 「수」를 변주마다 벌렸다</footer>
+<footer>마지막 갱신 2026-09-10 10:09 · 141eb64 chore(gallery): 그림 갤러리 갱신</footer>
 </div></body></html>
