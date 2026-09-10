@@ -109,10 +109,13 @@ JUDGE = {
 
 
 def revisions(text):
-    """history.md → [(회차, 그 회차 본문)] — `## r<N>` 로 쪼갠다."""
+    """history.md → {회차: 그 회차 본문} — `## r<N>` 로 쪼갠다.
+
+    **빈 이력이면 빈 dict 다.** 한때 `[]` 를 돌려줘서 부르는 쪽의 `.get()` 이 터졌다.
+    """
     out = []
     if not text:
-        return out
+        return {}
     parts = re.split(r"^##\s*r(\d+)\b[^\n]*$", text, flags=re.M)
     # parts = [머리말, 번호, 본문, 번호, 본문, ...]
     for i in range(1, len(parts) - 1, 2):
