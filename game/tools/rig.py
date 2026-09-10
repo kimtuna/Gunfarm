@@ -125,6 +125,21 @@ def joints(cx=512, top=180, h=680, heads=3.6, arm_deg=90.0, face="front"):
 ## 4방향을 한 장에 받으면서 한 인물의 키가 420px 이 됐고(`comfy.FIG_H`), 같은 픽셀
 ## 값을 그대로 쓰면 반경이 몸에 비해 1.6배가 되어 위팔이 가슴을 문다. 비율로 적어두면
 ## 캔버스나 인물 크기가 바뀌어도 따라온다 — `split()` 이 키를 곱한다.
+## ── 새 규격 (2026-09-10, `DESIGN_QUEUE #d1`) ───────────────────────────────
+## **인물은 칸을 꽉 채우지 않는다.** 칸은 96px 그대로고 인물만 72px 이다
+## (`gen_player.FIG`). 남는 24px 이 가로로 넓은 도구를 받는다.
+##
+## `HEAD_PX` 가 이 항목의 핵심이다 — **몸만 줄이고 얼굴 픽셀은 안 줄인다**
+## (사람 결정: *"머리 26px — 얼굴 픽셀은 한 개도 안 줄인다"*). 인물을 통째로
+## 0.75배 하면 머리가 27 → 20px 이 되어 눈이 3px → 2px 로 사라진다(실측).
+## 그래서 `head_scale()` 이 **머리 레이어만 키워** 머리를 26px 에 못박는다.
+##
+## **`comfy.FIG_HEADS`(3.6) 는 건드리지 않는다.** 그 값은 밑그림
+## (`docs/design_reference/farmer_sheet4.png`)을 그릴 때 쓴 뼈대의 등신이라,
+## 바꾸면 그림은 그대로인데 자르는 뼈대만 어긋난다 — 옆모습 아래팔이 0px 이 됐던
+## `#d10` 과 **똑같은 고장**이다. 등신은 굽는 쪽(여기)에서 바꾼다.
+HEAD_PX = 26.0                    # 칸 안에서 머리(머리카락 포함)의 높이(px)
+
 RIG_H = 680.0                     # 아래 비율을 잰 기준 키
 PARTS = [
     ("armL_upper", ("shoulderL", "elbowL"), None,          "shoulderL", 34/RIG_H),
@@ -272,6 +287,68 @@ def compose(layers, J, xf, behind=False):
                      t.get("dy", 0.0), t.get("dx", 0.0)) @ M
         out.alpha_composite(_apply(layers[name], M))
     return out
+
+
+def merge_xf(a, b):
+    """두 변환을 한 부품에 겹친다 — **회전은 더하고 배율은 곱한다.**
+
+    모션이 낸 변환 위에 「이 시트 내내 걸려 있는 변환」(등신을 맞추는 머리 배율)을
+    얹을 때 쓴다. 덮어쓰면 안 된다 — 언젠가 머리를 돌리는 모션이 생기면 그 회전이
+    소리 없이 사라진다.
+    """
+    if not a:
+        return dict(b or {})
+    if not b:
+        return dict(a)
+    out = dict(a)
+    for name, t in b.items():
+        u = out.get(name) or {}
+        out[name] = {"rot":   u.get("rot", 0.0)   + t.get("rot", 0.0),
+                     "scale": u.get("scale", 1.0) * t.get("scale", 1.0),
+                     "dy":    u.get("dy", 0.0)    + t.get("dy", 0.0),
+                     "dx":    u.get("dx", 0.0)    + t.get("dx", 0.0)}
+    return out
+
+
+def head_scale(layers, J, fig=None, head_px=HEAD_PX, pad=None):
+    """**머리를 `head_px` 에 못박는 배율.** 등신을 여기서 정한다.
+
+    왜 이런 게 필요한가 (2026-09-10, `#d1`): 인물을 96 → 72px 로 줄이면서 통째로
+    0.75배 하면 머리가 27 → 20px 이 되어 **눈이 사라진다.** 사람이 못박은 것은
+    *"머리 26px — 얼굴 픽셀은 한 개도 안 줄인다"* 이므로, 몸만 줄이고 머리는
+    제 크기를 지키게 한다 = 등신이 3.5 → 2.7 로 내려간다.
+
+    **밑그림을 다시 뽑아서 하지 않는다.** `comfy.FIG_HEADS` 를 내리면 뼈대만
+    바뀌고 그림은 그대로라 자르는 자리가 어긋난다(`#d10` 과 같은 고장).
+
+    머리는 **목을 축으로** 커지므로 아래로는 안 자란다 — 자라는 만큼 그대로
+    인물이 커지고, 그 커진 키가 다시 `fig` 로 줄어든다. 그 되먹임까지 풀어서
+    한 번에 낸다:
+
+        머리(출력) = A·s · th / (B + s·C + 1) = head_px
+        s = head_px·(B+1) / (A·th − head_px·C)
+
+    `A` 머리 그림의 세로 · `C` 목에서 머리 꼭대기까지 · `B` 목에서 발끝까지
+    (전부 리그 공간 px), `th = fig − 2·pad` 는 출력에서 인물이 쓰는 줄 수다.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_player
+    fig = gen_player.FIG if fig is None else fig
+    pad = gen_player.PAD if pad is None else pad
+    th = float(fig - 2*pad)
+    hd = np.asarray(layers["head"])[..., 3] > 0
+    hys = np.flatnonzero(hd.sum(1) > 0)
+    hy0, hy1 = float(hys.min()), float(hys.max())
+    rest = dict(layers)
+    rest["head"] = Image.new('RGBA', layers["head"].size, (0, 0, 0, 0))
+    bo = np.asarray(compose(rest, J, {}))[..., 3] > 0
+    by1 = float(np.flatnonzero(bo.sum(1) > 0).max())
+    ny = float(J["neck"][1])
+    A, C, B = hy1 - hy0 + 1.0, ny - hy0, by1 - ny
+    den = A*th - head_px*C
+    if den <= 0:
+        raise SystemExit("머리를 %.1fpx 로 못박을 수 없다 — 머리가 인물보다 크다" % head_px)
+    return head_px*(B + 1.0) / den
 
 
 def render(layers, J, xf, cell=96):
@@ -524,12 +601,27 @@ def walk_tool(front=True):
 ## 팔 각도만큼 돌리는 순간 뭉갠다(`docs/CHARACTER.md` 「자르고 → 돌리고 → 맨 마지막에
 ## 줄인다」). 그래서 여기서 굽는 것은 **리그 공간(1024px) 해상도**이고, 도트는
 ## `bake_rows` 의 축소 한 번에서만 생긴다.
-TOOL_UNIT = 4.4     # 도구 설계 단위 하나가 **캐릭터 칸(96px)에서 몇 px** 인가.
+## 도구 설계 단위 하나가 **몸(키에서 머리를 뺀 것)에서 차지하는 비**. 픽셀이 아니라
+## 비율로 적는다 — 여기를 픽셀로 적어두면 인물만 줄었을 때 도구가 안 줄어서 72px 짜리
+## 사람이 96px 짜리 도끼를 든다.
+##
+## **키가 아니라 몸에 매단다** (2026-09-10, `#d1`). 손은 몸에 달려 있지 머리에 달려
+## 있지 않다. 키에 매달았더니 `head_scale()` 로 머리를 키운 만큼 도구도 같이 커져서,
+## **물뿌리개가 다리 띠까지 내려와 「선 축」이 4.2px 밀렸다**(실측 — 96px 때 up 방향은
+## 22장이 전부 48.0 이었는데 52.2 가 나왔다).
+TOOL_UNIT_PER_BODY = 4.4 / (96.0 - 27.0)   # 인물 96px · 머리 27px 이던 때의 값
 ## 17px 캐릭터가 쥐던 도끼는 설계 단위 하나가 1px 이었다(칸의 1/17). 96px 칸에서
 ## 같은 비를 지키면 5.65 인데, 그 값이면 총(가로 8.15단위)이 칸 폭을 넘고 도끼머리가
 ## 머리 위로 올라간다 — **칸 밖으로 나가면 외곽선이 잘린다**(`qa_character_sheets.py`
 ## 의 「잘림」이 잡는다). 4.4 면 도끼가 21 × 28 · 총이 42 × 12 라 일곱 도구가 전부
 ## **몸 중심에서 좌우 47px · 위아래 94px** 안에 들어간다.
+
+
+def tool_unit(fig=None, head_px=HEAD_PX):
+    """도구 설계 단위 하나 = **출력 몇 px**. 몸 높이(키 − 머리)에 매달려 있다."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_player
+    return TOOL_UNIT_PER_BODY * ((gen_player.FIG if fig is None else fig) - head_px)
 TOOL_BOX = 15.0     # 도구를 그릴 설계 공간 한 변 (일곱 도구가 다 들어가는 크기)
 TOOL_SS = 6         # 슈퍼샘플 — **칸이 크면 낮춘다**(`gen_objects.py` 와 같은 이유).
 ## 재는 것은 캔버스 크기가 아니라 출력 픽셀당 샘플 수다: 36 샘플로 구운 리그 px 가
@@ -562,7 +654,7 @@ def tool_sprite(name, angle, sx=1.0, per_cell=5.0):
         return _TOOL_CACHE[key]
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import gen_character as gen
-    unit = TOOL_UNIT * per_cell               # 설계 단위 하나 = 리그 px
+    unit = tool_unit() * per_cell             # 설계 단위 하나 = 리그 px
     n = int(round(TOOL_BOX * unit))
     grip = (TOOL_BOX * 0.5, TOOL_BOX * 0.5)
     keep_ss = gen.SS
@@ -946,7 +1038,7 @@ def _levels(cols, k):
     return lv[:k]
 
 
-def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
+def bake_rows(rows, layers, J, cell=96, behind=False, labels=None, base=None, fig=None):
     """방향별 자세 목록 → 방향별 칸 목록.
 
     **시트 한 장의 모든 칸이 같은 테두리와 같은 팔레트를 쓴다.**
@@ -965,8 +1057,12 @@ def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
     — 테두리에는 뻗은 팔이 들어가서, 도구를 들면 캐릭터가 6px 옆으로 미끄러졌다).
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_player
     from gen_player import downscale
-    flat = [x for r in rows for x in r]
+    fig = gen_player.FIG if fig is None else fig
+    # **`base` 는 이 시트 내내 걸려 있는 변환**(등신을 맞추는 머리 배율 —
+    # `head_scale()`). 여기 한 자리에서 겹쳐야 색·라벨·몸통이 **같은 그림**이 된다.
+    flat = [merge_xf(x, base) for r in rows for x in r]
     bigs = [compose(layers, J, a, behind) for a in flat]
     body = {k: v for k, v in layers.items() if k != "tool"}
     bodies = bigs if len(body) == len(layers) \
@@ -1009,12 +1105,12 @@ def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
     # 한 값**이라 22장이 저절로 같은 자리에 선다. 관절(`J['hipC']`)을 안 쓰는 이유는
     # 그림이 뼈대에 정확히 얹혀 있지 않기 때문이고, 쉼 자세로 재면 지금 맞아 있는
     # idle 이 한 픽셀도 안 움직인다(idle 이 곧 쉼 자세다).
-    rest = np.asarray(compose(body, J, {}))[..., 3] > 0
+    rest = np.asarray(compose(body, J, merge_xf({}, base)))[..., 3] > 0
     rxs = np.flatnonzero(rest.sum(0) > 0)
     cx = (int(rxs.min()) + int(rxs.max()) + 1) * 0.5
     r = min(max(cx - int(xs.min()), int(xs.max()) + 1 - cx), cx, W - cx)
     box = (int(bys.min()), int(bys.max())+1, int(round(cx - r)), int(round(cx + r)))
-    cells = [downscale(Image.fromarray(np.asarray(b)[..., :3]), k, cell=cell, box=box)
+    cells = [downscale(Image.fromarray(np.asarray(b)[..., :3]), k, cell=cell, box=box, fig=fig)
              for b, k in zip(bigs, keeps)]      # **색은 아직 안 줄인다** — 부르는 쪽이 한 번에 한다
     labs = None
     if labels is not None:
@@ -1022,7 +1118,8 @@ def bake_rows(rows, layers, J, cell=96, behind=False, labels=None):
         # 무슨 재질이었는지 알 수 있다(`recolor_cells()` 가 그걸로 램프를 고른다).
         from gen_player import downscale_labels
         lbig = [np.asarray(compose(labels, J, a, behind))[..., 0] for a in flat]
-        labs = [downscale_labels(np.where(k, l, 0), k, cell=cell, box=box, top=len(MATS))
+        labs = [downscale_labels(np.where(k, l, 0), k, cell=cell, box=box, top=len(MATS),
+                                 fig=fig)
                 for l, k in zip(lbig, keeps)]
     out = []; lout = []; at = 0
     for r in rows:
@@ -1116,16 +1213,26 @@ def build_sheets(src=None, style="farmer", cell=96):
     걸리므로 그러면 걷기 시트만 옷을 안 갈아입는다. 재질별 램프는 상수라 22장이
     저절로 같은 색을 쓴다 — `recolor_cells()` 참고.
     """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gen_player
     rigs = load_sheet(src) if (src or SHEET) else load_dirs()
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_dir = os.path.join(here, "assets", "sprites")
-    # **리그 px ÷ 칸 px** — 도구를 얼마나 촘촘히 찍을지 여기서 정한다. 방향마다
-    # 다르다(옆모습이 조금 작다): 몸 하나가 칸의 세로를 다 채우게 굽기 때문이다.
+    # **이 시트 내내 걸려 있는 변환** — 등신을 맞추는 머리 배율(`head_scale()`).
+    # 방향마다 그림이 달라서 배율도 방향마다 다르다. 모션 변환 위에 `merge_xf()` 로
+    # 겹쳐지고, 색·라벨·몸통이 전부 같은 그림을 보게 `bake_rows` 한 자리에서 건다.
+    base = {d: {"head": {"scale": head_scale(layers, J)}}
+            for d, (layers, J) in rigs.items()}
+    # **리그 px ÷ 출력 px** — 도구를 얼마나 촘촘히 찍을지 여기서 정한다. 방향마다
+    # 다르다(옆모습이 조금 작다). **나누는 값은 칸이 아니라 인물이 쓰는 줄 수다**
+    # (`FIG - 2·PAD`) — 인물이 칸을 꽉 채우지 않게 된 2026-09-10 부터 둘이 다르다.
+    # 여기를 칸으로 두면 축소 배율과 어긋나서 도구만 1.34배로 커진다.
+    rows_px = float(gen_player.FIG - 2*gen_player.PAD)
     per_cell = {}
     for d, (layers, J) in rigs.items():
-        op = np.asarray(compose(layers, J, {}))[..., 3] > 0
+        op = np.asarray(compose(layers, J, base[d]))[..., 3] > 0
         ys = np.flatnonzero(op.sum(1) > 0)
-        per_cell[d] = (int(ys.max()) - int(ys.min()) + 1) / float(cell - 2)
+        per_cell[d] = (int(ys.max()) - int(ys.min()) + 1) / rows_px
     plans = {
         "idle": {"down": idle(), "left": idle(), "up": idle()},
         "walk": {"down": walk_front(), "left": walk_side(), "up": walk_front()},
@@ -1164,7 +1271,8 @@ def build_sheets(src=None, style="farmer", cell=96):
                     sx=sx, per_cell=per_cell[d])
             cells, labs = bake_rows([frames], layers, J, cell,
                                     behind=(tool is not None and d in TOOL_BEHIND),
-                                    labels=label_images(layers, body_lab[d]))
+                                    labels=label_images(layers, body_lab[d]),
+                                    base=base[d])
             baked[motion][d] = cells[0]; labeled[motion][d] = labs[0]
 
     # **22장을 한 번에 줄인다.** 여기서 비로소 도트의 색이 정해지고, 그 색이 곧

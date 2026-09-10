@@ -33,6 +33,12 @@ CELL = 96          # 아트 한 칸. 씬 배율 1 → 화면 96px = 타일 두 �
 # 칸을 96 으로 올리면 배율이 1 이 되므로 지형 아트도 48px(배율 1)로 같이 올렸다 —
 # 도트 하나의 화면 크기가 서로 같아야 한다(STYLE_GUIDE 1번).
 PAD = 1            # 외곽선이 들어갈 여백 (칸 테두리에 그림이 닿으면 선이 잘린다)
+FIG = 72           # **칸 안에서 인물이 차지하는 키(px).** 칸(96)과 따로 있는 값이다.
+# 2026-09-10 (`DESIGN_QUEUE #d1`) 에 96 → 72 로 내렸다. 칸은 96 그대로다 —
+# 인물이 72 가 되면 **24px 이 남고, 그 여유가 가로로 넓은 도구를 받는다**(총·낚싯대).
+# 전에는 인물이 칸을 세로로 꽉 채워서(94 + 외곽선 2 = 96) 가로가 세로보다 넓어지는
+# 순간 `_grid()` 가 세로를 깎았고, 그래서 **낫만 87px 로 작아졌다**(INBOX #72).
+# 화면에서는 1080p 세로의 8.9% → **6.7%** 가 된다(`DESIGN.md` 「카메라 / 해상도」).
 COLORS = 32        # 팔레트 크기 — 이보다 많으면 도트가 아니라 「축소한 그림」이 된다.
                    # 96px 칸은 48px 때(16색)보다 넓고, 게다가 **시트 한 장의 프레임
                    # 전부가 이 한 팔레트를 나눠 쓰므로**(`quantize_all`) 더 준다.
@@ -118,25 +124,32 @@ def add_ink(body, ink=INK):
     return out
 
 
-def _grid(keep, cell, pad, box):
+def _grid(keep, cell, pad, box, fig=None):
     """축소 격자 — (자를 상자, 세로칸, 가로칸, 칸 안 왼쪽 여백, 칸 안 위 여백).
 
     **색과 라벨이 같은 격자를 써야 한다** — 한 칸이라도 어긋나면 「이 픽셀이 무슨
     재질인가」가 옆 픽셀 것이 되어 색 바꿔치기가 엉뚱한 자리를 칠한다.
+
+    `fig` 는 **칸 안에서 인물이 차지할 키**다(기본 `FIG`). 세로는 여기에 맞추고,
+    가로는 비율대로 따라가되 **칸을 넘지 않는다** — 그래서 `fig < cell` 인 만큼이
+    가로로 넓은 도구가 들어갈 여유가 된다. `fig=cell` 이면 옛 동작(칸을 꽉 채움)이다.
+
+    **발밑은 `fig` 와 무관하게 늘 칸의 아랫줄이다** (`cell - pad`). 위 여백만
+    늘어난다 — `player_frames.feet_y()` 가 아랫줄을 발밑으로 믿기 때문이다.
     """
     if box is None:
         ys, xs = np.where(keep)
         box = (int(ys.min()), int(ys.max()) + 1, int(xs.min()), int(xs.max()) + 1)
     y0, y1, x0, x1 = box
     ch, cw = y1 - y0, x1 - x0
-    th = cell - 2*pad
+    th = (cell if fig is None else fig) - 2*pad
     tw = max(1, round(cw * th / ch))
     if tw > cell - 2*pad:
         tw = cell - 2*pad; th = max(1, round(ch * tw / cw))
     return box, th, tw, (cell - tw)//2, (cell - pad) - th
 
 
-def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
+def downscale(rgb, keep, cell=CELL, pad=PAD, box=None, fig=FIG):
     """큰 그림 → 칸 크기의 RGBA. **색은 아직 줄이지 않는다.**
 
     색 줄이기(양자화)를 프레임마다 따로 하면 팔레트가 조금씩 달라져서 **모든 픽셀이
@@ -147,7 +160,7 @@ def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
     a = np.asarray(rgb).astype(float)
     # **여러 프레임을 구울 때는 같은 `box` 를 넘긴다** — 프레임마다 제 몸에 맞춰 자르면
     # 다리를 들 때 축소 배율이 달라져 캐릭터가 프레임마다 들썩인다.
-    box, th, tw, ox, oy = _grid(keep, cell, pad, box)
+    box, th, tw, ox, oy = _grid(keep, cell, pad, box, fig)
     y0, y1, x0, x1 = box
     a = a[y0:y1, x0:x1]
     k = keep[y0:y1, x0:x1].astype(float)
@@ -168,13 +181,13 @@ def downscale(rgb, keep, cell=CELL, pad=PAD, box=None):
     return out
 
 
-def downscale_labels(labels, keep, cell=CELL, pad=PAD, box=None, top=255):
+def downscale_labels(labels, keep, cell=CELL, pad=PAD, box=None, top=255, fig=FIG):
     """재질 라벨(정수) → 칸 크기. **`downscale()` 과 같은 격자에서 최빈값**을 고른다.
 
     색은 평균이 맞지만 라벨은 평균이 뜻이 없다 — 피부 3px 과 옷 1px 의 「평균」은
     아무 재질도 아니다. 블록에서 **가장 넓은 재질**이 그 도트의 재질이다.
     """
-    box, th, tw, ox, oy = _grid(keep, cell, pad, box)
+    box, th, tw, ox, oy = _grid(keep, cell, pad, box, fig)
     y0, y1, x0, x1 = box
     lab = np.asarray(labels)[y0:y1, x0:x1]
     k = keep[y0:y1, x0:x1]
@@ -221,9 +234,9 @@ def quantize_all(cells, colors=COLORS, ref_cells=None):
     return out
 
 
-def to_cell(rgb, keep, cell=CELL, pad=PAD, colors=COLORS, box=None):
+def to_cell(rgb, keep, cell=CELL, pad=PAD, colors=COLORS, box=None, fig=FIG):
     """큰 그림 한 장 → 칸 하나 (축소 + 색 줄이기 + 테두리)."""
-    return quantize_all([downscale(rgb, keep, cell, pad, box)], colors)[0]
+    return quantize_all([downscale(rgb, keep, cell, pad, box, fig)], colors)[0]
 
 
 def shrink(path, cell=CELL, pad=PAD, colors=COLORS):
