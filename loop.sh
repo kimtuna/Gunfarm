@@ -39,14 +39,40 @@ notify() {
     >/dev/null 2>&1 || true
 }
 
+# ── git 자물쇠 ──────────────────────────────────────────────────────────
+# **두 루프가 같은 저장소에 커밋한다.** 동시에 `git add`/`commit` 하면 `index.lock`
+# 이 겹쳐서 커밋이 깨진다. `mkdir` 은 원자적이라 자물쇠로 쓴다(macOS 에 flock 이 없다).
+GIT_LOCK="$ROOT/.harness/git.lock"
+git_lock() {
+  local i
+  for i in $(seq 1 600); do            # 최대 10분 기다린다
+    if mkdir "$GIT_LOCK" 2>/dev/null; then
+      echo $$ > "$GIT_LOCK/pid"
+      return 0
+    fi
+    # 자물쇠를 쥔 프로세스가 죽었으면 뺏는다 (안 그러면 영영 막힌다)
+    local owner; owner="$(cat "$GIT_LOCK/pid" 2>/dev/null)"
+    if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
+      rm -rf "$GIT_LOCK"
+      continue
+    fi
+    sleep 1
+  done
+  return 1
+}
+git_unlock() { rm -rf "$GIT_LOCK"; }
+
 render_and_push_dashboard() {
   /usr/bin/python3 "$ROOT/scripts/render_dashboard.py" >>"$LOG" 2>&1 || return 0
+  git_lock || { log "경고: git 자물쇠를 못 얻었다 — 이번 갱신은 건너뛴다"; return 0; }
   git -C "$ROOT" add docs/index.html >/dev/null 2>&1
   if ! git -C "$ROOT" diff --cached --quiet -- docs/index.html 2>/dev/null; then
     git -C "$ROOT" commit -q -m "chore(dashboard): 진행 상황 갱신" >>"$LOG" 2>&1
+    git -C "$ROOT" pull -q --rebase "$PUSH_REMOTE" "$PUSH_BRANCH" >>"$LOG" 2>&1
     git -C "$ROOT" push -q "$PUSH_REMOTE" "HEAD:$PUSH_BRANCH" >>"$LOG" 2>&1 \
       || log "경고: 대시보드 push 실패 (다음 바퀴에 다시 시도)"
   fi
+  git_unlock
 }
 
 # 루프를 멈추고 그 이유를 대시보드 배너로 남긴다.
