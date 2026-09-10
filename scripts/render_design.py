@@ -90,6 +90,38 @@ def git(*args):
 BADGE = {"todo": ("진행 중", "#c8862a"), "wait": ("확인해 주세요", "#2f7fd0"),
          "done": ("완료", "#3f8a4a")}
 
+## 갈래마다 **사람이 무엇으로 판정하는가.** 이게 없으면 갤러리를 보는 사람이
+## "이건 내가 봐야 하는 건가 기계가 보는 건가"를 매번 다시 판단해야 한다.
+JUDGE = {
+    "플레이": ("★ 감독이 <b>게임을 켜서</b> 판정",
+               "돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, "
+               "클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br>"
+               "<code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code>"),
+    "취향":   ("★ 감독이 <b>눈으로</b> 판정",
+               "기계가 못 재는 것입니다 — 모양·비율·색감이 「누가 봐도 퀄리티가 "
+               "떨어지지 않는가」."),
+    "바탕":   ("기계(QA)가 판정",
+               "화면이 안 바뀌는 배관이면 루프가 스스로 닫습니다. 화면이 바뀌면 "
+               "그때는 감독 확인이 필요합니다."),
+    "자":     ("기계(QA)가 판정",
+               "잴 수 있는 것입니다. 통과하면 루프가 닫습니다."),
+}
+
+
+def revisions(text):
+    """history.md → [(회차, 그 회차 본문)] — `## r<N>` 로 쪼갠다."""
+    out = []
+    if not text:
+        return out
+    parts = re.split(r"^##\s*r(\d+)\b[^\n]*$", text, flags=re.M)
+    # parts = [머리말, 번호, 본문, 번호, 본문, ...]
+    for i in range(1, len(parts) - 1, 2):
+        try:
+            out.append((int(parts[i]), parts[i + 1].strip()))
+        except ValueError:
+            pass
+    return dict(out)
+
 
 def main():
     items = queue_items()
@@ -108,19 +140,33 @@ def main():
         note = read(WORKDIR, "d%d" % num, "note.md")
         crit = read(WORKDIR, "d%d" % num, "critique.md")
         label, color = BADGE[state]
-        thumbs = "".join(
-            '<figure><a href="design_reference/{n}" target="_blank">'
-            '<img src="design_reference/{n}" alt="{n}" loading="lazy"></a>'
-            '<figcaption>{cap}</figcaption></figure>'.format(
-                n=e(p), cap=("r%d" % r) if r else e(p))
-            for r, p in pics)
-        if not thumbs:
-            thumbs = '<p class="none">아직 그림이 없습니다.</p>'
-        body = ['<div class="revs">%s</div>' % thumbs]
-        if hist:
-            body.append('<h4>회차 이력 — 무엇을 보완해 왔나</h4><pre>%s</pre>' % e(hist))
-        if note:
-            body.append('<h4>만든 세션이 남긴 것</h4><pre>%s</pre>' % e(note))
+        revs = revisions(hist)
+        who, why = JUDGE.get(kind, ("", ""))
+        body = []
+        # **누가 판정하는가를 맨 위에.** 사람이 갤러리를 열자마자 알아야 한다.
+        if who:
+            cls = "judge play" if kind == "플레이" else (
+                  "judge taste" if kind == "취향" else "judge auto")
+            extra = ('<div class="tolook">%s</div>' % e(note)) if (note and state != "done") else ""
+            body.append('<div class="%s"><b>%s</b><p>%s</p>%s</div>'
+                        % (cls, who, why, extra))
+        # **회차마다 그림 + 왜 그 회차가 필요했나를 나란히.**
+        if pics:
+            rows = []
+            for r, fn in pics:
+                reason = revs.get(r, "")
+                rows.append(
+                    '<div class="rev">'
+                    '<a href="design_reference/{fn}" target="_blank">'
+                    '<img src="design_reference/{fn}" alt="{fn}" loading="lazy"></a>'
+                    '<div class="why"><span class="rno">{cap}</span>{reason}</div>'
+                    '</div>'.format(
+                        fn=e(fn), cap=("r%d" % r) if r else "—",
+                        reason=('<pre>%s</pre>' % e(reason)) if reason
+                               else '<p class="none">이 회차의 사유가 안 적혀 있습니다.</p>'))
+            body.append("".join(rows))
+        else:
+            body.append('<p class="none">아직 그림이 없습니다.</p>')
         if crit:
             body.append('<h4>보는 세션의 「잴 것」</h4><pre>%s</pre>' % e(crit))
         blocks.append(
@@ -130,10 +176,12 @@ def main():
             '<span class="kind{playcls}">{kind}</span>'
             '<span class="title">{title}</span>'
             '<span class="count">{cnt}회차</span>'
+            '{judge}'
             '</summary><div class="body">{body}</div></details>'.format(
                 op=" open" if first and state != "done" else "",
                 c=color, lab=label, num=num, kind=e(kind), title=e(title),
                 playcls=(" play" if kind == "플레이" else ""),
+                judge=('<span class="me">내가 볼 것</span>' if kind in ("플레이", "취향") else ''),
                 cnt=len(pics), body="".join(body)))
         first = False
 
@@ -165,9 +213,22 @@ summary::-webkit-details-marker{{display:none}}
 .title{{flex:1;min-width:200px}}
 .count{{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}}
 .body{{padding:4px 14px 16px;border-top:1px solid var(--line)}}
-.revs{{display:flex;flex-wrap:wrap;gap:12px;margin:10px 0}}
-figure{{margin:0}}
-figcaption{{color:var(--dim);font-size:11px;margin-top:4px;text-align:center}}
+.judge{{border-radius:8px;padding:10px 12px;margin:12px 0;font-size:13px;
+ border:1px solid var(--line)}}
+.judge b{{display:block;margin-bottom:4px}}
+.judge p{{margin:0;color:var(--dim);font-size:12px;line-height:1.5}}
+.judge.play{{background:#2a2418;border-color:#7a6330;color:#ffd479}}
+.judge.taste{{background:#182430;border-color:#31597a;color:#9fd0ff}}
+.judge.auto{{background:#1a1d1a;border-color:#33473a;color:#9ec9a8}}
+.tolook{{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
+ color:var(--fg);font-size:12.5px;white-space:pre-wrap}}
+.me{{background:#2f7fd0;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px}}
+.rev{{display:flex;gap:14px;align-items:flex-start;padding:12px 0;
+ border-top:1px solid var(--line);flex-wrap:wrap}}
+.rev img{{max-width:min(420px,100%)}}
+.why{{flex:1;min-width:240px}}
+.rno{{display:inline-block;background:#2c2e36;color:var(--fg);font-size:11px;
+ padding:1px 8px;border-radius:99px;margin-bottom:6px}}
 .body img{{max-width:100%;image-rendering:pixelated;border-radius:6px;
  border:1px solid var(--line);display:block}}
 h4{{font-size:12px;color:var(--dim);margin:16px 0 6px;font-weight:600}}
