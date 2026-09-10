@@ -48,6 +48,9 @@ P_EYE="$ROOT/PROMPT_CRITIC.md"
 # 한 바퀴에 두 세션을 부르므로 각각의 제한은 절반으로 본다.
 DESIGN_LAP_TIMEOUT="${DESIGN_LAP_TIMEOUT:-$((LAP_TIMEOUT_SECONDS))}"
 EYE_TIMEOUT="${EYE_TIMEOUT:-900}"        # 보는 세션은 짧다 — 그림 몇 장 보고 쓰는 게 전부다
+## 세션이 도는 동안 갤러리를 몇 초마다 갱신할 것인가. 한 바퀴가 20분인데 끝나야만
+## 갱신되면 그동안 사람이 아무것도 못 본다(2026-09-10).
+GALLERY_PUSH_SECONDS="${GALLERY_PUSH_SECONDS:-90}"
 
 log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
 
@@ -99,16 +102,26 @@ run_session() {
     >"$out" 2>>"$LOG" &
   pid=$!
   start=$(date +%s)
+  local last_push=$start now
+  # **세션이 도는 동안에도 갤러리를 갱신한다** (2026-09-10 사람 지적: 한 바퀴가
+  # 20분인데 그동안 아무것도 안 보였다). 세션이 `docs/design_reference/` 에 그림을
+  # 떨어뜨리는 즉시 갤러리에 뜬다. `render_and_push_gallery` 는 바뀐 게 없으면
+  # 커밋하지 않으므로 자주 불러도 git 이 지저분해지지 않는다.
+  #
   # 벽시계로 잰다 — 맥이 자면 sleep 타이머가 같이 멈춘다(loop.sh 에서 겪은 것).
-  ( while kill -0 "$pid" 2>/dev/null; do
-      sleep 30
-      if (( $(date +%s) - start >= limit )); then
-        kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
-      fi
-    done ) >/dev/null 2>&1 &
-  local wd=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 15
+    now=$(date +%s)
+    if (( now - start >= limit )); then
+      log "   ${limit}s 넘김 — 세션을 종료한다"
+      kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
+    fi
+    if (( now - last_push >= GALLERY_PUSH_SECONDS )); then
+      render_and_push_gallery
+      last_push=$now
+    fi
+  done
   wait "$pid"; rc=$?
-  pkill -P "$wd" >/dev/null 2>&1; kill "$wd" >/dev/null 2>&1; wait "$wd" 2>/dev/null
   return $rc
 }
 
