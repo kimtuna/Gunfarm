@@ -116,6 +116,15 @@ next_item() {
 
 CREDIT_RE='usage limit|session limit|rate limit|limit reached|hit your [a-z ]*limit|Credit balance is too low|insufficient credit|quota exceeded|Please run /login'
 
+# 프로세스와 **그 자식들을 전부** 죽인다.
+# `kill $pid` 는 claude 만 죽인다 — 그 밑에서 돌던 Godot 이 고아로 남아 몇십 분씩
+# CPU 를 먹는다(2026-09-10 실측: `ppid 1` 짜리 38분 된 qa_player_walk 가 살아 있었다).
+kill_tree() {
+  local pid="$1" sig="${2:-TERM}" c
+  for c in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$c" "$sig"; done
+  kill "-$sig" "$pid" 2>/dev/null
+}
+
 # `claude -p` 한 번. $1=프롬프트파일 $2=제한초 $3=결과JSON. 종료코드를 그대로 돌려준다.
 run_session() {
   local prompt="$1" limit="$2" out="$3" pid start rc
@@ -140,7 +149,7 @@ run_session() {
     now=$(date +%s)
     if (( now - start >= limit )); then
       log "   ${limit}s 넘김 — 세션을 종료한다"
-      kill -TERM "$pid" 2>/dev/null; sleep 10; kill -KILL "$pid" 2>/dev/null; break
+      kill_tree "$pid" TERM; sleep 10; kill_tree "$pid" KILL; break
     fi
     if (( now - last_push >= GALLERY_PUSH_SECONDS )); then
       render_and_push_gallery
@@ -148,7 +157,34 @@ run_session() {
     fi
   done
   wait "$pid"; rc=$?
+  kill_tree "$pid" KILL 2>/dev/null      # 세션이 끝나도 자식이 남을 수 있다
   return $rc
+}
+
+# ── 자(QA) — **루프가 직접 돌린다** ──────────────────────────────────────
+# 2026-09-10 까지는 세션이 스스로 QA 를 돌렸다고 「말하면」 믿었다. 그래서 건너뛰어도,
+# 실패해도 루프가 몰랐다 — 판정자가 판정받는 쪽과 같았다는 뜻이다.
+# 이제 **루프가 직접 돌리고 결과를 measured.md 에 적는다.** 불통과면 그 바퀴는
+# 사람에게 보이지 않고 미달로 되돌린다(docs/DESIGN_LOOP.md 「판정자는 셋」).
+run_design_qa() {
+  local work="$1" ok=1 out
+  : > "$work/measured.md"
+  {
+    printf '# 자(QA) — 루프가 직접 돌린 것\n\n'
+    printf '%s\n\n' "$(date '+%Y-%m-%d %H:%M:%S')"
+  } >> "$work/measured.md"
+  for q in qa_sprite_check qa_character_sheets; do
+    [[ -f "$ROOT/game/qa/$q.py" ]] || continue
+    out="$("$PYTHON_BIN" "$ROOT/game/qa/$q.py" 2>&1)"
+    if (( $? == 0 )); then
+      printf '## %s — 통과\n\n```\n%s\n```\n\n' "$q" "$(printf '%s' "$out" | tail -25)" >> "$work/measured.md"
+    else
+      ok=0
+      printf '## %s — **불통과**\n\n```\n%s\n```\n\n' "$q" "$(printf '%s' "$out" | tail -40)" >> "$work/measured.md"
+      log "   자(QA) 불통과: $q"
+    fi
+  done
+  return $(( ok ? 0 : 1 ))
 }
 
 # 세션 하나가 쓴 돈을 누적에 더하고, 누적을 돌려준다.
@@ -292,9 +328,28 @@ $(printf '%s' "$TEXT" | head -1)
 계속하려면 env.sh 의 DESIGN_MAX_TOTAL_USD 를 올리고 ./ctl.sh design start" 0
   fi
 
+  # ── ④ 자(QA) — **루프가 직접 돌린다. 세션의 말을 믿지 않는다.** ──────────
+  if run_design_qa "$WORK"; then
+    QA_OK=1
+  else
+    QA_OK=0
+    # 세션이 `- [x]` 나 `- [~]` 로 바꿔놨어도 **되돌린다** — 깨진 것을 사람에게
+    # 보이거나 닫으면 안 된다(docs/DESIGN_LOOP.md 「QA 불통과면 커밋하지 않는다」).
+    /usr/bin/python3 - "$QUEUE" "$NUM" <<'PYEOF'
+import io, re, sys
+p, num = sys.argv[1], sys.argv[2]
+s = io.open(p, encoding='utf-8').read()
+s2 = re.sub(r'^- \[[x~X]\]([^#\n]*#d%s(?:[^0-9]|$))' % num, r'- [ ]\1', s, flags=re.M)
+if s2 != s:
+    io.open(p, 'w', encoding='utf-8').write(s2)
+    print("  QA 불통과라 #d%s 를 - [ ] 로 되돌렸다" % num)
+PYEOF
+    log "   자(QA) 불통과 — #d$NUM 을 미달로 되돌린다"
+  fi
+
   render_and_push_gallery
 
-  # ── ④ 판정 ──────────────────────────────────────────────────────────────
+  # ── ⑤ 판정 ──────────────────────────────────────────────────────────────
   if grep -qE "^- \[[xX]\][^#]*#d${NUM}([^0-9]|$)" "$QUEUE"; then
     log "-- 완료: #d$NUM"
     rm -f "$REPEAT_FILE" "$LAST_ITEM_FILE"

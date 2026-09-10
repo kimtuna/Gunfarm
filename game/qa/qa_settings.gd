@@ -95,11 +95,21 @@ func _step_initial() -> void:
 	_shoot("00_settings_default")
 
 
+## 「다음」을 눌렀을 때 와야 하는 해상도. **목록의 두 번째가 아니라 「지금 고른 것의
+## 다음」이다** — 설정 화면은 목록의 처음이 아니라 **지금 값(저장이 없으면 DEFAULT_SIZE)**
+## 에서 시작한다. 2026-09-08~10 동안은 DEFAULT_SIZE 가 마침 목록의 첫 값(1280x720)이라
+## 둘이 같았고, DEFAULT_SIZE 가 1920x1080 이 되자 이 검사만 거짓 실패했다(INBOX #76).
+func _next_of_default() -> Vector2i:
+	var at := _options.find(SettingsStore.DEFAULT_SIZE)
+	return _options[at + 1] if at >= 0 and at + 1 < _options.size() else Vector2i.ZERO
+
+
 func _step_after_next() -> void:
-	if _options.size() < 2:
-		_fails.append("고를 수 있는 해상도가 %d개뿐이라 이 화면에서는 검증이 불가능하다" % _options.size())
+	var expected := _next_of_default()
+	if expected == Vector2i.ZERO:
+		_fails.append("기본 해상도 %s 뒤에 고를 수 있는 값이 없어 이 화면에서는 검증이 불가능하다"
+				% SettingsStore.DEFAULT_SIZE)
 		return
-	var expected: Vector2i = _options[1]
 	_expect_value(_label(expected), "다음 해상도로 넘긴 뒤")
 	_expect_window(expected, "다음 해상도로 넘긴 뒤")
 	var saved: Vector2i = SettingsStore.load_settings().get("resolution", Vector2i.ZERO)
@@ -116,15 +126,15 @@ func _step_after_prev() -> void:
 
 ## 저장된 해상도를 메인 메뉴(진입 씬)가 창에 반영하는지.
 func _step_save_then_reenter_menu() -> void:
-	if _options.size() >= 2:
-		SettingsStore.save_settings({"resolution": _options[1]})
+	if _next_of_default() != Vector2i.ZERO:
+		SettingsStore.save_settings({"resolution": _next_of_default()})
 	SettingsStore.apply_resolution(SettingsStore.DEFAULT_SIZE)  # 일부러 어긋나게 해둔다.
 	change_scene_to_file(MAIN_MENU_SCENE)
 
 
 func _step_menu_applied() -> void:
-	if _options.size() >= 2:
-		_expect_window(_options[1], "메인 메뉴가 저장된 해상도를 반영")
+	if _next_of_default() != Vector2i.ZERO:
+		_expect_window(_next_of_default(), "메인 메뉴가 저장된 해상도를 반영")
 	_shoot("03_menu_applied_saved")
 
 

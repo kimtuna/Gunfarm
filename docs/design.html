@@ -32,6 +32,7 @@ summary::-webkit-details-marker{display:none}
 .judge.auto{background:#1a1d1a;border-color:#33473a;color:#9ec9a8}
 .tolook{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
  color:var(--fg);font-size:12.5px;white-space:pre-wrap}
+.bad{background:#a33;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px}
 .me{background:#2f7fd0;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px}
 .rev{display:flex;gap:14px;align-items:flex-start;padding:12px 0;
  border-top:1px solid var(--line);flex-wrap:wrap}
@@ -53,7 +54,7 @@ footer{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var(
 <p class="sub">그림·모션 루프가 만든 후보들. 규칙은 <code>docs/DESIGN_LOOP.md</code>,
 큐는 <code>docs/feedback/DESIGN_QUEUE.md</code>.
 <b>「확인해 주세요」</b>가 붙은 것은 <b>사람이 직접 보고 「누가 봐도 퀄리티가 떨어지지 않는다」</b>고 판단해야 넘어갑니다 — 그것이 이 루프의 유일한 완료 조건입니다.</p>
-<details open><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d2</span><span class="kind">취향</span><span class="title">초원이 벽지처럼 보인다 — 칸마다 풀 양이 달라야 한다.</span><span class="count">4회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge taste"><b>★ 감독이 <b>눈으로</b> 판정</b><p>기계가 못 재는 것입니다 — 모양·비율·색감이 「누가 봐도 퀄리티가 떨어지지 않는가」.</p><div class="tolook">**갤러리에서 `d2_grass_r0.png` 와 `d2_grass_r1.png` 를 나란히 보십시오** — 같은 시드·
+<details open><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d2</span><span class="kind">취향</span><span class="title">초원 — 「비슷한 계열의 타일 여러 벌」을 붙여서 자연스럽게 만든다.</span><span class="count">4회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge taste"><b>★ 감독이 <b>눈으로</b> 판정</b><p>기계가 못 재는 것입니다 — 모양·비율·색감이 「누가 봐도 퀄리티가 떨어지지 않는가」.</p><div class="tolook">**갤러리에서 `d2_grass_r0.png` 와 `d2_grass_r1.png` 를 나란히 보십시오** — 같은 시드·
 같은 자리의 월드 캡처라 **풀 양의 차이만** 다릅니다. r0 은 풀 뭉치가 화면 어디서나
 같은 간격이고(벽지), r1 은 **민무늬로 트인 데와 우거진 데**가 섞여 있어야 합니다.
 도트 결은 `d2_grasszoom_r0/r1.png`(같은 자리 2배 확대)로 보십시오 — **덤불 하나의
@@ -123,7 +124,64 @@ footer{color:var(--dim);font-size:12px;margin-top:24px;border-top:1px solid var(
 ### 덤으로 — 사람이 같은 캡처에서 본 것
 
 **해안선이 완전한 계단이다.** 48px 칸이 그대로 보인다. 이건 `#d4` 의 일이지만,
-**화면에서 제일 눈에 띄는 것이 그거였다** — `#d4` 를 할 때 이 캡처를 견줘라.</pre></div></div><h4>보는 세션의 「잴 것」</h4><pre># 앞 회차 지적이 처리됐나
+**화면에서 제일 눈에 띄는 것이 그거였다** — `#d4` 를 할 때 이 캡처를 견줘라.</pre></div></div><h4>자(QA) — 루프가 직접 잰 것</h4><pre># #d2 measured — 2026-09-10
+
+## 변주별 덮인 넓이 (땅 한가운데 칸, 바탕색이 아닌 픽셀의 비율)
+
+| 변주 | 덤불 수 | r0 | r1 |
+|---|---|---|---|
+| v0 | 0 | 19.9% | **0.0%** |
+| v1 | 1 | 21.2% | 21.2% |
+| v2 | 1 | 21.9% | 21.9% |
+| v3 | 2 | 19.6% | **36.4%** |
+| v4 | 1 | 19.8% | 19.8% |
+| v5 | 3 | 24.9% | **50.0%** |
+| v6 | 1 | 19.1% | 19.1% |
+| v7 | 2 | 18.4% | **34.9%** |
+| **폭** | | **6.5%** | **50.0%** |
+| 평균 | | 20.6% | 25.4% |
+
+## `qa_sprite_check.py` — terrain_tiles.png (전부 통과)
+
+```
+ok   규격        48px × 4096칸
+ok   팔레트       18색
+ok   순검정
+ok   이음매       땅 0.89/상한1.10(안쪽대비 1.97) 바다 0.61/상한0.80(안쪽대비 1.53)
+ok   변주        8종 / 8종
+ok   변주폭       폭 50% (0~50%)          ← 이번에 새로 만든 검사
+ok   무늬        grass 75%/±10.8
+ok   평균명도      grass 99
+ok   채도        grass 58
+ok   무늬        sea 79%/±10.9
+ok   평균명도      sea 55
+ok   채도        sea 68
+ok   캐릭터대비     61% (시트 22장, 잉크 #1a0f18)
+```
+
+r0 실측: 이음매 땅 **0.94** · 무늬 grass **79%/±9.5**. 나머지는 같다.
+
+## 새 검사가 진짜 잡는가 — 옛 그림을 다시 구워 돌렸다
+
+`GRASS_CLUMPS = (1,)*8` (= 칸마다 덤불 하나씩, 옛 그림) 로 시트를 다시 구워 검사:
+
+```
+FAIL old_terrain.png
+  ok   이음매       땅 0.94/상한1.10  바다 0.61/상한0.80
+  ok   변주        8종 / 8종
+  FAIL 변주폭       땅 변주별 덮인 넓이 18~25% (폭 7% &lt; 하한 30% ...) — 벽지가 된다
+  ok   무늬        grass 79%/±9.5 · sea 79%/±10.9
+  ok   평균명도 · 채도 · 캐릭터대비
+```
+
+**다른 검사는 전부 초록불이고 「변주폭」만 잡는다** — 이번 문제가 지나간 구멍이
+정확히 거기였다.
+
+## 엔진에서 멀쩡한가
+
+`qa_terrain_view.gd` — PASS (마스크/번호 규칙 ok · 무늬 변주 8종 · 시트 표본 10종)
+`qa_character_sheets.py` — 22장 전부 합격
+`qa_uid_files.gd` — PASS (스크립트 69/uid 69, 자산 42/import 42)</pre><h4>보는 세션의 「잴 것」</h4><pre># 앞 회차 지적이 처리됐나
 
 - **회차 기록은 갖췄다.** `history.md` 의 `## r1` 에 「보완한 것」이 있고 큐의 지적을
   인용한 뒤 무엇을 바꿨는지(`GRASS_CLUMPS`) 적었다. 갤러리가 보여줄 사유가 있다.
@@ -346,5 +404,5 @@ r1 에는 빈 칸이 있었지만 전부 칸 하나짜리라 「빈 데」로 �
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d55</span><span class="kind play">플레이</span><span class="title">도구·아이템을 켜서 본다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge play"><b>★ 감독이 <b>게임을 켜서</b> 판정</b><p>돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, 클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br><code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code></p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#c8862a">진행 중</span><span class="num">#d60</span><span class="kind play">플레이</span><span class="title">게임을 켜서 전체를 판정한다.</span><span class="count">0회차</span><span class="me">내가 볼 것</span></summary><div class="body"><div class="judge play"><b>★ 감독이 <b>게임을 켜서</b> 판정</b><p>돌려봐야 아는 것들입니다 — 움직일 때 되풀이가 보이나, 밀도가 맞나, 클릭 타이밍이 맞나. 캡처로는 알 수 없습니다.<br><code>/Applications/Godot.app/Contents/MacOS/Godot --path game</code></p></div><p class="none">아직 그림이 없습니다.</p></div></details>
 <details><summary><span class="badge" style="background:#3f8a4a">완료</span><span class="num">#d10</span><span class="kind"></span><span class="title">(2026-09-10 완료 — `rig.joints()` 가 `comfy.figure()` 를 직접 부르게 바꿔</span><span class="count">0회차</span></summary><div class="body"><p class="none">아직 그림이 없습니다.</p></div></details>
-<footer>마지막 갱신 2026-09-10 10:15 · 35b470b chore(gallery): 그림 갤러리 갱신</footer>
+<footer>마지막 갱신 2026-09-10 10:15 · e2524ae chore(gallery): 그림 갤러리 갱신</footer>
 </div></body></html>

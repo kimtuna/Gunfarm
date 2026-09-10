@@ -142,6 +142,7 @@ def main():
         hist = read(WORKDIR, "d%d" % num, "history.md")
         note = read(WORKDIR, "d%d" % num, "note.md")
         crit = read(WORKDIR, "d%d" % num, "critique.md")
+        meas = read(WORKDIR, "d%d" % num, "measured.md")
         label, color = BADGE[state]
         revs = revisions(hist)
         who, why = JUDGE.get(kind, ("", ""))
@@ -170,6 +171,10 @@ def main():
             body.append("".join(rows))
         else:
             body.append('<p class="none">아직 그림이 없습니다.</p>')
+        if meas:
+            fail = "불통과" in meas
+            body.append('<h4>자(QA) — 루프가 직접 잰 것%s</h4><pre>%s</pre>'
+                        % (' <span class="bad">불통과</span>' if fail else '', e(meas)))
         if crit:
             body.append('<h4>보는 세션의 「잴 것」</h4><pre>%s</pre>' % e(crit))
         blocks.append(
@@ -225,6 +230,7 @@ summary::-webkit-details-marker{{display:none}}
 .judge.auto{{background:#1a1d1a;border-color:#33473a;color:#9ec9a8}}
 .tolook{{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
  color:var(--fg);font-size:12.5px;white-space:pre-wrap}}
+.bad{{background:#a33;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px}}
 .me{{background:#2f7fd0;color:#fff;font-size:10px;padding:1px 6px;border-radius:99px}}
 .rev{{display:flex;gap:14px;align-items:flex-start;padding:12px 0;
  border-top:1px solid var(--line);flex-wrap:wrap}}
